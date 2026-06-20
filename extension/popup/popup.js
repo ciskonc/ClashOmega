@@ -94,6 +94,59 @@ function findMatchingRules(domain, rules) {
   return matched;
 }
 
+/**
+ * 通过 Clash API /connections 查询域名实际匹配的规则
+ * 用于 RULE-SET 等浏览器端无法匹配的规则类型
+ * @param {string} domain - 当前 tab 的主域名
+ * @param {Array} connections - Clash API /connections 返回的连接列表
+ * @param {Array} rules - Clash API /rules 返回的规则列表（用于查找规则索引）
+ * @returns {Array} 匹配的规则列表，格式与 findMatchingRules 返回值一致
+ */
+function findMatchingRulesFromConnections(domain, connections, rules) {
+  const matched = [];
+  const domainLower = domain.toLowerCase();
+  const seen = new Set(); // 去重：同一 proxy 只记录一次
+
+  for (const conn of connections) {
+    const host = (conn.metadata && conn.metadata.host || '').toLowerCase();
+    if (!host) continue;
+
+    // 匹配当前域名或其子域名
+    if (host !== domainLower && !host.endsWith('.' + domainLower) && !domainLower.endsWith('.' + host)) {
+      continue;
+    }
+
+    const ruleType = conn.rule || '';
+    const rulePayload = conn.rulePayload || '';
+    // chains[0] 是匹配的代理组名称
+    const proxy = (conn.chains && conn.chains.length > 0) ? conn.chains[0] : '';
+
+    if (seen.has(proxy)) continue;
+    seen.add(proxy);
+
+    // 在 rules 列表中查找对应规则的索引
+    let ruleIndex = -1;
+    for (let i = 0; i < rules.length; i++) {
+      const r = rules[i];
+      const rType = normalizeRuleType(r.type);
+      const cType = normalizeRuleType(ruleType);
+      if (rType === cType && (r.payload || '').toLowerCase() === rulePayload.toLowerCase()) {
+        ruleIndex = i;
+        break;
+      }
+    }
+
+    matched.push({
+      index: ruleIndex >= 0 ? ruleIndex : 0,
+      type: ruleType,
+      payload: rulePayload,
+      proxy: proxy
+    });
+  }
+
+  return matched;
+}
+
 // ──── F3 智能域名分组 ────
 
 /**
@@ -706,6 +759,18 @@ async function initPopup() {
       const matched = findMatchingRules(domain, clashRules.rules);
       renderDomainRuleCheck(domain, matched);
       renderRuleList(clashRules.rules);
+
+      // 如果本地匹配为空（RULE-SET 等类型无法在浏览器端匹配），回退到 Clash API /connections 查询
+      if (matched.length === 0) {
+        sendToBackground({ action: 'getDomainConnections' }).then(connResult => {
+          if (connResult.success && connResult.connections) {
+            const connMatched = findMatchingRulesFromConnections(domain, connResult.connections, clashRules.rules);
+            if (connMatched.length > 0) {
+              renderDomainRuleCheck(domain, connMatched);
+            }
+          }
+        });
+      }
     }
   });
 

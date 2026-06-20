@@ -17,6 +17,8 @@
 | T003 | 修复系统代理状态问题 | 待处理 | 中 | 等待用户指令 |
 | T004 | 修复 Join-Path 三参数错误导致 restartClash 失败 | 已完成 | 高 | Get-ConfigPath 中 Join-Path $dir 'profiles' $file 改为嵌套调用 |
 | T005 | 修复 Parse-Rules 返回 $null 导致快照 rules 被清空、节点全断 | 已完成 | 高 | Parse-Rules 改用 ArrayList+ToArray()+, 防止空数组被 streaming 展平为 $null；Sync-SnapshotRules 添加参数验证；JS 端用 Array.isArray 严格检查 |
+| T006 | 修复 Get-ConfigPath 自动检测选错 profile 文件 | 已完成 | 高 | 优先解析 profiles.yaml 的 current 字段，而非 type:rules |
+| T007 | 修复 RULE-SET 类型规则域名匹配不显示 | 已完成 | 高 | 回退到 Clash API /connections 查询实际匹配的规则和代理组 |
 
 ## 讨论区
 
@@ -36,3 +38,4 @@
 | 2026-06-21 | clash-dev (C) | 初始化 | 4140a18 | 重建 Git 仓库，创建 agent-clash-dev-C-native-host 分支，注册模块 C |
 | 2026-06-21 | clash-dev (C) | 修复 | 01cf205 | 修复 Get-ConfigPath 中 Join-Path 三参数错误（Win PS 5.1 只接受两个位置参数），修复 hotReloadConfig 中 newRules 未定义变量 |
 | 2026-06-21 | clash-dev (C) | 修复 | e73232e | 修复 Parse-Rules 返回 $null 导致快照 rules 被清空、节点全断。根因：PowerShell streaming 把空数组展平为 $null，ConvertTo-Json 把 $null 序列化为 {} |
+| 2026-06-21 | clash-dev (C) | 修复 | 待提交 | 修复 Get-ConfigPath 优先使用 current 字段检测激活 profile；修复 RULE-SET 域名匹配不显示（回退到 /connections API） |

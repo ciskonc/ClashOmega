@@ -136,6 +136,15 @@ async function getClashRules() {
 }
 
 /**
+ * 获取 Clash 当前活跃连接列表
+ * 用于查询域名实际匹配的规则和代理组（RULE-SET 等类型无法在浏览器端匹配，需通过内核查询）
+ * @returns {Promise<{connections: Array}|null>}
+ */
+async function getClashConnections() {
+  return await clashGet('/connections');
+}
+
+/**
  * 获取 Clash 配置
  */
 async function getClashConfig() {

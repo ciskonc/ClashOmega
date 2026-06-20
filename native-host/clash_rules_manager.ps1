@@ -70,11 +70,12 @@ function Get-ConfigPath {
         return $envPath
     }
 
-    # 2. 从 profiles.yaml 解析 type:rules 的 profile 文件（优先于快照文件）
+    # 2. 从 profiles.yaml 解析当前激活的 profile 文件
     #    Clash Verge Rev 架构说明：
-    #    - clash-verge.yaml 是快照文件，由所有 profile 合并生成，重启内核后重建
-    #    - profiles.yaml 中的 type:rules 项指向用户自定义规则的源文件，修改后永久生效
-    #    - type:remote 是订阅文件，不应修改（会被订阅更新覆盖）
+    #    - profiles.yaml 的 current 字段指向当前激活的 profile UID
+    #    - items 列表中每个条目有 uid/type/file 字段
+    #    - current 指向的 profile 文件包含完整的 Clash 配置（proxies, rules, proxy-groups 等）
+    #    - type:rules 条目只是规则覆盖模板（append/prepend/delete），不是完整配置
     $foundProfilePath = $null
     $profileDir = $null
 
@@ -83,9 +84,42 @@ function Get-ConfigPath {
         if (Test-Path $profilesYaml) {
             $profileContent = [System.IO.File]::ReadAllText($profilesYaml, $encoding)
             $lines = $profileContent -split "`n"
-            $currentType = $null; $currentFile = $null
 
-            # 优先查找 type:rules（用户自定义规则覆盖文件）
+            # 2a. 优先：解析 current 字段，找到当前激活的 profile
+            $currentUid = $null
+            foreach ($line in $lines) {
+                $trimmed = $line.Trim()
+                if ($trimmed -match '^current\s*:\s*(\S+)') {
+                    $currentUid = $matches[1]
+                    break
+                }
+            }
+
+            if ($currentUid) {
+                # 在 items 列表中查找 uid 匹配 currentUid 的条目
+                $itemUid = $null; $itemFile = $null; $itemType = $null
+                foreach ($line in $lines) {
+                    $trimmed = $line.Trim()
+                    if ($trimmed -match '^-\s*uid\s*:\s*(\S+)') {
+                        # 遇到新条目，检查上一个条目是否匹配
+                        if ($itemUid -eq $currentUid -and $itemFile) {
+                            $foundProfilePath = Join-Path (Join-Path $dir 'profiles') $itemFile
+                            if (Test-Path $foundProfilePath) { return $foundProfilePath }
+                        }
+                        $itemUid = $matches[1]; $itemFile = $null; $itemType = $null
+                    }
+                    elseif ($trimmed -match '^\s*type\s*:\s*(\S+)') { $itemType = $matches[1] }
+                    elseif ($trimmed -match '^\s*file\s*:\s*(\S+)') { $itemFile = $matches[1] }
+                }
+                # 检查最后一个条目
+                if ($itemUid -eq $currentUid -and $itemFile) {
+                    $foundProfilePath = Join-Path (Join-Path $dir 'profiles') $itemFile
+                    if (Test-Path $foundProfilePath) { return $foundProfilePath }
+                }
+            }
+
+            # 2b. 次选：如果 current 字段未找到，查找 type:rules 的 profile 文件
+            $currentType = $null; $currentFile = $null
             foreach ($line in $lines) {
                 $trimmed = $line.Trim()
                 if ($trimmed -match '^-\s*uid\s*:') { $currentType = $null; $currentFile = $null }
@@ -100,7 +134,7 @@ function Get-ConfigPath {
                 }
             }
 
-            # 兜底：如果 type:rules 未找到，取任意一个非 remote 的 profile 文件
+            # 2c. 兜底：取任意一个非 remote 的 profile 文件
             if (-not $foundProfilePath) {
                 $currentType = $null; $currentFile = $null
                 foreach ($line in $lines) {

@@ -164,6 +164,15 @@ async function handleMessage(message) {
         return { success: true, domains, count };
       }
 
+      // ──── 域名连接查询（通过 Clash API /connections 查询域名实际匹配的规则）────
+      case 'getDomainConnections': {
+        const connections = await getClashConnections();
+        if (!connections || !connections.connections) {
+          return { success: false, error: 'Cannot get connections from Clash API' };
+        }
+        return { success: true, connections: connections.connections };
+      }
+
       // ──── 设置管理 ────
       case 'getSettings': {
         return await getSettings();
