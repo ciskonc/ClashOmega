@@ -1,6 +1,6 @@
 # Chrome Clash Manager
 
-> v1.1.1 · Chrome 浏览器扩展，用于管理 Clash 代理规则，支持三模式代理切换、域名规则匹配检测、一键添加域名到代理组。
+> v1.1.2 · Chrome 浏览器扩展，用于管理 Clash 代理规则，支持三模式代理切换、域名规则匹配检测、一键添加域名到代理组。
 
 ## 功能
 
@@ -93,6 +93,17 @@ native-host/        # Native Messaging Host（Windows）
 ```
 
 ## 版本历史
+
+### v1.1.2 (2026-06-21)
+
+**Bug 修复**
+- 修复切换语言后 placeholder 仍显示中文：`refreshAllI18n` 未处理 `placeholder` 和 `title` 属性
+- 新增 `data-i18n-placeholder` 和 `data-i18n-title` 属性支持，切换语言时同步更新
+
+**i18n 完善**
+- 补充 `settings_secret_placeholder`、`settings_config_path_placeholder`、`settings_close` 三语言 key
+- 修复「关闭」按钮缺少 `data-i18n` 属性导致切换语言后仍显示中文
+- 修复「(可选)」「自动检测」等 placeholder 切换语言后不更新
 
 ### v1.1.1 (2026-06-21)
 

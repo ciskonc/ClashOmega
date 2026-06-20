@@ -219,6 +219,7 @@ function smartGroupDomains(domains) {
 // ──── 渲染函数 ────
 
 function refreshAllI18n() {
+  // 1. 处理 data-i18n（文本内容）
   document.querySelectorAll('[data-i18n]').forEach(el => {
     const key = el.getAttribute('data-i18n');
     if (el.tagName === 'OPTION') {
@@ -228,6 +229,16 @@ function refreshAllI18n() {
         el.textContent = I18N.t(key);
       }
     }
+  });
+  // 2. 处理 data-i18n-placeholder（输入框占位文本）
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    const key = el.getAttribute('data-i18n-placeholder');
+    el.placeholder = I18N.t(key);
+  });
+  // 3. 处理 data-i18n-title（悬停提示）
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    const key = el.getAttribute('data-i18n-title');
+    el.title = I18N.t(key);
   });
 }
 

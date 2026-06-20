@@ -96,11 +96,11 @@
     <input class="md3-text-field" id="settings-api-url" type="text" placeholder="http://127.0.0.1:9090">
 
     <label data-i18n="settings_secret">API 密钥</label>
-    <input class="md3-text-field" id="settings-secret" type="password" placeholder="(可选)">
+    <input class="md3-text-field" id="settings-secret" type="password" placeholder="(可选)" data-i18n-placeholder="settings_secret_placeholder">
 
     <label data-i18n="settings_config_path">配置文件路径</label>
     <div style="display: flex; gap: var(--md-spacing-2);">
-      <input class="md3-text-field" id="settings-config-path" type="text" placeholder="自动检测" style="flex: 1;">
+      <input class="md3-text-field" id="settings-config-path" type="text" placeholder="自动检测" style="flex: 1;" data-i18n-placeholder="settings_config_path_placeholder">
       <button class="md3-button md3-button--outlined" id="settings-detect-config" data-i18n="settings_detect" style="white-space: nowrap;">自动检测</button>
     </div>
     <div style="font: var(--md-typescale-body-small); color: var(--md-sys-color-on-surface-variant); margin: var(--md-spacing-1) 0 var(--md-spacing-2) 0;" data-i18n="settings_config_path_hint">留空则自动检测，修改后需重启 Clash 生效</div>
@@ -110,7 +110,7 @@
 
     <div class="settings-actions">
       <button class="md3-button md3-button--filled" id="settings-save" data-i18n="settings_save">保存设置</button>
-      <button class="md3-button md3-button--outlined" id="settings-close">关闭</button>
+      <button class="md3-button md3-button--outlined" id="settings-close" data-i18n="settings_close">关闭</button>
     </div>
   </div>
 
