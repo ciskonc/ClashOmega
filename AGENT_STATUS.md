@@ -19,6 +19,10 @@
 | T005 | 修复 Parse-Rules 返回 $null 导致快照 rules 被清空、节点全断 | 已完成 | 高 | Parse-Rules 改用 ArrayList+ToArray()+, 防止空数组被 streaming 展平为 $null；Sync-SnapshotRules 添加参数验证；JS 端用 Array.isArray 严格检查 |
 | T006 | 修复 Get-ConfigPath 自动检测选错 profile 文件 | 已完成 | 高 | 优先解析 profiles.yaml 的 current 字段，而非 type:rules |
 | T007 | 修复 RULE-SET 类型规则域名匹配不显示 | 已完成 | 高 | 回退到 Clash API /connections 查询实际匹配的规则和代理组 |
+| T008 | 修复 Add-Rule 写入双单引号导致 YAML 解析失败、代理崩溃 | 已完成 | 高 | Add-Rule/Sync-SnapshotRules 写入前清理首尾单引号 |
+| T009 | 修复 Remove-Rule 删除规则不生效 | 已完成 | 高 | Remove-Rule 传入规则首尾单引号清理 + ArrayList 替代 @() += |
+| T010 | 修复 F1 删除按钮 null 崩溃 | 已完成 | 高 | btn.closest('.rule-item') 在 .matched-rule-item 容器中返回 null |
+| T011 | 移除设置面板内重复的「同步规则到内核」按钮 | 已完成 | 中 | 保留底部唯一入口，符合「一个键不需要两个地方有」 |
 
 ## 讨论区
 
@@ -39,3 +43,5 @@
 | 2026-06-21 | clash-dev (C) | 修复 | 01cf205 | 修复 Get-ConfigPath 中 Join-Path 三参数错误（Win PS 5.1 只接受两个位置参数），修复 hotReloadConfig 中 newRules 未定义变量 |
 | 2026-06-21 | clash-dev (C) | 修复 | e73232e | 修复 Parse-Rules 返回 $null 导致快照 rules 被清空、节点全断。根因：PowerShell streaming 把空数组展平为 $null，ConvertTo-Json 把 $null 序列化为 {} |
 | 2026-06-21 | clash-dev (C) | 修复 | 90a7a32 | 修复 Get-ConfigPath 优先使用 current 字段检测激活 profile；修复 RULE-SET 域名匹配不显示（回退到 /connections API） |
+| 2026-06-21 | clash-dev (C) | 修复 | 179c168 | 修复 Add-Rule 写入双单引号导致 YAML 解析失败、代理崩溃 |
+| 2026-06-21 | clash-dev (C) | 修复 | c417c12 | 修复 Remove-Rule 删除不生效（首尾单引号清理）+ F1 删除按钮 null 崩溃 + 移除设置面板重复按钮 |
