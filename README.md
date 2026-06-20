@@ -1,6 +1,6 @@
 # Chrome Clash Manager
 
-> v1.1.3 · Chrome 浏览器扩展，用于管理 Clash 代理规则，支持三模式代理切换、域名规则匹配检测、一键添加域名到代理组。
+> v1.1.4 · Chrome 浏览器扩展，用于管理 Clash 代理规则，支持三模式代理切换、域名规则匹配检测、一键添加域名到代理组。
 
 ## 功能
 
@@ -93,6 +93,12 @@ native-host/        # Native Messaging Host（Windows）
 ```
 
 ## 版本历史
+
+### v1.1.4 (2026-06-21)
+
+**Bug 修复**
+- 修复 F1 域名匹配关键词提取错误：多段 TLD 域名（如 `.com.tw`、`.co.uk`）导致 `domainKey` 取到 TLD 部分（`com`）而非域名主体，使得所有 `.com` 连接被误判为匹配当前域名，表现为「当前域名匹配到 google 分组和漏网之鱼」
+- `findMatchingRulesFromConnections` 改为严格域名匹配：`host === domain` 精确匹配、`host 是 domain 子域`、`domain 是 host 子域`三种情况，不再使用 `host.includes(keyword)` 包含匹配
 
 ### v1.1.3 (2026-06-21)
 

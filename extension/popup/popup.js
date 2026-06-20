@@ -107,20 +107,27 @@ function findMatchingRulesFromConnections(domain, connections, rules) {
   const domainLower = domain.toLowerCase();
   const seen = new Set(); // 去重：同一 rulePayload 只记录一次
 
-  // 提取域名核心关键词用于宽松匹配
-  // 例如: www.google.com → google, mail.google.com.hk → google
-  const domainParts = domainLower.split('.');
-  const domainKey = domainParts.length >= 2 ? domainParts[domainParts.length - 2] : domainParts[0];
-
   for (const conn of connections) {
     const host = (conn.metadata && conn.metadata.host || '').toLowerCase();
     if (!host) continue;
 
-    // 宽松域名匹配：检查 host 是否包含 domain 核心关键词
-    // 或 host 与 domain 共享同一核心域名段
-    const hostParts = host.split('.');
-    const hostKey = hostParts.length >= 2 ? hostParts[hostParts.length - 2] : hostParts[0];
-    if (hostKey !== domainKey && !host.includes(domainKey) && !domainLower.includes(hostKey)) {
+    // ──── 严格域名匹配：不使用关键词包含，避免 com/net 等通用 TLD 造成误匹配 ────
+    // 匹配条件（任一满足即可）：
+    //   1. host 与 domain 完全相同 → 精确匹配
+    //   2. host 是 domain 的子域（host 以 .domain 结尾）→ 子域匹配
+    //   3. domain 是 host 的子域（domain 以 .host 结尾）→ 反向子域匹配
+    //
+    // 示例 (domain = www.whatismyip.com.tw):
+    //   host = www.whatismyip.com.tw → ✓ 完全相同
+    //   host = cdn.www.whatismyip.com.tw → ✓ 是 domain 的子域
+    //   host = whatismyip.com.tw → ✓ domain 是 host 的子域
+    //   host = www.google.com → ✗ 不匹配
+    //   host = api.something.com → ✗ 不匹配（旧关键词逻辑会错误地将 'com' 当成匹配）
+    const exactMatch = host === domainLower;
+    const hostIsSubdomain = domainLower.length > host.length && domainLower.endsWith('.' + host);
+    const domainIsSubdomain = host.length > domainLower.length && host.endsWith('.' + domainLower);
+
+    if (!exactMatch && !hostIsSubdomain && !domainIsSubdomain) {
       continue;
     }
 
