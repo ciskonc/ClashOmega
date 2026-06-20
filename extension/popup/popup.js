@@ -94,6 +94,70 @@ function findMatchingRules(domain, rules) {
   return matched;
 }
 
+/**
+ * 通过 Clash API /connections 查询域名实际匹配的规则
+ * 用于 RULE-SET 等浏览器端无法匹配的规则类型
+ * @param {string} domain - 当前 tab 的主域名
+ * @param {Array} connections - Clash API /connections 返回的连接列表
+ * @param {Array} rules - Clash API /rules 返回的规则列表（用于查找规则索引）
+ * @returns {Array} 匹配的规则列表，格式与 findMatchingRules 返回值一致
+ */
+function findMatchingRulesFromConnections(domain, connections, rules) {
+  const matched = [];
+  const domainLower = domain.toLowerCase();
+  const seen = new Set(); // 去重：同一 rulePayload 只记录一次
+
+  // 提取域名核心关键词用于宽松匹配
+  // 例如: www.google.com → google, mail.google.com.hk → google
+  const domainParts = domainLower.split('.');
+  const domainKey = domainParts.length >= 2 ? domainParts[domainParts.length - 2] : domainParts[0];
+
+  for (const conn of connections) {
+    const host = (conn.metadata && conn.metadata.host || '').toLowerCase();
+    if (!host) continue;
+
+    // 宽松域名匹配：检查 host 是否包含 domain 核心关键词
+    // 或 host 与 domain 共享同一核心域名段
+    const hostParts = host.split('.');
+    const hostKey = hostParts.length >= 2 ? hostParts[hostParts.length - 2] : hostParts[0];
+    if (hostKey !== domainKey && !host.includes(domainKey) && !domainLower.includes(hostKey)) {
+      continue;
+    }
+
+    const ruleType = conn.rule || '';
+    const rulePayload = conn.rulePayload || '';
+    // chains 结构: [代理节点, 中间代理组, ..., 规则匹配的代理组]
+    // 最后一个元素是规则匹配的代理组（如"🔍 谷歌服务"）
+    const proxy = (conn.chains && conn.chains.length > 0) ? conn.chains[conn.chains.length - 1] : '';
+
+    // 按 rulePayload 去重（同一规则只记录一次）
+    const dedupKey = ruleType + '|' + rulePayload;
+    if (seen.has(dedupKey)) continue;
+    seen.add(dedupKey);
+
+    // 在 rules 列表中查找对应规则的索引
+    let ruleIndex = -1;
+    for (let i = 0; i < rules.length; i++) {
+      const r = rules[i];
+      const rType = normalizeRuleType(r.type);
+      const cType = normalizeRuleType(ruleType);
+      if (rType === cType && (r.payload || '').toLowerCase() === rulePayload.toLowerCase()) {
+        ruleIndex = i;
+        break;
+      }
+    }
+
+    matched.push({
+      index: ruleIndex >= 0 ? ruleIndex : 0,
+      type: ruleType,
+      payload: rulePayload,
+      proxy: proxy
+    });
+  }
+
+  return matched;
+}
+
 // ──── F3 智能域名分组 ────
 
 /**
@@ -528,7 +592,9 @@ function bindF1DeleteEvents() {
     if (result && result.success) {
       showToast(I18N.t('success_rule_deleted'), 'success');
       // 乐观更新：直接从 DOM 移除，不重新从内核 API 拉取（内核尚未热重载）
-      btn.closest('.rule-item').remove();
+      // F1 匹配结果容器是 .matched-rule-item，规则列表容器是 .rule-item，需兼容两者
+      const item = btn.closest('.rule-item') || btn.closest('.matched-rule-item');
+      if (item) item.remove();
       const countEl = document.getElementById('rule-count');
       countEl.textContent = Math.max(0, parseInt(countEl.textContent) - 1);
     } else {
@@ -637,21 +703,6 @@ function bindSettingsEvents() {
     refreshAllI18n();
     await initPopup();
   });
-
-  // 设置面板中的「重启 Clash 内核」按钮
-  document.getElementById('settings-restart-kernel').addEventListener('click', async () => {
-    const btn = document.getElementById('settings-restart-kernel');
-    btn.disabled = true;
-    btn.textContent = '...';
-    const result = await sendToBackground({ action: 'restartClash' });
-    btn.disabled = false;
-    btn.textContent = I18N.t('settings_restart_kernel');
-    if (result && result.success) {
-      showToast(I18N.t('restart_clash_success'), 'success');
-    } else {
-      showToast(I18N.t('restart_clash_failed'), 'error');
-    }
-  });
 }
 
 async function openSettings() {
@@ -706,6 +757,20 @@ async function initPopup() {
       const matched = findMatchingRules(domain, clashRules.rules);
       renderDomainRuleCheck(domain, matched);
       renderRuleList(clashRules.rules);
+
+      // 始终异步查询 Clash API /connections，获取内核实际匹配的规则
+      // 本地匹配无法处理 RULE-SET 等类型，/connections 返回的是内核真实匹配结果
+      // 如果 /connections 返回了非 MATCH 的精确匹配，则覆盖本地结果
+      sendToBackground({ action: 'getDomainConnections' }).then(connResult => {
+        if (connResult.success && connResult.connections) {
+          const connMatched = findMatchingRulesFromConnections(domain, connResult.connections, clashRules.rules);
+          // 仅当 connections 返回了非 MATCH 的匹配时才覆盖（MATCH 是兜底规则，不够精确）
+          const hasNonMatchRule = connMatched.some(r => normalizeRuleType(r.type) !== 'MATCH');
+          if (hasNonMatchRule) {
+            renderDomainRuleCheck(domain, connMatched);
+          }
+        }
+      });
     }
   });
 

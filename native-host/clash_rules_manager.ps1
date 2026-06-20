@@ -70,11 +70,12 @@ function Get-ConfigPath {
         return $envPath
     }
 
-    # 2. 从 profiles.yaml 解析 type:rules 的 profile 文件（优先于快照文件）
+    # 2. 从 profiles.yaml 解析当前激活的 profile 文件
     #    Clash Verge Rev 架构说明：
-    #    - clash-verge.yaml 是快照文件，由所有 profile 合并生成，重启内核后重建
-    #    - profiles.yaml 中的 type:rules 项指向用户自定义规则的源文件，修改后永久生效
-    #    - type:remote 是订阅文件，不应修改（会被订阅更新覆盖）
+    #    - profiles.yaml 的 current 字段指向当前激活的 profile UID
+    #    - items 列表中每个条目有 uid/type/file 字段
+    #    - current 指向的 profile 文件包含完整的 Clash 配置（proxies, rules, proxy-groups 等）
+    #    - type:rules 条目只是规则覆盖模板（append/prepend/delete），不是完整配置
     $foundProfilePath = $null
     $profileDir = $null
 
@@ -83,23 +84,57 @@ function Get-ConfigPath {
         if (Test-Path $profilesYaml) {
             $profileContent = [System.IO.File]::ReadAllText($profilesYaml, $encoding)
             $lines = $profileContent -split "`n"
-            $currentType = $null; $currentFile = $null
 
-            # 优先查找 type:rules（用户自定义规则覆盖文件）
+            # 2a. 优先：解析 current 字段，找到当前激活的 profile
+            $currentUid = $null
+            foreach ($line in $lines) {
+                $trimmed = $line.Trim()
+                if ($trimmed -match '^current\s*:\s*(\S+)') {
+                    $currentUid = $matches[1]
+                    break
+                }
+            }
+
+            if ($currentUid) {
+                # 在 items 列表中查找 uid 匹配 currentUid 的条目
+                $itemUid = $null; $itemFile = $null; $itemType = $null
+                foreach ($line in $lines) {
+                    $trimmed = $line.Trim()
+                    if ($trimmed -match '^-\s*uid\s*:\s*(\S+)') {
+                        # 遇到新条目，检查上一个条目是否匹配
+                        if ($itemUid -eq $currentUid -and $itemFile) {
+                            $foundProfilePath = Join-Path (Join-Path $dir 'profiles') $itemFile
+                            if (Test-Path $foundProfilePath) { return $foundProfilePath }
+                        }
+                        $itemUid = $matches[1]; $itemFile = $null; $itemType = $null
+                    }
+                    elseif ($trimmed -match '^\s*type\s*:\s*(\S+)') { $itemType = $matches[1] }
+                    elseif ($trimmed -match '^\s*file\s*:\s*(\S+)') { $itemFile = $matches[1] }
+                }
+                # 检查最后一个条目
+                if ($itemUid -eq $currentUid -and $itemFile) {
+                    $foundProfilePath = Join-Path (Join-Path $dir 'profiles') $itemFile
+                    if (Test-Path $foundProfilePath) { return $foundProfilePath }
+                }
+            }
+
+            # 2b. 次选：如果 current 字段未找到，查找 type:rules 的 profile 文件
+            $currentType = $null; $currentFile = $null
             foreach ($line in $lines) {
                 $trimmed = $line.Trim()
                 if ($trimmed -match '^-\s*uid\s*:') { $currentType = $null; $currentFile = $null }
                 elseif ($trimmed -match '^\s*type\s*:\s*(\S+)') { $currentType = $matches[1] }
                 elseif ($trimmed -match '^\s*file\s*:\s*(\S+)') { $currentFile = $matches[1] }
                 if ($currentType -eq 'rules' -and $currentFile) {
-                    $foundProfilePath = Join-Path $dir 'profiles' $currentFile
+                    # Join-Path 在 Windows PowerShell 5.1 中只接受两个位置参数，必须嵌套调用
+                    $foundProfilePath = Join-Path (Join-Path $dir 'profiles') $currentFile
                     $profileDir = $dir
                     if (Test-Path $foundProfilePath) { return $foundProfilePath }
                     $currentType = $null; $currentFile = $null
                 }
             }
 
-            # 兜底：如果 type:rules 未找到，取任意一个非 remote 的 profile 文件
+            # 2c. 兜底：取任意一个非 remote 的 profile 文件
             if (-not $foundProfilePath) {
                 $currentType = $null; $currentFile = $null
                 foreach ($line in $lines) {
@@ -108,7 +143,8 @@ function Get-ConfigPath {
                     elseif ($trimmed -match '^\s*type\s*:\s*(\S+)') { $currentType = $matches[1] }
                     elseif ($trimmed -match '^\s*file\s*:\s*(\S+)') { $currentFile = $matches[1] }
                     if ($currentType -ne 'remote' -and $currentType -ne 'script' -and $currentFile) {
-                        $foundProfilePath = Join-Path $dir 'profiles' $currentFile
+                        # Join-Path 在 Windows PowerShell 5.1 中只接受两个位置参数，必须嵌套调用
+                        $foundProfilePath = Join-Path (Join-Path $dir 'profiles') $currentFile
                         $profileDir = $dir
                         if (Test-Path $foundProfilePath) { break }
                         $currentType = $null; $currentFile = $null
@@ -176,7 +212,9 @@ function Write-Config($path, $content) {
 }
 
 function Parse-Rules($content) {
-    $rules = @()
+    # 使用 ArrayList 确保始终返回真正的数组，避免 PowerShell streaming 把空数组展平为 $null
+    $rules = [System.Collections.ArrayList]::new()
+
     $lines = $content -split "`n"
 
     # 自动检测 Clash Verge profile 格式
@@ -189,13 +227,13 @@ function Parse-Rules($content) {
             if ($trimmed -eq 'append:') { $inAppend = $true; continue }
             if ($inAppend -and $trimmed.StartsWith('- ') -and -not $trimmed.EndsWith('[]')) {
                 $rule = $trimmed.Substring(2).Trim().Trim("'").Trim('"')
-                if ($rule) { $rules += $rule }
+                if ($rule) { [void]$rules.Add($rule) }
             }
             if ($inAppend -and -not $trimmed.StartsWith('- ') -and $trimmed -and -not $trimmed.StartsWith('#')) {
                 $inAppend = $false
             }
         }
-        return $rules
+        return ,$rules.ToArray()
     }
 
     # 标准 Clash 配置格式
@@ -215,12 +253,15 @@ function Parse-Rules($content) {
         if ($trimmed.StartsWith('- ')) { $rule = $trimmed.Substring(2).Trim() }
         elseif ($trimmed.StartsWith("- '") -and $trimmed.EndsWith("'")) { $rule = $trimmed.Substring(3, $trimmed.Length - 4).Trim() }
         elseif ($trimmed.StartsWith('- "') -and $trimmed.EndsWith('"')) { $rule = $trimmed.Substring(3, $trimmed.Length - 4).Trim() }
-        if ($rule) { $rules += $rule }
+        if ($rule) { [void]$rules.Add($rule) }
     }
-    return $rules
+    return ,$rules.ToArray()
 }
 
 function Add-Rule($content, $rule) {
+    # 去除规则首尾的单引号/双引号，防止 YAML 双引号转义问题（''xxx'' 会被解析为空字符串+xxx）
+    $rule = $rule.Trim().TrimStart("'").TrimEnd("'").TrimStart('"').TrimEnd('"').Trim()
+
     # 解析新规则的类型和 payload
     $ruleParts = $rule -split ','
     $newType = if ($ruleParts.Count -ge 1) { $ruleParts[0].Trim() } else { '' }
@@ -297,8 +338,11 @@ function Add-Rule($content, $rule) {
 }
 
 function Remove-Rule($content, $rule) {
+    # 去除传入规则首尾的单引号/双引号，防止匹配失败
+    $rule = $rule.Trim().TrimStart("'").TrimEnd("'").TrimStart('"').TrimEnd('"').Trim()
+
     $lines = $content -split "`n"
-    $result = @()
+    $result = [System.Collections.ArrayList]::new()
     foreach ($line in $lines) {
         $trimmed = $line.Trim()
         $ruleContent = ''
@@ -306,7 +350,7 @@ function Remove-Rule($content, $rule) {
         elseif ($trimmed.StartsWith("- '") -and $trimmed.EndsWith("'")) { $ruleContent = $trimmed.Substring(3, $trimmed.Length - 4).Trim() }
         elseif ($trimmed.StartsWith('- "') -and $trimmed.EndsWith('"')) { $ruleContent = $trimmed.Substring(3, $trimmed.Length - 4).Trim() }
         if ($ruleContent -eq $rule) { continue }
-        $result += $line
+        [void]$result.Add($line)
     }
     return $result -join "`n"
 }
@@ -328,6 +372,22 @@ function Get-SnapshotPath {
 
 # 将规则列表写入快照文件的 rules: 区块
 function Sync-SnapshotRules($snapshotPath, $rules) {
+    # 参数验证：拒绝空或非数组 rules，防止清空快照文件
+    if ($null -eq $rules -or -not ($rules -is [array]) -or $rules.Count -eq 0) {
+        throw "Sync-SnapshotRules: rules 参数为空或非数组，拒绝写入快照（防止清空规则）"
+    }
+
+    # 去除每条规则首尾的单引号/双引号，防止 YAML 双引号转义问题
+    $cleanRules = [System.Collections.ArrayList]::new()
+    foreach ($r in $rules) {
+        $clean = $r.Trim().TrimStart("'").TrimEnd("'").TrimStart('"').TrimEnd('"').Trim()
+        if ($clean) { [void]$cleanRules.Add($clean) }
+    }
+    if ($cleanRules.Count -eq 0) {
+        throw "Sync-SnapshotRules: 清理后规则列表为空，拒绝写入快照"
+    }
+    $rules = $cleanRules.ToArray()
+
     $content = Read-Config $snapshotPath
     $lines = [System.Collections.ArrayList]::new($content -split "`n")
     $inRules = $false

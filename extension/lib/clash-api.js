@@ -136,6 +136,15 @@ async function getClashRules() {
 }
 
 /**
+ * 获取 Clash 当前活跃连接列表
+ * 用于查询域名实际匹配的规则和代理组（RULE-SET 等类型无法在浏览器端匹配，需通过内核查询）
+ * @returns {Promise<{connections: Array}|null>}
+ */
+async function getClashConnections() {
+  return await clashGet('/connections');
+}
+
+/**
  * 获取 Clash 配置
  */
 async function getClashConfig() {
@@ -150,6 +159,12 @@ async function getClashConfig() {
  */
 async function hotReloadConfig(rules) {
   try {
+    // 防御性检查：确保 rules 是非空数组，防止 .filter 崩溃
+    if (!Array.isArray(rules) || rules.length === 0) {
+      console.error("Clash Manager: hotReloadConfig skipped — rules is not a non-empty array");
+      return false;
+    }
+
     // 1. 获取当前运行配置
     const config = await clashGet("/configs");
     if (!config) {
@@ -178,7 +193,7 @@ async function hotReloadConfig(rules) {
       console.error(`Clash Manager: hotReloadConfig PUT failed HTTP ${response.status}`);
       return false;
     }
-    console.log(`Clash Manager: hot-reloaded ${newRules.length} rules without restart`);
+    console.log(`Clash Manager: hot-reloaded ${orderedRules.length} rules without restart`);
     return true;
   } catch (e) {
     console.error("Clash Manager: hotReloadConfig error:", e.message);
