@@ -255,8 +255,18 @@ function scheduleHotReload(configPath) {
       // 内核 GET /rules 返回的是旧快照的规则，profile 文件才是最新数据
       // 必须传入 configPath，否则 Native Host 自动检测可能失败或选错文件
       const yamlResult = await getClashYamlRules(pathToUse);
-      // 使用 Array.isArray 严格检查，防止 rules 为 {} 等非数组 truthy 值导致 hotReloadConfig 崩溃
+      // 使用 Array.isArray 严格检查，防止 rules 为 {} 等非数组 truthy 值导致后续调用崩溃
       if (yamlResult && yamlResult.success && Array.isArray(yamlResult.rules) && yamlResult.rules.length > 0) {
+        // 步骤 1：同步规则到快照文件（clash-verge.yaml）
+        // 必须先写快照，否则 Clash 内核 /rules 和 /connections API 仍读取旧快照，
+        // 导致"检查当前域名在那个组"看不到新规则
+        const syncResult = await syncSnapshotRules(yamlResult.rules);
+        if (syncResult && syncResult.success) {
+          console.log(`Clash Manager: snapshot synced to ${syncResult.snapshotPath}`);
+        } else {
+          console.warn('Clash Manager: snapshot sync failed, continuing with hot-reload only', syncResult);
+        }
+        // 步骤 2：PUT /configs?force=true 热重载内存配置（不重启进程，代理全程在线）
         const ok = await hotReloadConfig(yamlResult.rules);
         console.log(`Clash Manager: async hot-reload ${ok ? 'succeeded' : 'failed'} (${yamlResult.rules.length} rules from profile, path=${pathToUse || 'auto'})`);
       } else {

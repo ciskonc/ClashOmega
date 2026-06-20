@@ -292,9 +292,14 @@ function Add-Rule($content, $rule) {
                 if (-not $trimmed.StartsWith('- ') -and $trimmed -and -not $trimmed.StartsWith('#')) { $insertIdx = $i; break }
             }
         }
-        if ($overrideIdx -ge 0) { $insertIdx = $overrideIdx }
-        elseif ($lastSameTypeIdx -ge 0) { $insertIdx = $lastSameTypeIdx + 1 }
-        if ($insertIdx -ge 0) { $lines.Insert($insertIdx, "  - '$rule'") }
+        if ($overrideIdx -ge 0) {
+            # 检测到重复规则时，替换原行（而非 Insert 导致重复）
+            $lines[$overrideIdx] = "  - '$rule'"
+        } elseif ($lastSameTypeIdx -ge 0) {
+            $lines.Insert($lastSameTypeIdx + 1, "  - '$rule'")
+        } elseif ($insertIdx -ge 0) {
+            $lines.Insert($insertIdx, "  - '$rule'")
+        }
         return $lines -join "`n"
     }
 
@@ -333,13 +338,33 @@ function Add-Rule($content, $rule) {
         }
     }
     $newLine = if ($rule.Contains(',')) { "  - '$rule'" } else { "  - $rule" }
-    $lines.Insert($insertIdx, $newLine)
+    # 检测到重复规则时，替换原行（而非 Insert 导致重复）
+    if ($overrideIdx -ge 0) {
+        $lines[$overrideIdx] = $newLine
+    } else {
+        $lines.Insert($insertIdx, $newLine)
+    }
     return $lines -join "`n"
 }
 
 function Remove-Rule($content, $rule) {
     # 去除传入规则首尾的单引号/双引号，防止匹配失败
     $rule = $rule.Trim().TrimStart("'").TrimEnd("'").TrimStart('"').TrimEnd('"').Trim()
+
+    # 归一化规则字符串：将 type 部分去除连字符并转大写，用于跨格式比较
+    # 解决 Clash API 返回驼峰格式（DomainSuffix）与 YAML 文件大写格式（DOMAIN-SUFFIX）不匹配问题
+    # 例如: DomainSuffix,google.com,Proxy → DOMAINSUFFIX,google.com,Proxy
+    #       DOMAIN-SUFFIX,google.com,Proxy → DOMAINSUFFIX,google.com,Proxy
+    #       两者归一化后相等，可正确匹配删除
+    function Normalize-RuleStr($r) {
+        $parts = $r -split ','
+        if ($parts.Count -ge 1) {
+            $parts[0] = $parts[0].ToUpper().Replace('-', '')
+        }
+        return ($parts -join ',')
+    }
+
+    $normalizedRule = Normalize-RuleStr $rule
 
     $lines = $content -split "`n"
     $result = [System.Collections.ArrayList]::new()
@@ -349,7 +374,8 @@ function Remove-Rule($content, $rule) {
         if ($trimmed.StartsWith('- ')) { $ruleContent = $trimmed.Substring(2).Trim().Trim("'").Trim('"') }
         elseif ($trimmed.StartsWith("- '") -and $trimmed.EndsWith("'")) { $ruleContent = $trimmed.Substring(3, $trimmed.Length - 4).Trim() }
         elseif ($trimmed.StartsWith('- "') -and $trimmed.EndsWith('"')) { $ruleContent = $trimmed.Substring(3, $trimmed.Length - 4).Trim() }
-        if ($ruleContent -eq $rule) { continue }
+        # 归一化比较：不区分 type 的大小写和连字符差异
+        if ($ruleContent -and (Normalize-RuleStr $ruleContent) -eq $normalizedRule) { continue }
         [void]$result.Add($line)
     }
     return $result -join "`n"

@@ -1,6 +1,6 @@
 # Chrome Clash Manager
 
-> v1.1.2 · Chrome 浏览器扩展，用于管理 Clash 代理规则，支持三模式代理切换、域名规则匹配检测、一键添加域名到代理组。
+> v1.1.3 · Chrome 浏览器扩展，用于管理 Clash 代理规则，支持三模式代理切换、域名规则匹配检测、一键添加域名到代理组。
 
 ## 功能
 
@@ -93,6 +93,13 @@ native-host/        # Native Messaging Host（Windows）
 ```
 
 ## 版本历史
+
+### v1.1.3 (2026-06-21)
+
+**Bug 修复**
+- 修复删除规则不生效：Clash API 返回驼峰格式 type（`DomainSuffix`）与 YAML 文件大写格式（`DOMAIN-SUFFIX`）不匹配，`Remove-Rule` 归一化比较后正确删除
+- 修复添加规则产生重复：`Add-Rule` 检测到同 type+payload 重复规则时用 `$lines[$overrideIdx] = $newLine` 替换原行，而非 `Insert` 插入新行
+- 修复热重载不生效：`scheduleHotReload` 缺少 `syncSnapshotRules` 步骤，导致 Clash 内核 `/rules` 和 `/connections` API 仍读取旧快照，新增/删除规则后「检查当前域名在那个组」看不到变化
 
 ### v1.1.2 (2026-06-21)
 
