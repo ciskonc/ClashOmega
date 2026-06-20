@@ -38,4 +38,4 @@
 | 2026-06-21 | clash-dev (C) | 初始化 | 4140a18 | 重建 Git 仓库，创建 agent-clash-dev-C-native-host 分支，注册模块 C |
 | 2026-06-21 | clash-dev (C) | 修复 | 01cf205 | 修复 Get-ConfigPath 中 Join-Path 三参数错误（Win PS 5.1 只接受两个位置参数），修复 hotReloadConfig 中 newRules 未定义变量 |
 | 2026-06-21 | clash-dev (C) | 修复 | e73232e | 修复 Parse-Rules 返回 $null 导致快照 rules 被清空、节点全断。根因：PowerShell streaming 把空数组展平为 $null，ConvertTo-Json 把 $null 序列化为 {} |
-| 2026-06-21 | clash-dev (C) | 修复 | 待提交 | 修复 Get-ConfigPath 优先使用 current 字段检测激活 profile；修复 RULE-SET 域名匹配不显示（回退到 /connections API） |
+| 2026-06-21 | clash-dev (C) | 修复 | 90a7a32 | 修复 Get-ConfigPath 优先使用 current 字段检测激活 profile；修复 RULE-SET 域名匹配不显示（回退到 /connections API） |
