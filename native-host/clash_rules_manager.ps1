@@ -259,6 +259,9 @@ function Parse-Rules($content) {
 }
 
 function Add-Rule($content, $rule) {
+    # 去除规则首尾的单引号/双引号，防止 YAML 双引号转义问题（''xxx'' 会被解析为空字符串+xxx）
+    $rule = $rule.Trim().TrimStart("'").TrimEnd("'").TrimStart('"').TrimEnd('"').Trim()
+
     # 解析新规则的类型和 payload
     $ruleParts = $rule -split ','
     $newType = if ($ruleParts.Count -ge 1) { $ruleParts[0].Trim() } else { '' }
@@ -370,6 +373,17 @@ function Sync-SnapshotRules($snapshotPath, $rules) {
     if ($null -eq $rules -or -not ($rules -is [array]) -or $rules.Count -eq 0) {
         throw "Sync-SnapshotRules: rules 参数为空或非数组，拒绝写入快照（防止清空规则）"
     }
+
+    # 去除每条规则首尾的单引号/双引号，防止 YAML 双引号转义问题
+    $cleanRules = [System.Collections.ArrayList]::new()
+    foreach ($r in $rules) {
+        $clean = $r.Trim().TrimStart("'").TrimEnd("'").TrimStart('"').TrimEnd('"').Trim()
+        if ($clean) { [void]$cleanRules.Add($clean) }
+    }
+    if ($cleanRules.Count -eq 0) {
+        throw "Sync-SnapshotRules: 清理后规则列表为空，拒绝写入快照"
+    }
+    $rules = $cleanRules.ToArray()
 
     $content = Read-Config $snapshotPath
     $lines = [System.Collections.ArrayList]::new($content -split "`n")
