@@ -592,7 +592,9 @@ function bindF1DeleteEvents() {
     if (result && result.success) {
       showToast(I18N.t('success_rule_deleted'), 'success');
       // 乐观更新：直接从 DOM 移除，不重新从内核 API 拉取（内核尚未热重载）
-      btn.closest('.rule-item').remove();
+      // F1 匹配结果容器是 .matched-rule-item，规则列表容器是 .rule-item，需兼容两者
+      const item = btn.closest('.rule-item') || btn.closest('.matched-rule-item');
+      if (item) item.remove();
       const countEl = document.getElementById('rule-count');
       countEl.textContent = Math.max(0, parseInt(countEl.textContent) - 1);
     } else {
@@ -700,21 +702,6 @@ function bindSettingsEvents() {
     await I18N.setLanguage(e.target.value);
     refreshAllI18n();
     await initPopup();
-  });
-
-  // 设置面板中的「重启 Clash 内核」按钮
-  document.getElementById('settings-restart-kernel').addEventListener('click', async () => {
-    const btn = document.getElementById('settings-restart-kernel');
-    btn.disabled = true;
-    btn.textContent = '...';
-    const result = await sendToBackground({ action: 'restartClash' });
-    btn.disabled = false;
-    btn.textContent = I18N.t('settings_restart_kernel');
-    if (result && result.success) {
-      showToast(I18N.t('restart_clash_success'), 'success');
-    } else {
-      showToast(I18N.t('restart_clash_failed'), 'error');
-    }
   });
 }
 

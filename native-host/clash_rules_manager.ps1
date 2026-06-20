@@ -338,8 +338,11 @@ function Add-Rule($content, $rule) {
 }
 
 function Remove-Rule($content, $rule) {
+    # 去除传入规则首尾的单引号/双引号，防止匹配失败
+    $rule = $rule.Trim().TrimStart("'").TrimEnd("'").TrimStart('"').TrimEnd('"').Trim()
+
     $lines = $content -split "`n"
-    $result = @()
+    $result = [System.Collections.ArrayList]::new()
     foreach ($line in $lines) {
         $trimmed = $line.Trim()
         $ruleContent = ''
@@ -347,7 +350,7 @@ function Remove-Rule($content, $rule) {
         elseif ($trimmed.StartsWith("- '") -and $trimmed.EndsWith("'")) { $ruleContent = $trimmed.Substring(3, $trimmed.Length - 4).Trim() }
         elseif ($trimmed.StartsWith('- "') -and $trimmed.EndsWith('"')) { $ruleContent = $trimmed.Substring(3, $trimmed.Length - 4).Trim() }
         if ($ruleContent -eq $rule) { continue }
-        $result += $line
+        [void]$result.Add($line)
     }
     return $result -join "`n"
 }
