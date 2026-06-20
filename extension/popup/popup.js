@@ -105,24 +105,35 @@ function findMatchingRules(domain, rules) {
 function findMatchingRulesFromConnections(domain, connections, rules) {
   const matched = [];
   const domainLower = domain.toLowerCase();
-  const seen = new Set(); // 去重：同一 proxy 只记录一次
+  const seen = new Set(); // 去重：同一 rulePayload 只记录一次
+
+  // 提取域名核心关键词用于宽松匹配
+  // 例如: www.google.com → google, mail.google.com.hk → google
+  const domainParts = domainLower.split('.');
+  const domainKey = domainParts.length >= 2 ? domainParts[domainParts.length - 2] : domainParts[0];
 
   for (const conn of connections) {
     const host = (conn.metadata && conn.metadata.host || '').toLowerCase();
     if (!host) continue;
 
-    // 匹配当前域名或其子域名
-    if (host !== domainLower && !host.endsWith('.' + domainLower) && !domainLower.endsWith('.' + host)) {
+    // 宽松域名匹配：检查 host 是否包含 domain 核心关键词
+    // 或 host 与 domain 共享同一核心域名段
+    const hostParts = host.split('.');
+    const hostKey = hostParts.length >= 2 ? hostParts[hostParts.length - 2] : hostParts[0];
+    if (hostKey !== domainKey && !host.includes(domainKey) && !domainLower.includes(hostKey)) {
       continue;
     }
 
     const ruleType = conn.rule || '';
     const rulePayload = conn.rulePayload || '';
-    // chains[0] 是匹配的代理组名称
-    const proxy = (conn.chains && conn.chains.length > 0) ? conn.chains[0] : '';
+    // chains 结构: [代理节点, 中间代理组, ..., 规则匹配的代理组]
+    // 最后一个元素是规则匹配的代理组（如"🔍 谷歌服务"）
+    const proxy = (conn.chains && conn.chains.length > 0) ? conn.chains[conn.chains.length - 1] : '';
 
-    if (seen.has(proxy)) continue;
-    seen.add(proxy);
+    // 按 rulePayload 去重（同一规则只记录一次）
+    const dedupKey = ruleType + '|' + rulePayload;
+    if (seen.has(dedupKey)) continue;
+    seen.add(dedupKey);
 
     // 在 rules 列表中查找对应规则的索引
     let ruleIndex = -1;
@@ -760,17 +771,19 @@ async function initPopup() {
       renderDomainRuleCheck(domain, matched);
       renderRuleList(clashRules.rules);
 
-      // 如果本地匹配为空（RULE-SET 等类型无法在浏览器端匹配），回退到 Clash API /connections 查询
-      if (matched.length === 0) {
-        sendToBackground({ action: 'getDomainConnections' }).then(connResult => {
-          if (connResult.success && connResult.connections) {
-            const connMatched = findMatchingRulesFromConnections(domain, connResult.connections, clashRules.rules);
-            if (connMatched.length > 0) {
-              renderDomainRuleCheck(domain, connMatched);
-            }
+      // 始终异步查询 Clash API /connections，获取内核实际匹配的规则
+      // 本地匹配无法处理 RULE-SET 等类型，/connections 返回的是内核真实匹配结果
+      // 如果 /connections 返回了非 MATCH 的精确匹配，则覆盖本地结果
+      sendToBackground({ action: 'getDomainConnections' }).then(connResult => {
+        if (connResult.success && connResult.connections) {
+          const connMatched = findMatchingRulesFromConnections(domain, connResult.connections, clashRules.rules);
+          // 仅当 connections 返回了非 MATCH 的匹配时才覆盖（MATCH 是兜底规则，不够精确）
+          const hasNonMatchRule = connMatched.some(r => normalizeRuleType(r.type) !== 'MATCH');
+          if (hasNonMatchRule) {
+            renderDomainRuleCheck(domain, connMatched);
           }
-        });
-      }
+        }
+      });
     }
   });
 
