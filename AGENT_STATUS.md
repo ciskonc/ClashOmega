@@ -6,7 +6,7 @@
 |----------|----------|------|------|
 | clash-dev | A (全栈) | agent-clash-dev-A | 活跃 |
 | clash-dev | B (前端+性能) | agent-clash-dev-B | 活跃 |
-| clash-dev | C (Native Host) | agent/clash-dev/C-native-host | 活跃 |
+| clash-dev | C (Native Host) | agent-clash-dev-C-native-host | 活跃 |
 
 ## 任务看板
 
@@ -31,4 +31,4 @@
 | 2026-06-21 | clash-dev (B) | 修改 | 5fd7ad1 | 系统代理状态颜色：绿色直连/红色代理/橙色PAC |
 | 2026-06-21 | clash-dev (B) | 修改 | 1133be6 | 同步规则按钮改为读 profile → PUT /configs?force=true 热重载 |
 | 2026-06-21 | clash-dev (B) | 修复 | 9ceb64a | 删除/添加改为乐观 DOM 更新，解决连点删除只删一个 |
-| 2026-06-21 | clash-dev (C) | 初始化 | 3f3ed56 | 重建 Git 仓库，创建 agent/clash-dev/C-native-host 分支，注册模块 C |
+| 2026-06-21 | clash-dev (C) | 初始化 | 4140a18 | 重建 Git 仓库，创建 agent-clash-dev-C-native-host 分支，注册模块 C |
