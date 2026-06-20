@@ -1,0 +1,476 @@
+/* ============================================================
+   Clash Manager — Popup UI (Material Design 3)
+   ============================================================ */
+
+/* ──── MD3 Design Tokens ──── */
+:root {
+  /* Primary */
+  --md-sys-color-primary: #6750A4;
+  --md-sys-color-on-primary: #FFFFFF;
+  --md-sys-color-primary-container: #EADDFF;
+  --md-sys-color-on-primary-container: #21005D;
+
+  /* Tertiary */
+  --md-sys-color-tertiary: #7D5260;
+  --md-sys-color-on-tertiary: #FFFFFF;
+  --md-sys-color-tertiary-container: #FFD8E4;
+  --md-sys-color-on-tertiary-container: #31111D;
+
+  /* Surface */
+  --md-sys-color-surface: #FFFBFE;
+  --md-sys-color-on-surface: #1C1B1F;
+  --md-sys-color-surface-variant: #E7E0EC;
+  --md-sys-color-on-surface-variant: #49454F;
+
+  /* Error */
+  --md-sys-color-error: #B3261E;
+  --md-sys-color-error-container: #F9DEDC;
+
+  /* Outline */
+  --md-sys-color-outline: #79747E;
+  --md-sys-color-outline-variant: #CAC4D0;
+
+  /* 状态色 */
+  --md-status-on: #4CAF50;
+  --md-status-off: #F44336;
+  --md-status-warn: #FF9800;
+
+  /* Elevation */
+  --md-elevation-1: 0 1px 2px 0 rgba(0,0,0,0.3), 0 1px 3px 1px rgba(0,0,0,0.15);
+  --md-elevation-2: 0 1px 2px 0 rgba(0,0,0,0.3), 0 2px 6px 2px rgba(0,0,0,0.15);
+
+  /* Shape */
+  --md-shape-corner-extra-small: 4px;
+  --md-shape-corner-small: 8px;
+  --md-shape-corner-medium: 12px;
+  --md-shape-corner-large: 16px;
+  --md-shape-corner-full: 9999px;
+
+  /* Typography */
+  --md-typescale-title-small: 500 14px/20px 'Roboto', 'Segoe UI', sans-serif;
+  --md-typescale-body-medium: 400 14px/20px 'Roboto', 'Segoe UI', sans-serif;
+  --md-typescale-body-small: 400 12px/16px 'Roboto', 'Segoe UI', sans-serif;
+  --md-typescale-label-large: 500 14px/20px 'Roboto', 'Segoe UI', sans-serif;
+  --md-typescale-label-medium: 500 12px/16px 'Roboto', 'Segoe UI', sans-serif;
+
+  /* Spacing */
+  --md-spacing-1: 4px;
+  --md-spacing-2: 8px;
+  --md-spacing-3: 12px;
+  --md-spacing-4: 16px;
+  --md-spacing-5: 24px;
+
+  /* Layout */
+  --popup-width: 360px;
+}
+
+/* ──── Reset & Base ──── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  width: var(--popup-width);
+  margin: 0;
+  padding: var(--md-spacing-4);
+  font: var(--md-typescale-body-medium);
+  color: var(--md-sys-color-on-surface);
+  background: var(--md-sys-color-surface);
+  user-select: none;
+}
+
+/* ──── MD3 Card ──── */
+.md3-card {
+  background: var(--md-sys-color-surface);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-shape-corner-medium);
+  padding: var(--md-spacing-4);
+  margin-bottom: var(--md-spacing-3);
+  box-shadow: var(--md-elevation-1);
+}
+
+/* ──── MD3 Segmented Button (三模式切换) ──── */
+.md3-segmented-button {
+  display: flex;
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: var(--md-shape-corner-full);
+  overflow: hidden;
+  height: 40px;
+}
+.md3-segmented-button button {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font: var(--md-typescale-label-large);
+  color: var(--md-sys-color-on-surface);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  position: relative;
+  padding: 0;
+}
+.md3-segmented-button button:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 1px;
+  background: var(--md-sys-color-outline);
+}
+.md3-segmented-button button.active {
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+}
+.md3-segmented-button button.active::after {
+  display: none;
+}
+
+/* ──── MD3 Buttons ──── */
+.md3-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  padding: 0 var(--md-spacing-5);
+  border: none;
+  border-radius: var(--md-shape-corner-full);
+  font: var(--md-typescale-label-large);
+  cursor: pointer;
+  transition: box-shadow 0.2s, opacity 0.2s;
+  white-space: nowrap;
+}
+.md3-button--filled {
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+  box-shadow: var(--md-elevation-1);
+}
+.md3-button--filled:hover {
+  box-shadow: var(--md-elevation-2);
+  opacity: 0.92;
+}
+.md3-button--tonal {
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+}
+.md3-button--tonal:hover {
+  opacity: 0.88;
+}
+.md3-button--outlined {
+  background: transparent;
+  border: 1px solid var(--md-sys-color-outline);
+  color: var(--md-sys-color-primary);
+}
+.md3-button--outlined:hover {
+  background: rgba(103, 80, 164, 0.08);
+}
+.md3-button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* ──── MD3 Select ──── */
+.md3-select {
+  height: 40px;
+  padding: 0 var(--md-spacing-4);
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: var(--md-shape-corner-small);
+  font: var(--md-typescale-body-medium);
+  color: var(--md-sys-color-on-surface);
+  background: var(--md-sys-color-surface);
+  cursor: pointer;
+  outline: none;
+  min-width: 140px;
+}
+.md3-select:focus {
+  border-color: var(--md-sys-color-primary);
+  border-width: 2px;
+  padding: 0 calc(var(--md-spacing-4) - 1px);
+}
+
+/* ──── MD3 Text Field ──── */
+.md3-text-field {
+  height: 40px;
+  padding: 0 var(--md-spacing-4);
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: var(--md-shape-corner-small);
+  font: var(--md-typescale-body-medium);
+  color: var(--md-sys-color-on-surface);
+  background: var(--md-sys-color-surface);
+  outline: none;
+  width: 100%;
+}
+.md3-text-field:focus {
+  border-color: var(--md-sys-color-primary);
+  border-width: 2px;
+  padding: 0 calc(var(--md-spacing-4) - 1px);
+}
+
+/* ──── MD3 Section Title ──── */
+.md3-section-title {
+  font: var(--md-typescale-title-small);
+  color: var(--md-sys-color-on-surface);
+  margin: 0 0 var(--md-spacing-2) 0;
+  padding: 0;
+}
+
+/* ──── Status Dot ──── */
+.status-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: var(--md-spacing-2);
+  flex-shrink: 0;
+}
+.status-dot--on { background: var(--md-status-on); }
+.status-dot--off { background: var(--md-status-off); }
+.status-dot--warn { background: var(--md-status-warn); }
+
+/* ──── F1: Domain Rule Check ──── */
+#f1-matched { margin-top: var(--md-spacing-2); }
+#f1-not-matched { display: none; color: var(--md-sys-color-on-surface-variant); font: var(--md-typescale-body-small); }
+.matched-rule-item {
+  display: flex;
+  align-items: center;
+  gap: var(--md-spacing-2);
+  padding: var(--md-spacing-1) 0;
+  font: var(--md-typescale-body-small);
+}
+.matched-rule-item .rule-index {
+  color: var(--md-sys-color-on-surface-variant);
+  min-width: 24px;
+}
+.matched-rule-item .rule-detail {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ──── F2: Quick Add ──── */
+#f2-row {
+  display: flex;
+  gap: var(--md-spacing-2);
+  align-items: center;
+  flex-wrap: wrap;
+}
+#f2-domain {
+  font: var(--md-typescale-body-medium);
+  min-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ──── F3: Domain Detection ──── */
+#f3-summary {
+  display: none;
+  font: var(--md-typescale-body-small);
+  color: var(--md-sys-color-on-surface-variant);
+  margin-top: var(--md-spacing-2);
+}
+.domain-list {
+  display: none;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-shape-corner-small);
+  padding: var(--md-spacing-2);
+  margin: var(--md-spacing-2) 0;
+}
+.domain-list::-webkit-scrollbar {
+  width: 6px;
+}
+.domain-list::-webkit-scrollbar-thumb {
+  background: var(--md-sys-color-outline-variant);
+  border-radius: 3px;
+}
+.md3-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--md-spacing-2);
+  padding: var(--md-spacing-1) 0;
+  cursor: pointer;
+  font: var(--md-typescale-body-medium);
+}
+.md3-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--md-sys-color-primary);
+  cursor: pointer;
+}
+.md3-checkbox .domain-type {
+  font: var(--md-typescale-label-medium);
+  color: var(--md-sys-color-on-surface-variant);
+  margin-left: auto;
+}
+
+/* ──── F3: Smart Domain Grouping ──── */
+.domain-group-item {
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  padding: var(--md-spacing-1) 0;
+}
+.domain-group-item:last-child {
+  border-bottom: none;
+}
+.domain-suggested {
+  font: var(--md-typescale-body-medium);
+  font-weight: 700;
+  color: var(--md-sys-color-primary);
+}
+.domain-count {
+  font: var(--md-typescale-label-medium);
+  color: var(--md-sys-color-on-surface-variant);
+  margin-left: auto;
+}
+.domain-type-tag {
+  font: var(--md-typescale-label-medium);
+  color: var(--md-sys-color-on-surface-variant);
+  margin-left: auto;
+}
+.domain-sub-list {
+  margin-left: 26px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  padding-bottom: var(--md-spacing-1);
+}
+.domain-sub {
+  font: var(--md-typescale-body-small);
+  color: var(--md-sys-color-on-surface-variant);
+  background: var(--md-sys-color-surface-variant);
+  padding: 1px 6px;
+  border-radius: var(--md-shape-corner-extra-small);
+}
+
+/* ──── Rule List ──── */
+#rule-list {
+  max-height: 180px;
+  overflow-y: auto;
+}
+#rule-list::-webkit-scrollbar {
+  width: 6px;
+}
+#rule-list::-webkit-scrollbar-thumb {
+  background: var(--md-sys-color-outline-variant);
+  border-radius: 3px;
+}
+.rule-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--md-spacing-2) 0;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  font: var(--md-typescale-body-small);
+  gap: var(--md-spacing-2);
+}
+.rule-item:last-child {
+  border-bottom: none;
+}
+.rule-item .rule-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rule-policy {
+  padding: 2px 8px;
+  border-radius: var(--md-shape-corner-extra-small);
+  font: var(--md-typescale-label-medium);
+  flex-shrink: 0;
+}
+.rule-policy--proxy { background: #E8F5E9; color: #2E7D32; }
+.rule-policy--direct { background: #FFF3E0; color: #E65100; }
+.rule-policy--reject { background: #FFEBEE; color: #C62828; }
+.rule-policy--group { background: #E8EAF6; color: #283593; }
+.rule-delete-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.rule-delete-btn:hover {
+  background: var(--md-sys-color-error-container);
+  color: var(--md-sys-color-error);
+}
+
+/* ──── Settings Panel Overlay ──── */
+.settings-panel {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: var(--md-sys-color-surface);
+  padding: var(--md-spacing-4);
+  z-index: 10;
+  overflow-y: auto;
+}
+.settings-panel.open {
+  display: block;
+}
+.settings-panel label {
+  display: block;
+  font: var(--md-typescale-label-medium);
+  color: var(--md-sys-color-on-surface-variant);
+  margin-bottom: var(--md-spacing-1);
+  margin-top: var(--md-spacing-3);
+}
+.settings-panel label:first-of-type {
+  margin-top: 0;
+}
+.settings-panel .md3-text-field {
+  margin-bottom: var(--md-spacing-1);
+}
+.settings-actions {
+  display: flex;
+  gap: var(--md-spacing-2);
+  margin-top: var(--md-spacing-5);
+}
+
+/* ──── Toast ──── */
+.toast {
+  position: fixed;
+  bottom: var(--md-spacing-4);
+  left: var(--md-spacing-4);
+  right: var(--md-spacing-4);
+  padding: var(--md-spacing-3) var(--md-spacing-4);
+  border-radius: var(--md-shape-corner-small);
+  font: var(--md-typescale-body-medium);
+  color: var(--md-sys-color-on-primary);
+  background: var(--md-sys-color-primary);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  box-shadow: var(--md-elevation-2);
+  z-index: 20;
+  text-align: center;
+  animation: toastIn 0.3s ease;
+  pointer-events: none;
+}
+.toast--error {
+  background: var(--md-sys-color-error);
+  color: var(--md-sys-color-on-primary);
+  border-color: #D32F2F;
+}
+.toast--success {
+  background: var(--md-status-on);
+  color: var(--md-sys-color-on-primary);
+  border-color: #388E3C;
+}
+.toast--warn {
+  background: var(--md-sys-color-tertiary);
+  color: var(--md-sys-color-on-tertiary);
+  border-color: #5D4037;
+}
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}

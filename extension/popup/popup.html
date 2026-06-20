@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <!-- ──── 顶部：模式切换 + Clash 状态 ──── -->
+  <div class="md3-card">
+    <div class="md3-segmented-button" id="mode-switch">
+      <button data-mode="system" data-i18n="mode_system">系统代理</button>
+      <button data-mode="direct" data-i18n="mode_direct">直连</button>
+      <button data-mode="clash" data-i18n="mode_clash">Clash 代理</button>
+    </div>
+    <div style="margin-top: var(--md-spacing-3); display: flex; align-items: center; gap: var(--md-spacing-2);">
+      <span class="status-dot status-dot--off" id="clash-status-dot"></span>
+      <span data-i18n="clash_status" style="font: var(--md-typescale-body-small);">Clash 状态</span>:
+      <span id="clash-status-text" style="font: var(--md-typescale-body-small); margin-left: 4px; color: var(--md-sys-color-on-surface-variant); cursor: pointer;" title=""></span>
+    </div>
+    <div style="margin-top: var(--md-spacing-1); display: flex; align-items: center; gap: var(--md-spacing-2);">
+      <span class="status-dot status-dot--warn" id="system-proxy-dot"></span>
+      <span data-i18n="system_proxy_status" style="font: var(--md-typescale-body-small);">系统代理状态</span>:
+      <span id="system-proxy-text" style="font: var(--md-typescale-body-small); margin-left: 4px; color: var(--md-sys-color-on-surface-variant);"></span>
+    </div>
+  </div>
+
+  <!-- ──── F1: 检查当前域名在哪个代理组 ──── -->
+  <div class="md3-card" id="f1-section">
+    <h3 class="md3-section-title" data-i18n="f1_title">检查当前域名在哪个代理组</h3>
+    <span data-i18n="f1_current_site" style="font: var(--md-typescale-label-medium);">当前网站</span>:
+    <span id="current-domain" style="font: var(--md-typescale-body-medium);"></span>
+    <div id="f1-matched"></div>
+    <div id="f1-not-matched" data-i18n="f1_not_matched">未匹配到代理组</div>
+  </div>
+
+  <!-- ──── F2: 快捷添加当前域名到代理组 ──── -->
+  <div class="md3-card" id="f2-section">
+    <h3 class="md3-section-title" data-i18n="f2_title">快捷添加域名到代理组</h3>
+    <div id="f2-row">
+      <span id="f2-domain"></span>
+      <select class="md3-select" id="f2-rule-type">
+        <option value="DOMAIN-SUFFIX" data-i18n="rule_type_domain_suffix">DOMAIN-SUFFIX</option>
+        <option value="DOMAIN" data-i18n="rule_type_domain">DOMAIN</option>
+        <option value="DOMAIN-KEYWORD" data-i18n="rule_type_domain_keyword">DOMAIN-KEYWORD</option>
+      </select>
+      <select class="md3-select" id="f2-policy">
+        <option value="" data-i18n="f2_loading">加载代理组中...</option>
+      </select>
+      <button class="md3-button md3-button--filled" id="f2-btn" data-i18n="f2_confirm_add">确认添加</button>
+    </div>
+  </div>
+
+  <!-- ──── F3: 检测页面所有域名并智能分组 ──── -->
+  <div class="md3-card" id="f3-section">
+    <h3 class="md3-section-title" data-i18n="f3_title">检测页面域名并智能分组</h3>
+    <button class="md3-button md3-button--tonal" id="f3-detect-btn" data-i18n="f3_detect_btn" style="width: 100%;">检测页面域名</button>
+    <div id="f3-summary"></div>
+    <div class="domain-list" id="f3-domain-list"></div>
+    <div style="display: flex; gap: var(--md-spacing-2); margin-top: var(--md-spacing-2); flex-wrap: wrap;">
+      <button class="md3-button md3-button--outlined" id="f3-select-all" data-i18n="f3_select_all">全选</button>
+      <button class="md3-button md3-button--outlined" id="f3-deselect-all" data-i18n="f3_deselect_all">取消</button>
+      <select class="md3-select" id="f3-policy">
+        <option value="" data-i18n="f2_loading">加载代理组中...</option>
+      </select>
+      <button class="md3-button md3-button--filled" id="f3-batch-btn" data-i18n="f3_batch_add">批量添加</button>
+    </div>
+  </div>
+
+  <!-- ──── 规则列表 ──── -->
+  <div class="md3-card" id="rule-list-section">
+    <h3 class="md3-section-title" id="rule-list-header">
+      <span data-i18n="rule_list_title">全部 Clash 规则</span>
+      (<span id="rule-count">0</span> <span data-i18n="rule_list_count">条</span>)
+    </h3>
+    <div id="rule-list"></div>
+  </div>
+
+  <!-- ──── 底部 ──── -->
+  <div style="display: flex; gap: var(--md-spacing-2); justify-content: flex-end;">
+    <button class="md3-button md3-button--outlined" id="restart-clash-btn" data-i18n="settings_restart_kernel">同步规则到内核</button>
+    <button class="md3-button md3-button--outlined" id="settings-btn" data-i18n="settings_title">设置</button>
+  </div>
+
+  <!-- ──── 设置面板 (Overlay) ──── -->
+  <div class="settings-panel" id="settings-panel">
+    <h3 class="md3-section-title" data-i18n="settings_title">设置</h3>
+
+    <label data-i18n="settings_proxy_host">代理地址</label>
+    <div style="display: flex; gap: var(--md-spacing-2);">
+      <input class="md3-text-field" id="settings-proxy-host" type="text" placeholder="127.0.0.1" style="flex: 2;">
+      <input class="md3-text-field" id="settings-proxy-port" type="number" placeholder="7890" style="flex: 1;">
+    </div>
+    <div style="font: var(--md-typescale-body-small); color: var(--md-sys-color-on-surface-variant); margin: var(--md-spacing-1) 0 var(--md-spacing-2) 0;" data-i18n="settings_api_hint">修改代理地址和端口后自动拼接 API 地址，也可手动编辑</div>
+
+    <label data-i18n="settings_api_url">Clash API 地址</label>
+    <input class="md3-text-field" id="settings-api-url" type="text" placeholder="http://127.0.0.1:9090">
+
+    <label data-i18n="settings_secret">API 密钥</label>
+    <input class="md3-text-field" id="settings-secret" type="password" placeholder="(可选)">
+
+    <label data-i18n="settings_config_path">配置文件路径</label>
+    <div style="display: flex; gap: var(--md-spacing-2);">
+      <input class="md3-text-field" id="settings-config-path" type="text" placeholder="自动检测" style="flex: 1;">
+      <button class="md3-button md3-button--outlined" id="settings-detect-config" data-i18n="settings_detect" style="white-space: nowrap;">自动检测</button>
+    </div>
+    <div style="font: var(--md-typescale-body-small); color: var(--md-sys-color-on-surface-variant); margin: var(--md-spacing-1) 0 var(--md-spacing-2) 0;" data-i18n="settings_config_path_hint">留空则自动检测，修改后需重启 Clash 生效</div>
+
+    <label data-i18n="settings_language">界面语言</label>
+    <select class="md3-select" id="language-select" style="width: 100%;"></select>
+
+    <div class="settings-actions">
+      <button class="md3-button md3-button--filled" id="settings-save" data-i18n="settings_save">保存设置</button>
+      <button class="md3-button md3-button--outlined" id="settings-restart-kernel" data-i18n="settings_restart_kernel">同步规则到内核</button>
+      <button class="md3-button md3-button--outlined" id="settings-close">关闭</button>
+    </div>
+  </div>
+
+  <script src="../lib/i18n.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
