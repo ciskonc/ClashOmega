@@ -56,11 +56,11 @@
   "settings_language": "言語",
   "settings_save": "保存",
 
-  "restart_clash": "ルール同期",
-  "restart_clash_hint": "プロファイルからClashカーネルにルールを同期",
-  "restart_clash_success": "ルールをカーネルに同期しました",
-  "restart_clash_failed": "同期失敗、Clashの実行状態を確認してください",
-  "settings_restart_kernel": "ルールをカーネルに同期",
+  "restart_clash": "Clash 再起動",
+  "restart_clash_hint": "プロファイルからClashカーネルにルールを同期して再起動",
+  "restart_clash_success": "Clash を再起動しました、ルールが適用されました",
+  "restart_clash_failed": "再起動失敗、Clashの実行状態を確認してください",
+  "settings_restart_kernel": "Clash 再起動",
   "hot_reload_success": "ルールをホットリロードしました",
   "hot_reload_failed": "ホットリロード失敗、ルールを同期してください",
 

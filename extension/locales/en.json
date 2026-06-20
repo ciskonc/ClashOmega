@@ -56,11 +56,11 @@
   "settings_language": "Language",
   "settings_save": "Save",
 
-  "restart_clash": "Sync Rules",
-  "restart_clash_hint": "Sync rules from profile file to Clash kernel",
-  "restart_clash_success": "Rules synced to kernel",
-  "restart_clash_failed": "Sync failed, check if Clash is running",
-  "settings_restart_kernel": "Sync Rules to Kernel",
+  "restart_clash": "Restart Clash",
+  "restart_clash_hint": "Sync rules from profile file to Clash kernel and restart",
+  "restart_clash_success": "Clash restarted, rules applied",
+  "restart_clash_failed": "Restart failed, check if Clash is running",
+  "settings_restart_kernel": "Restart Clash",
   "hot_reload_success": "Rules hot-reloaded",
   "hot_reload_failed": "Hot-reload failed, please sync rules",
 

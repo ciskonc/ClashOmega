@@ -56,11 +56,11 @@
   "settings_language": "界面语言",
   "settings_save": "保存设置",
 
-  "restart_clash": "同步规则",
-  "restart_clash_hint": "将 profile 文件中的规则同步到 Clash 内核",
-  "restart_clash_success": "规则已同步到内核",
-  "restart_clash_failed": "同步失败，请检查 Clash 是否运行",
-  "settings_restart_kernel": "同步规则到内核",
+  "restart_clash": "重启 Clash",
+  "restart_clash_hint": "将 profile 文件中的规则同步到 Clash 内核并重启",
+  "restart_clash_success": "Clash 已重启，规则已生效",
+  "restart_clash_failed": "重启失败，请检查 Clash 是否运行",
+  "settings_restart_kernel": "重启 Clash",
   "hot_reload_success": "规则已热加载",
   "hot_reload_failed": "热加载失败，请同步规则",
 

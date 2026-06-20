@@ -1,6 +1,6 @@
 # Chrome Clash Manager
 
-> v1.1.0 · Chrome 浏览器扩展，用于管理 Clash 代理规则，支持三模式代理切换、域名规则匹配检测、一键添加域名到代理组。
+> v1.1.1 · Chrome 浏览器扩展，用于管理 Clash 代理规则，支持三模式代理切换、域名规则匹配检测、一键添加域名到代理组。
 
 ## 功能
 
@@ -12,7 +12,7 @@
 | **F3: 智能域名分组** | 检测页面所有域名，自动分组建议（如 `i1.art.com`, `i2.art.com` → `*.art.com`） |
 | **系统代理状态** | 实时显示 Windows 系统代理状态（通过 Native Host 读取注册表） |
 | **规则管理** | 查看、添加、删除 Clash YAML 配置文件中的规则（增删后自动热重载） |
-| **同步规则到内核** | 一键将 profile 规则同步到 Clash Verge Rev 快照文件并重启内核 |
+| **重启 Clash** | 一键将 profile 规则同步到 Clash Verge Rev 快照文件并重启内核（热重载失效时使用） |
 | **多语言** | 简体中文 / English / 日本語 |
 | **Material Design 3** | Google MD3 设计风格 |
 
@@ -46,7 +46,7 @@ Native Host 用于读写 Clash 本地 YAML 配置文件（仅 Windows）。
 
 **会**。增删规则成功后，扩展会自动通过 Clash API `/configs?force=true` 热重载配置（500ms 防抖）。
 
-底部的「同步规则到内核」按钮是更彻底的方式：将 profile 规则写入 Clash Verge Rev 快照文件（`clash-verge.yaml`）并重启内核，仅在热重载失效时使用。
+底部的「重启 Clash」按钮是更彻底的方式：将 profile 规则写入 Clash Verge Rev 快照文件（`clash-verge.yaml`）并重启内核，仅在热重载失效时使用。
 
 ### 为什么我的自定义规则不生效？
 
@@ -93,6 +93,16 @@ native-host/        # Native Messaging Host（Windows）
 ```
 
 ## 版本历史
+
+### v1.1.1 (2026-06-21)
+
+**Bug 修复**
+- 修复增删规则后热重载不生效：`scheduleHotReload` 未传入 `configPath`，导致 Native Host 自动检测失败或读错文件
+- 增删规则现在会携带用户设置的 `clashConfigPath` 触发热重载
+
+**UI 改进**
+- 「同步规则到内核」按钮改名为「重启 Clash」，更简单易懂
+- 同步更新三语言文案（zh_CN / en / ja）
 
 ### v1.1.0 (2026-06-21)
 

@@ -132,8 +132,8 @@ async function handleMessage(message) {
         const settings = await getSettings();
         const result = await addClashRule(message.rule, settings.clashConfigPath);
         if (result && result.success) {
-          // 异步热重载，不阻塞响应
-          scheduleHotReload();
+          // 异步热重载，不阻塞响应（传入 configPath 避免自动检测失败）
+          scheduleHotReload(settings.clashConfigPath);
         }
         return result;
       }
@@ -142,7 +142,7 @@ async function handleMessage(message) {
         const settings = await getSettings();
         const result = await batchAddClashRules(message.rules, settings.clashConfigPath);
         if (result && result.success) {
-          scheduleHotReload();
+          scheduleHotReload(settings.clashConfigPath);
         }
         return result;
       }
@@ -151,7 +151,7 @@ async function handleMessage(message) {
         const settings = await getSettings();
         const result = await removeClashRule(message.rule, settings.clashConfigPath);
         if (result && result.success) {
-          scheduleHotReload();
+          scheduleHotReload(settings.clashConfigPath);
         }
         return result;
       }
@@ -240,19 +240,25 @@ async function handleMessage(message) {
 // ──── 异步热重载（防抖：500ms 内多次调用只执行最后一次）────
 
 let hotReloadTimer = null;
+let pendingHotReloadPath = null;  // 缓存最近一次增删操作的 configPath
 
-function scheduleHotReload() {
+function scheduleHotReload(configPath) {
+  // 缓存 configPath，避免定时器触发时丢失路径导致 Native Host 自动检测失败
+  if (configPath) pendingHotReloadPath = configPath;
   if (hotReloadTimer) clearTimeout(hotReloadTimer);
   hotReloadTimer = setTimeout(async () => {
     hotReloadTimer = null;
+    const pathToUse = pendingHotReloadPath;
+    pendingHotReloadPath = null;
     try {
       // 从 profile 文件读取规则（Native Host），而非内核 API
       // 内核 GET /rules 返回的是旧快照的规则，profile 文件才是最新数据
-      const yamlResult = await getClashYamlRules();
+      // 必须传入 configPath，否则 Native Host 自动检测可能失败或选错文件
+      const yamlResult = await getClashYamlRules(pathToUse);
       // 使用 Array.isArray 严格检查，防止 rules 为 {} 等非数组 truthy 值导致 hotReloadConfig 崩溃
       if (yamlResult && yamlResult.success && Array.isArray(yamlResult.rules) && yamlResult.rules.length > 0) {
         const ok = await hotReloadConfig(yamlResult.rules);
-        console.log(`Clash Manager: async hot-reload ${ok ? 'succeeded' : 'failed'} (${yamlResult.rules.length} rules from profile)`);
+        console.log(`Clash Manager: async hot-reload ${ok ? 'succeeded' : 'failed'} (${yamlResult.rules.length} rules from profile, path=${pathToUse || 'auto'})`);
       } else {
         console.warn('Clash Manager: async hot-reload skipped (no valid rules from profile)', yamlResult);
       }
