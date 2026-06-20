@@ -178,7 +178,7 @@ async function hotReloadConfig(rules) {
       console.error(`Clash Manager: hotReloadConfig PUT failed HTTP ${response.status}`);
       return false;
     }
-    console.log(`Clash Manager: hot-reloaded ${newRules.length} rules without restart`);
+    console.log(`Clash Manager: hot-reloaded ${orderedRules.length} rules without restart`);
     return true;
   } catch (e) {
     console.error("Clash Manager: hotReloadConfig error:", e.message);

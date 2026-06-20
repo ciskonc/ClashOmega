@@ -92,7 +92,8 @@ function Get-ConfigPath {
                 elseif ($trimmed -match '^\s*type\s*:\s*(\S+)') { $currentType = $matches[1] }
                 elseif ($trimmed -match '^\s*file\s*:\s*(\S+)') { $currentFile = $matches[1] }
                 if ($currentType -eq 'rules' -and $currentFile) {
-                    $foundProfilePath = Join-Path $dir 'profiles' $currentFile
+                    # Join-Path 在 Windows PowerShell 5.1 中只接受两个位置参数，必须嵌套调用
+                    $foundProfilePath = Join-Path (Join-Path $dir 'profiles') $currentFile
                     $profileDir = $dir
                     if (Test-Path $foundProfilePath) { return $foundProfilePath }
                     $currentType = $null; $currentFile = $null
@@ -108,7 +109,8 @@ function Get-ConfigPath {
                     elseif ($trimmed -match '^\s*type\s*:\s*(\S+)') { $currentType = $matches[1] }
                     elseif ($trimmed -match '^\s*file\s*:\s*(\S+)') { $currentFile = $matches[1] }
                     if ($currentType -ne 'remote' -and $currentType -ne 'script' -and $currentFile) {
-                        $foundProfilePath = Join-Path $dir 'profiles' $currentFile
+                        # Join-Path 在 Windows PowerShell 5.1 中只接受两个位置参数，必须嵌套调用
+                        $foundProfilePath = Join-Path (Join-Path $dir 'profiles') $currentFile
                         $profileDir = $dir
                         if (Test-Path $foundProfilePath) { break }
                         $currentType = $null; $currentFile = $null
