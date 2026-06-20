@@ -178,7 +178,9 @@ function Write-Config($path, $content) {
 }
 
 function Parse-Rules($content) {
-    $rules = @()
+    # 使用 ArrayList 确保始终返回真正的数组，避免 PowerShell streaming 把空数组展平为 $null
+    $rules = [System.Collections.ArrayList]::new()
+
     $lines = $content -split "`n"
 
     # 自动检测 Clash Verge profile 格式
@@ -191,13 +193,13 @@ function Parse-Rules($content) {
             if ($trimmed -eq 'append:') { $inAppend = $true; continue }
             if ($inAppend -and $trimmed.StartsWith('- ') -and -not $trimmed.EndsWith('[]')) {
                 $rule = $trimmed.Substring(2).Trim().Trim("'").Trim('"')
-                if ($rule) { $rules += $rule }
+                if ($rule) { [void]$rules.Add($rule) }
             }
             if ($inAppend -and -not $trimmed.StartsWith('- ') -and $trimmed -and -not $trimmed.StartsWith('#')) {
                 $inAppend = $false
             }
         }
-        return $rules
+        return ,$rules.ToArray()
     }
 
     # 标准 Clash 配置格式
@@ -217,9 +219,9 @@ function Parse-Rules($content) {
         if ($trimmed.StartsWith('- ')) { $rule = $trimmed.Substring(2).Trim() }
         elseif ($trimmed.StartsWith("- '") -and $trimmed.EndsWith("'")) { $rule = $trimmed.Substring(3, $trimmed.Length - 4).Trim() }
         elseif ($trimmed.StartsWith('- "') -and $trimmed.EndsWith('"')) { $rule = $trimmed.Substring(3, $trimmed.Length - 4).Trim() }
-        if ($rule) { $rules += $rule }
+        if ($rule) { [void]$rules.Add($rule) }
     }
-    return $rules
+    return ,$rules.ToArray()
 }
 
 function Add-Rule($content, $rule) {
@@ -330,6 +332,11 @@ function Get-SnapshotPath {
 
 # 将规则列表写入快照文件的 rules: 区块
 function Sync-SnapshotRules($snapshotPath, $rules) {
+    # 参数验证：拒绝空或非数组 rules，防止清空快照文件
+    if ($null -eq $rules -or -not ($rules -is [array]) -or $rules.Count -eq 0) {
+        throw "Sync-SnapshotRules: rules 参数为空或非数组，拒绝写入快照（防止清空规则）"
+    }
+
     $content = Read-Config $snapshotPath
     $lines = [System.Collections.ArrayList]::new($content -split "`n")
     $inRules = $false

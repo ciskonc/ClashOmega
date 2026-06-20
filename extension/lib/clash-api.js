@@ -150,6 +150,12 @@ async function getClashConfig() {
  */
 async function hotReloadConfig(rules) {
   try {
+    // 防御性检查：确保 rules 是非空数组，防止 .filter 崩溃
+    if (!Array.isArray(rules) || rules.length === 0) {
+      console.error("Clash Manager: hotReloadConfig skipped — rules is not a non-empty array");
+      return false;
+    }
+
     // 1. 获取当前运行配置
     const config = await clashGet("/configs");
     if (!config) {

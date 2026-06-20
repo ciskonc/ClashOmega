@@ -54,10 +54,13 @@ async function removeClashRule(rule, configPath) {
 
 /**
  * 获取 Clash YAML 中的规则列表
+ * @param {string} [configPath] - 可选，配置文件路径（由 background.js 传入）
  * @returns {Promise<{success: boolean, rules?: string[], configPath?: string, error?: string}>}
  */
-async function getClashYamlRules() {
-  return await sendToNative({ action: 'getRules' });
+async function getClashYamlRules(configPath) {
+  const msg = { action: 'getRules' };
+  if (configPath) msg.configPath = configPath;
+  return await sendToNative(msg);
 }
 
 /**

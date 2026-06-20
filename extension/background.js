@@ -189,19 +189,25 @@ async function handleMessage(message) {
         const settings = await getSettings();
         console.log('[restartClash] Step 1: Reading rules from profile file...');
         const yamlResult = await getClashYamlRules(settings.clashConfigPath);
-        if (!yamlResult || !yamlResult.success || !yamlResult.rules) {
+        // 使用 Array.isArray 严格检查，防止 rules 为 {} 等非数组 truthy 值通过检查
+        if (!yamlResult || !yamlResult.success || !Array.isArray(yamlResult.rules)) {
           console.error('[restartClash] FAILED at step 1: cannot read profile rules', yamlResult);
-          return { success: false, error: 'Cannot read rules from profile file' };
+          return { success: false, error: 'Cannot read rules from profile file (invalid)' };
         }
         console.log(`[restartClash] Step 1 OK: ${yamlResult.rules.length} rules read`);
 
-        console.log('[restartClash] Step 2: Syncing rules to snapshot...');
-        const syncResult = await syncSnapshotRules(yamlResult.rules);
-        if (!syncResult || !syncResult.success) {
-          console.error('[restartClash] FAILED at step 2: snapshot sync failed', syncResult);
-          return { success: false, error: syncResult?.error || 'Failed to sync snapshot' };
+        // 仅当有规则时才同步到快照，避免空规则清空快照文件
+        if (yamlResult.rules.length > 0) {
+          console.log('[restartClash] Step 2: Syncing rules to snapshot...');
+          const syncResult = await syncSnapshotRules(yamlResult.rules);
+          if (!syncResult || !syncResult.success) {
+            console.error('[restartClash] FAILED at step 2: snapshot sync failed', syncResult);
+            return { success: false, error: syncResult?.error || 'Failed to sync snapshot' };
+          }
+          console.log(`[restartClash] Step 2 OK: snapshot synced to ${syncResult.snapshotPath}`);
+        } else {
+          console.log('[restartClash] Step 2 SKIPPED: no rules to sync (profile append is empty)');
         }
-        console.log(`[restartClash] Step 2 OK: snapshot synced to ${syncResult.snapshotPath}`);
 
         console.log('[restartClash] Step 3: Calling POST /restart...');
         const restarted = await restartKernel();
@@ -234,9 +240,12 @@ function scheduleHotReload() {
       // 从 profile 文件读取规则（Native Host），而非内核 API
       // 内核 GET /rules 返回的是旧快照的规则，profile 文件才是最新数据
       const yamlResult = await getClashYamlRules();
-      if (yamlResult && yamlResult.success && yamlResult.rules) {
+      // 使用 Array.isArray 严格检查，防止 rules 为 {} 等非数组 truthy 值导致 hotReloadConfig 崩溃
+      if (yamlResult && yamlResult.success && Array.isArray(yamlResult.rules) && yamlResult.rules.length > 0) {
         const ok = await hotReloadConfig(yamlResult.rules);
         console.log(`Clash Manager: async hot-reload ${ok ? 'succeeded' : 'failed'} (${yamlResult.rules.length} rules from profile)`);
+      } else {
+        console.warn('Clash Manager: async hot-reload skipped (no valid rules from profile)', yamlResult);
       }
     } catch (e) {
       console.error('Clash Manager: async hot-reload error:', e.message);
