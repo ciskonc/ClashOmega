@@ -20,6 +20,7 @@
   "f1_matched": "一致したプロキシグループ",
   "f1_not_matched": "プロキシグループにありません",
   "f1_mode_hint": "現在のモードでは検出できません、「Clash プロキシ」モードに切り替えてください",
+  "f1_detecting": "プロキシグループを検出中...",
 
   "f2_title": "プロキシグループに追加",
   "f2_confirm_add": "追加確認",
@@ -54,8 +55,8 @@
   "script_rules_not_found": "拡張スクリプトファイルが見つかりません（現在のプロファイルに option.script がありません）",
   "rule_restart_hint": "ルールが変更されました。Clash を再起動して適用してください",
 
-  "settings_use_script_rule": "拡張スクリプトにルールを書き込む",
-  "settings_use_script_rule_hint": "チェックすると、ルールの追加/削除は YAML 設定ファイルではなく Clash Verge Rev の Script.js ファイルに書き込まれます",
+  "settings_use_script_rule": "サブスクリプション拡張スクリプトにルールを書き込む",
+  "settings_use_script_rule_hint": "チェックすると、ルールの追加/削除は現在のサブスクリプションの拡張スクリプトファイル（profiles ディレクトリ内の .js）にのみ書き込まれ、Clash Verge Rev のグローバル Script.js は変更されません",
 
   "settings_title": "設定",
   "settings_api_url": "Clash API URL",

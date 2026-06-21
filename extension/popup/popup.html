@@ -125,10 +125,10 @@
     <select class="md3-select" id="language-select" style="width: 100%;"></select>
 
     <div style="margin-top: var(--md-spacing-2); display: flex; align-items: center; gap: var(--md-spacing-2);">
-      <input type="checkbox" id="settings-use-script-rule" style="cursor: pointer;">
-      <label for="settings-use-script-rule" data-i18n="settings_use_script_rule" style="cursor: pointer;">增删域名写入扩展脚本规则</label>
+      <input type="checkbox" id="settings-use-script-rule" style="cursor: pointer;" checked>
+      <label for="settings-use-script-rule" data-i18n="settings_use_script_rule" style="cursor: pointer;">增删域名写入订阅扩展脚本</label>
     </div>
-    <div style="font: var(--md-typescale-body-small); color: var(--md-sys-color-on-surface-variant); margin: var(--md-spacing-1) 0 var(--md-spacing-2) 0;" data-i18n="settings_use_script_rule_hint">勾选后添加/删除规则将写入 Clash Verge Rev 的 Script.js 扩展脚本文件</div>
+    <div style="font: var(--md-typescale-body-small); color: var(--md-sys-color-on-surface-variant); margin: var(--md-spacing-1) 0 var(--md-spacing-2) 0;" data-i18n="settings_use_script_rule_hint">勾选后添加/删除规则仅写入当前订阅的扩展脚本文件（profiles 目录下的 .js），不会改动 Clash Verge Rev 的全局 Script.js</div>
 
     <div class="settings-actions">
       <button class="md3-button md3-button--filled" id="settings-save" data-i18n="settings_save">保存设置</button>

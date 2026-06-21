@@ -20,6 +20,7 @@
   "f1_matched": "匹配到代理组",
   "f1_not_matched": "未匹配到代理组",
   "f1_mode_hint": "当前模式无法检测域名代理组，请切换到「Clash 代理」模式",
+  "f1_detecting": "正在检测域名匹配的代理组...",
 
   "f2_title": "快捷添加域名到代理组",
   "f2_confirm_add": "确认添加",
@@ -54,8 +55,8 @@
   "script_rules_not_found": "未找到扩展脚本文件（当前订阅未配置 option.script）",
   "rule_restart_hint": "规则已修改，请重启 Clash 生效",
 
-  "settings_use_script_rule": "增删域名写入扩展脚本规则",
-  "settings_use_script_rule_hint": "勾选后添加/删除规则将写入 Clash Verge Rev 的 Script.js 扩展脚本文件，而非 YAML 配置文件",
+  "settings_use_script_rule": "增删域名写入订阅扩展脚本",
+  "settings_use_script_rule_hint": "勾选后添加/删除规则仅写入当前订阅的扩展脚本文件（profiles 目录下的 .js），不会改动 Clash Verge Rev 的全局 Script.js",
 
   "settings_title": "设置",
   "settings_api_url": "Clash API 地址",

@@ -82,7 +82,7 @@ async function getSettings() {
     clashProxyHost: '127.0.0.1',
     clashProxyPort: 7890,
     clashConfigPath: '',
-    useScriptRule: false,
+    useScriptRule: true,
     language: 'zh_CN'
   };
 }

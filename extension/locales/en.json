@@ -20,6 +20,7 @@
   "f1_matched": "Matched Proxy Group",
   "f1_not_matched": "Not in any Proxy Group",
   "f1_mode_hint": "Cannot detect in current mode, please switch to \"Clash Proxy\" mode",
+  "f1_detecting": "Detecting matched proxy group...",
 
   "f2_title": "Quick Add Domain to Proxy Group",
   "f2_confirm_add": "Confirm Add",
@@ -54,8 +55,8 @@
   "script_rules_not_found": "Extension script file not found (current profile has no option.script)",
   "rule_restart_hint": "Rules modified, please restart Clash to apply",
 
-  "settings_use_script_rule": "Write rules to extension script",
-  "settings_use_script_rule_hint": "If checked, add/delete rules will be written to Clash Verge Rev's Script.js file instead of YAML config",
+  "settings_use_script_rule": "Write rules to subscription extension script",
+  "settings_use_script_rule_hint": "If checked, add/delete rules are only written to the current subscription's extension script (.js in profiles dir), not the global Script.js of Clash Verge Rev",
 
   "settings_title": "Settings",
   "settings_api_url": "Clash API URL",

@@ -979,25 +979,55 @@ async function initPopup() {
     sendToBackground({ action: 'getClashRules' }).then(clashRules => {
       if (clashRules.success) {
         const matched = findMatchingRules(domain, clashRules.rules);
-        renderDomainRuleCheck(domain, matched);
         renderRuleList(clashRules.rules);
+
+        // 判断本地匹配结果是否"不精确"：
+        //   - 本地无任何匹配 → 不精确
+        //   - 本地匹配全是 MATCH（兜底规则）→ 不精确（RULE-SET 等类型本地无法匹配）
+        // 不精确时先显示"检测中..."占位，等待 /connections 返回内核真实匹配后再渲染
+        const localImprecise = matched.length === 0 || matched.every(r => normalizeRuleType(r.type) === 'MATCH');
+
+        if (localImprecise) {
+          // 显示检测中占位，避免用户误以为 MATCH 就是最终结果
+          document.getElementById('current-domain').textContent = domain;
+          const matchedEl = document.getElementById('f1-matched');
+          const notMatchedEl = document.getElementById('f1-not-matched');
+          notMatchedEl.style.display = 'none';
+          matchedEl.innerHTML = '<div style="color: var(--md-sys-color-on-surface-variant); font: var(--md-typescale-body-small); padding: var(--md-spacing-1) 0;">' + I18N.t('f1_detecting') + '</div>';
+        } else {
+          // 本地有精确匹配（DOMAIN/DOMAINSUFFIX 等），先渲染
+          renderDomainRuleCheck(domain, matched);
+        }
 
         // 始终异步查询 Clash API /connections，获取内核实际匹配的规则
         // 本地匹配无法处理 RULE-SET 等类型，/connections 返回的是内核真实匹配结果
-        // 覆盖策略：
-        //   1. /connections 返回了非 MATCH 的精确匹配 → 覆盖本地结果
-        //   2. 本地只有 MATCH（规则全是 RULE-SET 无法匹配）且 /connections 有匹配 →
-        //      用 /connections 结果（含 chains 实际代理组信息，比本地 MATCH 更有价值）
-        sendToBackground({ action: 'getDomainConnections' }).then(connResult => {
-          if (connResult.success && connResult.connections) {
-            const connMatched = findMatchingRulesFromConnections(domain, connResult.connections, clashRules.rules);
-            const hasNonMatchRule = connMatched.some(r => normalizeRuleType(r.type) !== 'MATCH');
-            const localOnlyMatch = matched.length > 0 && matched.every(r => normalizeRuleType(r.type) === 'MATCH');
-            if (hasNonMatchRule || (localOnlyMatch && connMatched.length > 0)) {
-              renderDomainRuleCheck(domain, connMatched);
+        // 覆盖策略（放宽：/connections 有任何匹配就覆盖，因为内核结果更权威）：
+        //   1. /connections 返回了匹配（无论是否 MATCH）→ 覆盖本地结果
+        //   2. /connections 无匹配 → 保留本地结果（可能连接尚未建立）
+        //   3. 本地不精确且 /connections 无匹配 → 1.5 秒后重试一次（等待连接建立）
+        const queryConnections = (retryCount = 0) => {
+          sendToBackground({ action: 'getDomainConnections' }).then(connResult => {
+            if (connResult.success && connResult.connections) {
+              const connMatched = findMatchingRulesFromConnections(domain, connResult.connections, clashRules.rules);
+              if (connMatched.length > 0) {
+                // /connections 有匹配，覆盖本地结果
+                renderDomainRuleCheck(domain, connMatched);
+              } else if (localImprecise && retryCount === 0) {
+                // 本地不精确且 /connections 无匹配，1.5 秒后重试一次
+                setTimeout(() => queryConnections(1), 1500);
+              } else if (retryCount > 0) {
+                // 重试后仍无匹配，显示本地结果（可能是 MATCH）
+                renderDomainRuleCheck(domain, matched);
+              }
+            } else if (localImprecise && retryCount === 0) {
+              // /connections 请求失败，1.5 秒后重试一次
+              setTimeout(() => queryConnections(1), 1500);
+            } else if (retryCount > 0) {
+              renderDomainRuleCheck(domain, matched);
             }
-          }
-        });
+          });
+        };
+        queryConnections();
       }
     });
   }
