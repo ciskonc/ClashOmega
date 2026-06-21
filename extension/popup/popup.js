@@ -69,7 +69,7 @@ async function triggerRestartClash() {
   if (result && result.success) {
     showToast(I18N.t('restart_clash_success'), 'success');
     // 重启成功后自动刷新 popup UI，无需用户重新打开
-    // 刷新范围：F1 域名在哪个组、Clash 规则列表、扩展脚本规则
+    // 刷新范围：域名匹配检测、Clash 规则列表、额外脚本规则
     // 延迟 300ms 等 toast 先渲染，避免视觉抖动
     setTimeout(() => { initPopup(); }, 300);
   } else {
@@ -102,7 +102,7 @@ function showNativeError(result, fallbackKey) {
   showToast(I18N.t(fallbackKey || 'error_native_host'), 'error');
 }
 
-// ──── F1 域名匹配算法（增强版：支持更多规则类型） ────
+// ──── 域名匹配检测算法（增强版：支持更多规则类型） ────
 
 function findMatchingRules(domain, rules) {
   const matched = [];
@@ -223,7 +223,7 @@ function findMatchingRulesFromConnections(domain, connections, rules) {
   return matched;
 }
 
-// ──── F3 智能域名分组 ────
+// ──── 批量检测：智能域名分组 ────
 
 /**
  * 将域名列表按二级域名分组，推荐使用 *.suffix 形式
@@ -438,8 +438,8 @@ function isDomainRule(type) {
 
 function renderDomainRuleCheck(domain, matchedRules, proxies) {
   document.getElementById('current-domain').textContent = domain;
-  const matchedEl = document.getElementById('f1-matched');
-  const notMatchedEl = document.getElementById('f1-not-matched');
+  const matchedEl = document.getElementById('domain-check-matched');
+  const notMatchedEl = document.getElementById('domain-check-not-matched');
 
   matchedEl.innerHTML = '';
   notMatchedEl.style.display = 'none';
@@ -478,7 +478,7 @@ function renderRuleList(rules, proxies) {
 
   listEl.innerHTML = '';
   if (builtinRules.length === 0) {
-    listEl.innerHTML = '<div style="color: var(--md-sys-color-on-surface-variant); font: var(--md-typescale-body-small); padding: var(--md-spacing-2) 0;">' + I18N.t('f1_not_matched') + '</div>';
+    listEl.innerHTML = '<div style="color: var(--md-sys-color-on-surface-variant); font: var(--md-typescale-body-small); padding: var(--md-spacing-2) 0;">' + I18N.t('domain_check_not_matched') + '</div>';
     return;
   }
 
@@ -636,16 +636,16 @@ function renderLanguageSetting() {
   });
 }
 
-// ──── F2: 动态加载代理组下拉框 ────
+// ──── 动态加载代理组下拉框（快捷添加/批量检测共用） ────
 
 async function populateProxyGroupSelects() {
-  const f2Select = document.getElementById('f2-policy');
-  const f3Select = document.getElementById('f3-policy');
+  const quickAddSelect = document.getElementById('quick-add-policy');
+  const batchDetectSelect = document.getElementById('batch-detect-policy');
 
   // 先重置为加载中
-  const loadingHtml = '<option value="">' + I18N.t('f2_loading') + '</option>';
-  f2Select.innerHTML = loadingHtml;
-  f3Select.innerHTML = loadingHtml;
+  const loadingHtml = '<option value="">' + I18N.t('quick_add_loading') + '</option>';
+  quickAddSelect.innerHTML = loadingHtml;
+  batchDetectSelect.innerHTML = loadingHtml;
 
   const result = await sendToBackground({ action: 'getProxies' });
   const proxies = result.proxies || {};
@@ -661,7 +661,7 @@ async function populateProxyGroupSelects() {
   if (groupNames.length === 0) {
     // 没有代理组时回退到硬编码选项
     const fallback = ['Proxy', 'DIRECT', 'REJECT'];
-    [f2Select, f3Select].forEach(sel => {
+    [quickAddSelect, batchDetectSelect].forEach(sel => {
       sel.innerHTML = '';
       fallback.forEach(name => {
         const opt = document.createElement('option');
@@ -676,7 +676,7 @@ async function populateProxyGroupSelects() {
   // 添加 DIRECT 和 REJECT 作为固定选项
   const allOptions = [...groupNames, 'DIRECT', 'REJECT'];
 
-  [f2Select, f3Select].forEach(sel => {
+  [quickAddSelect, batchDetectSelect].forEach(sel => {
     sel.innerHTML = '';
     allOptions.forEach(name => {
       const opt = document.createElement('option');
@@ -697,8 +697,8 @@ function bindModeSwitchEvents() {
     const result = await sendToBackground({ action: 'setMode', mode });
     if (result.success) {
       renderModeSwitch(mode);
-      // 模式切换后重新初始化 popup，更新 F1 检测状态
-      // （非 clash 模式下 F1 应显示提示，clash 模式下应正常检测）
+      // 模式切换后重新初始化 popup，更新域名匹配检测状态
+      // （非 clash 模式下域名匹配检测应显示提示，clash 模式下应正常检测）
       await initPopup();
     } else {
       showToast(result?.error || I18N.t('error_clash_unreachable'), 'error');
@@ -707,13 +707,13 @@ function bindModeSwitchEvents() {
 }
 
 function bindQuickAddRule(domain) {
-  document.getElementById('f2-domain').textContent = domain;
+  document.getElementById('quick-add-domain').textContent = domain;
 
-  document.getElementById('f2-btn').addEventListener('click', async () => {
-    const ruleType = document.getElementById('f2-rule-type').value;
-    const policy = document.getElementById('f2-policy').value;
+  document.getElementById('quick-add-btn').addEventListener('click', async () => {
+    const ruleType = document.getElementById('quick-add-rule-type').value;
+    const policy = document.getElementById('quick-add-policy').value;
     if (!policy) {
-      showToast(I18N.t('f2_select_policy'), 'error');
+      showToast(I18N.t('quick_add_select_policy'), 'error');
       return;
     }
     const rule = `${ruleType},${domain},${policy}`;
@@ -764,10 +764,10 @@ function bindQuickAddRule(domain) {
 }
 
 function bindDomainDetection(tabId) {
-  const detectBtn = document.getElementById('f3-detect-btn');
-  const summaryEl = document.getElementById('f3-summary');
-  const listEl = document.getElementById('f3-domain-list');
-  const batchBtn = document.getElementById('f3-batch-btn');
+  const detectBtn = document.getElementById('batch-detect-btn');
+  const summaryEl = document.getElementById('batch-detect-summary');
+  const listEl = document.getElementById('batch-detect-domain-list');
+  const batchBtn = document.getElementById('batch-detect-batch-btn');
 
   let currentSuggestions = [];
 
@@ -777,11 +777,11 @@ function bindDomainDetection(tabId) {
 
     const result = await sendToBackground({ action: 'getPageDomains' });
     detectBtn.disabled = false;
-    detectBtn.textContent = I18N.t('f3_detect_btn');
+    detectBtn.textContent = I18N.t('batch_detect_btn');
 
     if (!result.success || result.domains.length === 0) {
       summaryEl.style.display = 'block';
-      summaryEl.textContent = `${I18N.t('f3_collected')} 0 ${I18N.t('f3_domains')}`;
+      summaryEl.textContent = `${I18N.t('batch_detect_collected')} 0 ${I18N.t('batch_detect_domains')}`;
       listEl.style.display = 'none';
       return;
     }
@@ -791,7 +791,7 @@ function bindDomainDetection(tabId) {
     currentSuggestions = suggestions;
 
     summaryEl.style.display = 'block';
-    summaryEl.textContent = `${I18N.t('f3_collected')} ${result.count} ${I18N.t('f3_domains')}, ${I18N.t('f3_grouped')} ${suggestions.length} ${I18N.t('f3_groups')}`;
+    summaryEl.textContent = `${I18N.t('batch_detect_collected')} ${result.count} ${I18N.t('batch_detect_domains')}, ${I18N.t('batch_detect_grouped')} ${suggestions.length} ${I18N.t('batch_detect_groups')}`;
 
     listEl.style.display = 'block';
     listEl.innerHTML = '';
@@ -806,7 +806,7 @@ function bindDomainDetection(tabId) {
           <label class="md3-checkbox">
             <input type="checkbox" value="${s.suggested}" data-type="${s.type}" data-idx="${idx}">
             <span class="domain-suggested">${s.suggested}</span>
-            <span class="domain-count">${s.count} ${I18N.t('f3_domains')}</span>
+            <span class="domain-count">${s.count} ${I18N.t('batch_detect_domains')}</span>
           </label>
           <div class="domain-sub-list">${s.hostnames.map(h => `<span class="domain-sub">${h}</span>`).join('')}</div>
         `;
@@ -825,12 +825,12 @@ function bindDomainDetection(tabId) {
   });
 
   // 全选
-  document.getElementById('f3-select-all').addEventListener('click', () => {
+  document.getElementById('batch-detect-select-all').addEventListener('click', () => {
     listEl.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = true; });
   });
 
   // 取消
-  document.getElementById('f3-deselect-all').addEventListener('click', () => {
+  document.getElementById('batch-detect-deselect-all').addEventListener('click', () => {
     listEl.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = false; });
   });
 
@@ -838,13 +838,13 @@ function bindDomainDetection(tabId) {
   batchBtn.addEventListener('click', async () => {
     const checked = listEl.querySelectorAll('input[type="checkbox"]:checked');
     if (checked.length === 0) {
-      showToast(I18N.t('f3_select_all'), 'error');
+      showToast(I18N.t('batch_detect_select_all'), 'error');
       return;
     }
 
-    const policy = document.getElementById('f3-policy').value;
+    const policy = document.getElementById('batch-detect-policy').value;
     if (!policy) {
-      showToast(I18N.t('f2_select_policy'), 'error');
+      showToast(I18N.t('quick_add_select_policy'), 'error');
       return;
     }
 
@@ -865,8 +865,8 @@ function bindDomainDetection(tabId) {
   });
 }
 
-function bindF1DeleteEvents() {
-  document.getElementById('f1-matched').addEventListener('click', async (e) => {
+function bindDomainCheckDeleteEvents() {
+  document.getElementById('domain-check-matched').addEventListener('click', async (e) => {
     const btn = e.target.closest('.rule-delete-btn');
     if (!btn) return;
 
@@ -881,10 +881,10 @@ function bindF1DeleteEvents() {
         }
       });
       // 乐观更新：直接从 DOM 移除，不重新从内核 API 拉取（内核尚未热重载）
-      // F1 匹配结果容器是 .matched-rule-item
+      // 域名匹配检测结果容器是 .matched-rule-item
       const item = btn.closest('.matched-rule-item');
       if (item) item.remove();
-      // F1 中可删除的规则属于「额外脚本规则」，删除后刷新该列表保持 UI 一致
+      // 域名匹配检测中可删除的规则属于「额外脚本规则」，删除后刷新该列表保持 UI 一致
       // 同时更新 script-rule-count
       await loadScriptRules();
     } else {
@@ -1043,7 +1043,7 @@ async function initPopup() {
   try {
     domain = new URL(tab.url).hostname;
   } catch {
-    document.getElementById('current-domain').textContent = I18N.t('f1_not_matched');
+    document.getElementById('current-domain').textContent = I18N.t('domain_check_not_matched');
     return;
   }
 
@@ -1062,26 +1062,26 @@ async function initPopup() {
     renderSystemProxyStatus(status.sysProxy);
   });
 
-  // 1b. 代理组下拉框（F2/F3 共用）
+  // 1b. 代理组下拉框（快捷添加/批量检测共用）
   populateProxyGroupSelects();
 
-  // 1c. 扩展脚本规则（独立于 Clash 规则列表，从 Script.js 读取）
+  // 1c. 额外脚本规则（独立于 Clash 规则列表，从 Script.js 或 /rules 读取）
   loadScriptRules();
 
-  // 1c. Clash 规则列表 + F1 域名匹配
+  // 1c. Clash 规则列表 + 域名匹配检测
   //     非 clash 模式下浏览器不走 Clash 代理，/connections 不会有该域名连接，
-  //     F1 无法检测实际代理组，显示提示并跳过检测
+  //     域名匹配检测无法进行，显示提示并跳过检测
   const currentMode = settings?.currentMode || 'system';
-  const f1ModeHint = document.getElementById('f1-mode-hint');
-  const f1Matched = document.getElementById('f1-matched');
-  const f1NotMatched = document.getElementById('f1-not-matched');
+  const domainCheckModeHint = document.getElementById('domain-check-mode-hint');
+  const domainCheckMatched = document.getElementById('domain-check-matched');
+  const domainCheckNotMatched = document.getElementById('domain-check-not-matched');
 
   if (currentMode !== 'clash') {
     // 非 clash 模式：显示提示，隐藏匹配结果
-    f1ModeHint.style.display = 'block';
-    f1Matched.innerHTML = '';
-    f1NotMatched.style.display = 'none';
-    // 仍加载规则列表供查看，但不做 F1 域名匹配检测
+    domainCheckModeHint.style.display = 'block';
+    domainCheckMatched.innerHTML = '';
+    domainCheckNotMatched.style.display = 'none';
+    // 仍加载规则列表供查看，但不做域名匹配检测
     // 并行获取 rules 和 proxies，proxies 用于解析代理组链路得到最终策略
     Promise.all([
       sendToBackground({ action: 'getClashRules' }),
@@ -1093,7 +1093,7 @@ async function initPopup() {
     });
   } else {
     // clash 模式：隐藏提示，正常检测
-    f1ModeHint.style.display = 'none';
+    domainCheckModeHint.style.display = 'none';
     // 并行获取 rules 和 proxies，proxies 用于解析代理组链路得到最终策略
     Promise.all([
       sendToBackground({ action: 'getClashRules' }),
@@ -1113,10 +1113,10 @@ async function initPopup() {
         if (localImprecise) {
           // 显示检测中占位，避免用户误以为 MATCH 就是最终结果
           document.getElementById('current-domain').textContent = domain;
-          const matchedEl = document.getElementById('f1-matched');
-          const notMatchedEl = document.getElementById('f1-not-matched');
+          const matchedEl = document.getElementById('domain-check-matched');
+          const notMatchedEl = document.getElementById('domain-check-not-matched');
           notMatchedEl.style.display = 'none';
-          matchedEl.innerHTML = '<div style="color: var(--md-sys-color-on-surface-variant); font: var(--md-typescale-body-small); padding: var(--md-spacing-1) 0;">' + I18N.t('f1_detecting') + '</div>';
+          matchedEl.innerHTML = '<div style="color: var(--md-sys-color-on-surface-variant); font: var(--md-typescale-body-small); padding: var(--md-spacing-1) 0;">' + I18N.t('domain_check_detecting') + '</div>';
         } else {
           // 本地有精确匹配（DOMAIN/DOMAINSUFFIX 等），先渲染
           renderDomainRuleCheck(domain, matched, proxies);
@@ -1172,7 +1172,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   refreshAllI18n();
 
   bindModeSwitchEvents();
-  bindF1DeleteEvents();
+  bindDomainCheckDeleteEvents();
   bindRuleListDeleteEvents();
   bindSettingsEvents();
   renderLanguageSetting();

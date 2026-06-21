@@ -24,46 +24,46 @@
     </div>
   </div>
 
-  <!-- ──── F1: 检查当前域名在哪个代理组 ──── -->
-  <div class="md3-card" id="f1-section">
-    <h3 class="md3-section-title" data-i18n="f1_title">检查当前域名在哪个代理组</h3>
-    <span data-i18n="f1_current_site" style="font: var(--md-typescale-label-medium);">当前网站</span>:
+  <!-- ──── 域名匹配检测：检查当前域名在哪个代理组 ──── -->
+  <div class="md3-card" id="domain-check-section">
+    <h3 class="md3-section-title" data-i18n="domain_check_title">检查当前域名在哪个代理组</h3>
+    <span data-i18n="domain_check_current_site" style="font: var(--md-typescale-label-medium);">当前网站</span>:
     <span id="current-domain" style="font: var(--md-typescale-body-medium);"></span>
-    <div id="f1-matched"></div>
-    <div id="f1-not-matched" data-i18n="f1_not_matched">未匹配到代理组</div>
-    <div id="f1-mode-hint" data-i18n="f1_mode_hint" style="display: none; color: var(--md-sys-color-error); font: var(--md-typescale-body-small); padding: var(--md-spacing-1) 0;">当前模式无法检测域名代理组，请切换到「Clash 代理」模式</div>
+    <div id="domain-check-matched"></div>
+    <div id="domain-check-not-matched" data-i18n="domain_check_not_matched">未匹配到代理组</div>
+    <div id="domain-check-mode-hint" data-i18n="domain_check_mode_hint" style="display: none; color: var(--md-sys-color-error); font: var(--md-typescale-body-small); padding: var(--md-spacing-1) 0;">当前模式无法检测域名代理组，请切换到「Clash 代理」模式</div>
   </div>
 
-  <!-- ──── F2: 快捷添加当前域名到代理组 ──── -->
-  <div class="md3-card" id="f2-section">
-    <h3 class="md3-section-title" data-i18n="f2_title">快捷添加域名到代理组</h3>
-    <div id="f2-row">
-      <span id="f2-domain"></span>
-      <select class="md3-select" id="f2-rule-type">
+  <!-- ──── 快捷添加：添加当前域名到代理组 ──── -->
+  <div class="md3-card" id="quick-add-section">
+    <h3 class="md3-section-title" data-i18n="quick_add_title">快捷添加域名到代理组</h3>
+    <div id="quick-add-row">
+      <span id="quick-add-domain"></span>
+      <select class="md3-select" id="quick-add-rule-type">
         <option value="DOMAIN-SUFFIX" data-i18n="rule_type_domain_suffix">DOMAIN-SUFFIX</option>
         <option value="DOMAIN" data-i18n="rule_type_domain">DOMAIN</option>
         <option value="DOMAIN-KEYWORD" data-i18n="rule_type_domain_keyword">DOMAIN-KEYWORD</option>
       </select>
-      <select class="md3-select" id="f2-policy">
-        <option value="" data-i18n="f2_loading">加载代理组中...</option>
+      <select class="md3-select" id="quick-add-policy">
+        <option value="" data-i18n="quick_add_loading">加载代理组中...</option>
       </select>
-      <button class="md3-button md3-button--filled" id="f2-btn" data-i18n="f2_confirm_add">确认添加</button>
+      <button class="md3-button md3-button--filled" id="quick-add-btn" data-i18n="quick_add_confirm">确认添加</button>
     </div>
   </div>
 
-  <!-- ──── F3: 检测页面所有域名并智能分组 ──── -->
-  <div class="md3-card" id="f3-section">
-    <h3 class="md3-section-title" data-i18n="f3_title">检测页面域名并智能分组</h3>
-    <button class="md3-button md3-button--tonal" id="f3-detect-btn" data-i18n="f3_detect_btn" style="width: 100%;">检测页面域名</button>
-    <div id="f3-summary"></div>
-    <div class="domain-list" id="f3-domain-list"></div>
+  <!-- ──── 批量检测：检测页面所有域名并智能分组 ──── -->
+  <div class="md3-card" id="batch-detect-section">
+    <h3 class="md3-section-title" data-i18n="batch_detect_title">检测页面域名并智能分组</h3>
+    <button class="md3-button md3-button--tonal" id="batch-detect-btn" data-i18n="batch_detect_btn" style="width: 100%;">检测页面域名</button>
+    <div id="batch-detect-summary"></div>
+    <div class="domain-list" id="batch-detect-domain-list"></div>
     <div style="display: flex; gap: var(--md-spacing-2); margin-top: var(--md-spacing-2); flex-wrap: wrap;">
-      <button class="md3-button md3-button--outlined" id="f3-select-all" data-i18n="f3_select_all">全选</button>
-      <button class="md3-button md3-button--outlined" id="f3-deselect-all" data-i18n="f3_deselect_all">取消</button>
-      <select class="md3-select" id="f3-policy">
-        <option value="" data-i18n="f2_loading">加载代理组中...</option>
+      <button class="md3-button md3-button--outlined" id="batch-detect-select-all" data-i18n="batch_detect_select_all">全选</button>
+      <button class="md3-button md3-button--outlined" id="batch-detect-deselect-all" data-i18n="batch_detect_deselect_all">取消</button>
+      <select class="md3-select" id="batch-detect-policy">
+        <option value="" data-i18n="quick_add_loading">加载代理组中...</option>
       </select>
-      <button class="md3-button md3-button--filled" id="f3-batch-btn" data-i18n="f3_batch_add">批量添加</button>
+      <button class="md3-button md3-button--filled" id="batch-detect-batch-btn" data-i18n="batch_detect_batch_add">批量添加</button>
     </div>
   </div>
 
