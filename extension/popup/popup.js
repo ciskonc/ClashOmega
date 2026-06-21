@@ -471,15 +471,18 @@ function renderDomainRuleCheck(domain, matchedRules, proxies) {
 function renderRuleList(rules, proxies) {
   const listEl = document.getElementById('rule-list');
   const countEl = document.getElementById('rule-count');
-  countEl.textContent = rules.length;
+  // 过滤掉 DOMAIN 类规则（DOMAIN/DOMAINSUFFIX/DOMAINKEYWORD）
+  // 这些规则属于用户可删除的「额外脚本规则」，不显示在「内置 Clash 规则」列表
+  const builtinRules = rules.filter(r => !isDomainRule(r.type));
+  countEl.textContent = builtinRules.length;
 
   listEl.innerHTML = '';
-  if (rules.length === 0) {
+  if (builtinRules.length === 0) {
     listEl.innerHTML = '<div style="color: var(--md-sys-color-on-surface-variant); font: var(--md-typescale-body-small); padding: var(--md-spacing-2) 0;">' + I18N.t('f1_not_matched') + '</div>';
     return;
   }
 
-  rules.forEach((rule, index) => {
+  builtinRules.forEach((rule, index) => {
     const ruleStr = `${rule.type},${rule.payload},${rule.proxy}`;
     const div = document.createElement('div');
     div.className = 'rule-item';
@@ -497,7 +500,13 @@ function renderRuleList(rules, proxies) {
 
 // ──── 扩展脚本规则渲染 ────
 
-function renderScriptRules(rules, proxies) {
+/**
+ * 渲染「额外脚本规则」列表
+ * @param {Array<string>|null} rules - 规则字符串数组（"TYPE,PAYLOAD,PROXY"），null 表示文件未找到/未初始化
+ * @param {object} proxies - /proxies API 返回的代理组字典，用于解析最终策略
+ * @param {string} source - 来源标识：'JS'（来自 Script.js）或 'YAML'（来自 YAML 配置文件）
+ */
+function renderScriptRules(rules, proxies, source) {
   const listEl = document.getElementById('script-rule-list');
   const countEl = document.getElementById('script-rule-count');
   const emptyEl = document.getElementById('script-rule-empty');
@@ -522,6 +531,13 @@ function renderScriptRules(rules, proxies) {
     return;
   }
 
+  // 来源标识 HTML：JS 蓝色小标签 / YAML 橙色小标签
+  const sourceTagHtml = source === 'JS'
+    ? `<span class="rule-source-tag rule-source--js" title="${I18N.t('rule_source_js')}">JS</span>`
+    : `<span class="rule-source-tag rule-source--yaml" title="${I18N.t('rule_source_yaml')}">YAML</span>`;
+  // 删除按钮的 data-script 属性：JS 来源 → "1"（删除时调用 useScript=true），YAML 来源 → "0"
+  const scriptFlag = source === 'JS' ? '1' : '0';
+
   rules.forEach((ruleStr) => {
     const parts = ruleStr.split(',');
     const type = parts[0] || '';
@@ -533,43 +549,63 @@ function renderScriptRules(rules, proxies) {
     const finalProxy = resolveFinalProxy(proxy, proxies);
     const fullRule = `${type},${payload},${proxy}`;
     div.innerHTML = `
+      ${sourceTagHtml}
       <span class="rule-type-tag">${type}</span>
       <span class="rule-payload" title="${fullRule}">${payload || '—'}</span>
       <span class="rule-group-name" title="${proxy}">${proxy}</span>
       <span class="rule-policy ${finalProxy.class}" title="${finalProxy.name}">${finalProxy.name}</span>
-      <button class="rule-delete-btn" data-rule="${fullRule}" data-script="1" data-i18n-title="rule_delete" title="${I18N.t('rule_delete')}">✕</button>
+      <button class="rule-delete-btn" data-rule="${fullRule}" data-script="${scriptFlag}" data-i18n-title="rule_delete" title="${I18N.t('rule_delete')}">✕</button>
     `;
     listEl.appendChild(div);
   });
 }
 
-// 加载扩展脚本规则
+// 加载额外脚本规则
+// 数据源由 useScriptRule 开关决定：
+//   - useScriptRule=true  → 从 Script.js 的 EXT_RULES 读取（来源标识 JS）
+//   - useScriptRule=false → 从 Clash API /rules 过滤 DOMAIN 类规则读取（来源标识 YAML）
 async function loadScriptRules() {
-  // 并行获取脚本规则和代理组数据，proxies 用于解析代理组链路得到最终策略
-  const [result, proxiesResult] = await Promise.all([
+  // 并行获取所有所需数据
+  const [scriptResult, proxiesResult, settingsResult, clashRulesResult] = await Promise.all([
     sendToBackground({ action: 'getScriptRules' }),
-    sendToBackground({ action: 'getProxies' })
+    sendToBackground({ action: 'getProxies' }),
+    sendToBackground({ action: 'getSettings' }),
+    sendToBackground({ action: 'getClashRules' })
   ]);
   const proxies = proxiesResult.success ? proxiesResult.proxies : null;
+  const useScript = settingsResult.success ? settingsResult.useScriptRule === true : true;
   const needInitEl = document.getElementById('script-rule-need-init');
   const notFoundEl = document.getElementById('script-rule-not-found');
 
-  if (!result.success) {
-    if (result.needInit) {
-      // 文件未初始化或损坏
-      renderScriptRules(null, proxies);
-      needInitEl.style.display = 'block';
-      document.getElementById('script-rule-count').textContent = '0';
-    } else {
-      // 文件未找到
-      renderScriptRules(null, proxies);
-      notFoundEl.style.display = 'block';
-      document.getElementById('script-rule-count').textContent = '0';
+  if (useScript) {
+    // ──── 数据源：Script.js 的 EXT_RULES ────
+    if (!scriptResult.success) {
+      if (scriptResult.needInit) {
+        // 文件未初始化或损坏
+        renderScriptRules(null, proxies, 'JS');
+        needInitEl.style.display = 'block';
+        document.getElementById('script-rule-count').textContent = '0';
+      } else {
+        // 文件未找到
+        renderScriptRules(null, proxies, 'JS');
+        notFoundEl.style.display = 'block';
+        document.getElementById('script-rule-count').textContent = '0';
+      }
+      return;
     }
-    return;
+    renderScriptRules(scriptResult.rules || [], proxies, 'JS');
+  } else {
+    // ──── 数据源：Clash API /rules 中 DOMAIN 类规则 ────
+    if (!clashRulesResult.success) {
+      renderScriptRules([], proxies, 'YAML');
+      return;
+    }
+    // 过滤出 DOMAIN/DOMAINSUFFIX/DOMAINKEYWORD 类规则，转换为 "TYPE,PAYLOAD,PROXY" 字符串数组
+    const domainRules = clashRulesResult.rules
+      .filter(r => isDomainRule(r.type))
+      .map(r => `${r.type},${r.payload},${r.proxy}`);
+    renderScriptRules(domainRules, proxies, 'YAML');
   }
-
-  renderScriptRules(result.rules || [], proxies);
 }
 
 // 绑定扩展脚本规则初始化按钮
@@ -691,29 +727,31 @@ function bindQuickAddRule(domain) {
           callback: triggerRestartClash
         }
       });
-      // 乐观更新：根据 useScriptRule 决定插入哪个列表
+      // 乐观更新：始终插入「额外脚本规则」列表
+      // useScriptRule 开关仅决定写入位置和来源标识（JS/YAML），UI 显示统一
       const settings = await sendToBackground({ action: 'getSettings' });
       const useScript = settings.useScriptRule === true;
-      const listEl = useScript
-        ? document.getElementById('script-rule-list')
-        : document.getElementById('rule-list');
-      const countEl = useScript
-        ? document.getElementById('script-rule-count')
-        : document.getElementById('rule-count');
+      const listEl = document.getElementById('script-rule-list');
+      const countEl = document.getElementById('script-rule-count');
       // 如果列表显示的是空占位文本，先清掉
       const placeholder = listEl.querySelector('div[style]');
       if (placeholder && !placeholder.classList.contains('rule-item')) {
         listEl.innerHTML = '';
       }
       // 隐藏空状态提示
-      if (useScript) {
-        document.getElementById('script-rule-empty').style.display = 'none';
-      }
+      document.getElementById('script-rule-empty').style.display = 'none';
+      // 来源标识 HTML
+      const sourceTagHtml = useScript
+        ? `<span class="rule-source-tag rule-source--js" title="${I18N.t('rule_source_js')}">JS</span>`
+        : `<span class="rule-source-tag rule-source--yaml" title="${I18N.t('rule_source_yaml')}">YAML</span>`;
       const div = document.createElement('div');
       div.className = 'rule-item';
       const policyClass = getPolicyClass(policy);
       div.innerHTML = `
-        <span class="rule-text" title="${rule}">${rule}</span>
+        ${sourceTagHtml}
+        <span class="rule-type-tag">${ruleType}</span>
+        <span class="rule-payload" title="${rule}">${domain}</span>
+        <span class="rule-group-name" title="${policy}">${policy}</span>
         <span class="rule-policy ${policyClass}">${policy}</span>
         <button class="rule-delete-btn" data-rule="${rule}" data-script="${useScript ? '1' : '0'}" data-i18n-title="rule_delete" title="${I18N.t('rule_delete')}">✕</button>
       `;
@@ -818,14 +856,9 @@ function bindDomainDetection(tabId) {
 
     if (result && result.success) {
       showToast(`${checked.length} ${I18N.t('success_rules_added')}`, 'success');
-      // 并行获取 rules 和 proxies，proxies 用于解析代理组链路得到最终策略
-      const [rulesResult, proxiesResult] = await Promise.all([
-        sendToBackground({ action: 'getClashRules' }),
-        sendToBackground({ action: 'getProxies' })
-      ]);
-      if (rulesResult.success) {
-        renderRuleList(rulesResult.rules, proxiesResult.success ? proxiesResult.proxies : null);
-      }
+      // 刷新「额外脚本规则」列表（用户添加的可删除规则统一显示在此列表）
+      // 不再刷新「内置 Clash 规则」列表，因为批量添加的 DOMAIN 类规则不属于内置规则
+      await loadScriptRules();
     } else {
       showNativeError(result, 'error_native_host');
     }
@@ -840,13 +873,20 @@ function bindF1DeleteEvents() {
     const ruleStr = btn.dataset.rule;
     const result = await sendToBackground({ action: 'removeRule', rule: ruleStr });
     if (result && result.success) {
-      showToast(I18N.t('success_rule_deleted'), 'success');
+      // 提示用户需重启 Clash 生效，toast 内带「重启 Clash」按钮可直接点击
+      showToast(I18N.t('success_rule_deleted') + ' — ' + I18N.t('rule_restart_hint'), 'success', {
+        action: {
+          label: I18N.t('restart_clash'),
+          callback: triggerRestartClash
+        }
+      });
       // 乐观更新：直接从 DOM 移除，不重新从内核 API 拉取（内核尚未热重载）
-      // F1 匹配结果容器是 .matched-rule-item，规则列表容器是 .rule-item，需兼容两者
-      const item = btn.closest('.rule-item') || btn.closest('.matched-rule-item');
+      // F1 匹配结果容器是 .matched-rule-item
+      const item = btn.closest('.matched-rule-item');
       if (item) item.remove();
-      const countEl = document.getElementById('rule-count');
-      countEl.textContent = Math.max(0, parseInt(countEl.textContent) - 1);
+      // F1 中可删除的规则属于「额外脚本规则」，删除后刷新该列表保持 UI 一致
+      // 同时更新 script-rule-count
+      await loadScriptRules();
     } else {
       showNativeError(result, 'error_native_host');
     }

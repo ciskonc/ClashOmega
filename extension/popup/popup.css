@@ -433,6 +433,26 @@ body {
   color: var(--md-sys-color-error);
 }
 
+/* ──── 来源标识（JS/YAML 小标签） ──── */
+.rule-source-tag {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border-radius: var(--md-shape-corner-extra-small);
+  font: var(--md-typescale-label-medium);
+  font-size: 10px;
+  font-weight: 700;
+  margin-right: var(--md-spacing-1);
+  letter-spacing: 0.5px;
+}
+.rule-source--js {
+  background: #E3F2FD;
+  color: #1565C0;
+}
+.rule-source--yaml {
+  background: #FFF3E0;
+  color: #E65100;
+}
+
 /* ──── Settings Panel Overlay ──── */
 .settings-panel {
   display: none;
