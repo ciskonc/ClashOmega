@@ -29,6 +29,19 @@
 
 Native Host 用于读写 Clash 本地 YAML 配置文件（仅 Windows）。
 
+> **前置条件：开启 PowerShell 脚本执行权限**
+>
+> Native Host 依赖 PowerShell 脚本（`.ps1`），Windows 默认禁止运行脚本，需先开启执行权限，否则 Native Host 无法启动。
+>
+> **方式一（推荐）：Windows 设置**
+> 1. 打开「设置」→「隐私和安全性」→「开发者选项」（Windows 11 为「设置」→「系统」→「开发者选项」）
+> 2. 找到「PowerShell」→「更改执行策略以允许本地 PowerShell 脚本在没有签名的情况下运行」→ 开启
+>
+> **方式二：PowerShell 命令**
+> 1. 以管理员身份打开 PowerShell
+> 2. 执行：`Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`
+> 3. 输入 `Y` 确认
+
 1. 在 `chrome://extensions/` 中找到 Clash Manager 扩展，复制其 **ID**
 2. 右键 `native-host/install.ps1` → **使用 PowerShell 运行**
 3. 粘贴扩展 ID，回车完成安装
