@@ -376,6 +376,23 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.rule-item .rule-type-tag {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border-radius: var(--md-shape-corner-extra-small);
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface-variant);
+  font: var(--md-typescale-label-medium);
+  font-family: var(--md-typescale-label-medium-font);
+  margin-right: var(--md-spacing-1);
+}
+.rule-item .rule-payload {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--md-typescale-body-small);
+}
 .rule-policy {
   padding: 2px 8px;
   border-radius: var(--md-shape-corner-extra-small);

@@ -371,6 +371,58 @@ function getPolicyClass(proxy) {
 }
 
 /**
+ * 递归解析代理组链路，得到最终显示的策略
+ *
+ * 解析规则：
+ *   - DIRECT/REJECT/DROP → 直接返回
+ *   - 链路中遇到"自动选择"（URLTest 类型）→ 返回「自动选择」
+ *   - 链路中遇到具体节点 → 返回节点名称
+ *   - 最多递归 5 层，防止循环引用
+ *
+ * @param {string} proxyName - 规则的 proxy 字段（代理组名或 DIRECT/REJECT）
+ * @param {object} proxies - /proxies API 返回的代理组字典
+ * @returns {{name: string, class: string}} 最终显示的策略名和 CSS 类
+ */
+function resolveFinalProxy(proxyName, proxies) {
+  const lower = (proxyName || '').toLowerCase();
+  if (lower === 'direct') return { name: 'DIRECT', class: 'rule-policy--direct' };
+  if (lower === 'reject' || lower === 'drop') return { name: 'REJECT', class: 'rule-policy--reject' };
+
+  if (!proxies || !proxyName) {
+    return { name: proxyName || 'DIRECT', class: getPolicyClass(proxyName) };
+  }
+
+  // 递归解析代理组链路
+  let current = proxyName;
+  const visited = new Set();
+  for (let i = 0; i < 5; i++) {
+    if (visited.has(current)) break;
+    visited.add(current);
+
+    const lowerCurrent = current.toLowerCase();
+    if (lowerCurrent === 'direct') return { name: 'DIRECT', class: 'rule-policy--direct' };
+    if (lowerCurrent === 'reject' || lowerCurrent === 'drop') return { name: 'REJECT', class: 'rule-policy--reject' };
+
+    // 链路中遇到"自动选择"类型组 → 优先显示「自动选择」
+    if (current.includes('自动选择') || /auto/i.test(current)) {
+      return { name: '自动选择', class: 'rule-policy--proxy' };
+    }
+
+    const proxy = proxies[current];
+    if (!proxy || !proxy.now) break;
+    current = proxy.now;
+  }
+
+  // 最终 current 是节点名称或 DIRECT/REJECT
+  const lowerFinal = current.toLowerCase();
+  if (lowerFinal === 'direct') return { name: 'DIRECT', class: 'rule-policy--direct' };
+  if (lowerFinal === 'reject' || lowerFinal === 'drop') return { name: 'REJECT', class: 'rule-policy--reject' };
+  if (current.includes('自动选择') || /auto/i.test(current)) return { name: '自动选择', class: 'rule-policy--proxy' };
+
+  return { name: current, class: 'rule-policy--group' };
+}
+
+/**
  * 归一化规则类型：去除连字符并转大写
  * DOMAIN-SUFFIX → DOMAINSUFFIX, DomainSuffix → DOMAINSUFFIX
  * 兼容 Clash API 不同版本返回的类型格式差异
@@ -413,7 +465,7 @@ function renderDomainRuleCheck(domain, matchedRules) {
   });
 }
 
-function renderRuleList(rules) {
+function renderRuleList(rules, proxies) {
   const listEl = document.getElementById('rule-list');
   const countEl = document.getElementById('rule-count');
   countEl.textContent = rules.length;
@@ -428,10 +480,12 @@ function renderRuleList(rules) {
     const ruleStr = `${rule.type},${rule.payload},${rule.proxy}`;
     const div = document.createElement('div');
     div.className = 'rule-item';
-    const policyClass = getPolicyClass(rule.proxy);
+    // 解析最终策略：递归代理组链路，优先显示「自动选择」，否则显示节点名或 DIRECT/REJECT
+    const finalProxy = resolveFinalProxy(rule.proxy, proxies);
     div.innerHTML = `
-      <span class="rule-text" title="${ruleStr}">${ruleStr}</span>
-      <span class="rule-policy ${policyClass}">${rule.proxy}</span>
+      <span class="rule-type-tag">${rule.type}</span>
+      <span class="rule-payload" title="${ruleStr}">${rule.payload || '—'}</span>
+      <span class="rule-policy ${finalProxy.class}" title="${rule.proxy}">${finalProxy.name}</span>
     `;
     listEl.appendChild(div);
   });
@@ -752,9 +806,13 @@ function bindDomainDetection(tabId) {
 
     if (result && result.success) {
       showToast(`${checked.length} ${I18N.t('success_rules_added')}`, 'success');
-      const rulesResult = await sendToBackground({ action: 'getClashRules' });
+      // 并行获取 rules 和 proxies，proxies 用于解析代理组链路得到最终策略
+      const [rulesResult, proxiesResult] = await Promise.all([
+        sendToBackground({ action: 'getClashRules' }),
+        sendToBackground({ action: 'getProxies' })
+      ]);
       if (rulesResult.success) {
-        renderRuleList(rulesResult.rules);
+        renderRuleList(rulesResult.rules, proxiesResult.success ? proxiesResult.proxies : null);
       }
     } else {
       showNativeError(result, 'error_native_host');
@@ -972,18 +1030,27 @@ async function initPopup() {
     f1Matched.innerHTML = '';
     f1NotMatched.style.display = 'none';
     // 仍加载规则列表供查看，但不做 F1 域名匹配检测
-    sendToBackground({ action: 'getClashRules' }).then(clashRules => {
+    // 并行获取 rules 和 proxies，proxies 用于解析代理组链路得到最终策略
+    Promise.all([
+      sendToBackground({ action: 'getClashRules' }),
+      sendToBackground({ action: 'getProxies' })
+    ]).then(([clashRules, proxiesResult]) => {
       if (clashRules.success) {
-        renderRuleList(clashRules.rules);
+        renderRuleList(clashRules.rules, proxiesResult.success ? proxiesResult.proxies : null);
       }
     });
   } else {
     // clash 模式：隐藏提示，正常检测
     f1ModeHint.style.display = 'none';
-    sendToBackground({ action: 'getClashRules' }).then(clashRules => {
+    // 并行获取 rules 和 proxies，proxies 用于解析代理组链路得到最终策略
+    Promise.all([
+      sendToBackground({ action: 'getClashRules' }),
+      sendToBackground({ action: 'getProxies' })
+    ]).then(([clashRules, proxiesResult]) => {
       if (clashRules.success) {
+        const proxies = proxiesResult.success ? proxiesResult.proxies : null;
         const matched = findMatchingRules(domain, clashRules.rules);
-        renderRuleList(clashRules.rules);
+        renderRuleList(clashRules.rules, proxies);
 
         // 判断本地匹配结果是否"不精确"：
         //   - 本地无任何匹配 → 不精确
