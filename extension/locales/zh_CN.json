@@ -55,11 +55,12 @@
   "script_rules_init_failed": "初始化失败",
   "script_rules_not_found": "未找到扩展脚本文件（当前订阅未配置 option.script）",
   "rule_restart_hint": "规则已修改，请重启 Clash 生效",
-  "rule_source_js": "来自扩展脚本（Script.js）",
+  "rule_source_js": "来自订阅扩展脚本（profiles 目录下的 .js）",
   "rule_source_yaml": "来自 YAML 配置文件",
-  "script_rules_help_tip": "JS = 来自扩展脚本（Script.js）\nYA = 来自 YAML 配置文件\n\nuseScriptRule 开关仅决定写入位置，UI 统一显示两个来源的所有可删除规则",
+  "script_rules_help_tip": "JS = 来自订阅扩展脚本（profiles 目录下的 .js，由「域名写入订阅扩展脚本」开关控制写入）\nYA = 来自 YAML 配置文件\n\n「域名写入订阅扩展脚本」开关仅决定写入位置，UI 统一显示两个来源的所有可删除规则",
+  "quick_add_help_tip": "规则类型说明：\nDOMAIN：精确匹配完整域名（如 example.com 仅匹配 example.com）\nDOMAIN-SUFFIX：匹配域名后缀（如 example.com 匹配 example.com、www.example.com、api.example.com 等所有子域名）\nDOMAIN-KEYWORD：匹配包含关键字的域名（如 google 匹配 www.google.com、googleapis.com 等所有包含 google 的域名）",
 
-  "settings_use_script_rule": "增删域名写入订阅扩展脚本",
+  "settings_use_script_rule": "域名写入订阅扩展脚本",
   "settings_use_script_rule_hint": "勾选后添加/删除规则仅写入当前订阅的扩展脚本文件（profiles 目录下的 .js），不会改动 Clash Verge Rev 的全局 Script.js",
 
   "settings_title": "设置",

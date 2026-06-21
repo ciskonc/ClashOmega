@@ -42,7 +42,10 @@
 
   <!-- ──── 快捷添加：添加域名到代理组（默认当前域名，可编辑） ──── -->
   <div class="md3-card" id="quick-add-section">
-    <h3 class="md3-section-title" data-i18n="quick_add_title">添加域名到代理组</h3>
+    <h3 class="md3-section-title">
+      <span data-i18n="quick_add_title">添加域名到代理组</span>
+      <span class="help-tip" data-i18n-title="quick_add_help_tip" title="">?</span>
+    </h3>
     <!-- 域名输入框 + 确认添加按钮同一行 -->
     <div id="quick-add-domain-row">
       <input class="md3-text-field" id="quick-add-domain" type="text" data-i18n-placeholder="quick_add_domain_placeholder" placeholder="输入域名" style="flex: 1; min-width: 0;">
@@ -131,7 +134,7 @@
 
     <div style="margin-top: var(--md-spacing-2); display: flex; align-items: center; gap: var(--md-spacing-2);">
       <input type="checkbox" id="settings-use-script-rule" style="cursor: pointer;" checked>
-      <label for="settings-use-script-rule" data-i18n="settings_use_script_rule" style="cursor: pointer;">增删域名写入订阅扩展脚本</label>
+      <label for="settings-use-script-rule" data-i18n="settings_use_script_rule" style="cursor: pointer;">域名写入订阅扩展脚本</label>
     </div>
     <div style="font: var(--md-typescale-body-small); color: var(--md-sys-color-on-surface-variant); margin: var(--md-spacing-1) 0 var(--md-spacing-2) 0;" data-i18n="settings_use_script_rule_hint">勾选后添加/删除规则仅写入当前订阅的扩展脚本文件（profiles 目录下的 .js），不会改动 Clash Verge Rev 的全局 Script.js</div>
 

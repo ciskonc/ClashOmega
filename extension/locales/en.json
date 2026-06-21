@@ -55,11 +55,12 @@
   "script_rules_init_failed": "Initialization failed",
   "script_rules_not_found": "Extension script file not found (current profile has no option.script)",
   "rule_restart_hint": "Rules modified, please restart Clash to apply",
-  "rule_source_js": "From extension script (Script.js)",
+  "rule_source_js": "From subscription extension script (.js in profiles dir)",
   "rule_source_yaml": "From YAML config file",
-  "script_rules_help_tip": "JS = From extension script (Script.js)\nYA = From YAML config file\n\nThe useScriptRule switch only decides where to write. UI shows all deletable rules from both sources.",
+  "script_rules_help_tip": "JS = From subscription extension script (.js in profiles dir, controlled by 'Write domains to subscription extension script' switch)\nYA = From YAML config file\n\nThe 'Write domains to subscription extension script' switch only decides where to write. UI shows all deletable rules from both sources.",
+  "quick_add_help_tip": "Rule types:\nDOMAIN: Exact match (e.g. example.com only matches example.com)\nDOMAIN-SUFFIX: Match domain suffix (e.g. example.com matches example.com, www.example.com, api.example.com, etc.)\nDOMAIN-KEYWORD: Match domains containing keyword (e.g. google matches www.google.com, googleapis.com, etc.)",
 
-  "settings_use_script_rule": "Write rules to subscription extension script",
+  "settings_use_script_rule": "Write domains to subscription extension script",
   "settings_use_script_rule_hint": "If checked, add/delete rules are only written to the current subscription's extension script (.js in profiles dir), not the global Script.js of Clash Verge Rev",
 
   "settings_title": "Settings",

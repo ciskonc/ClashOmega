@@ -55,11 +55,12 @@
   "script_rules_init_failed": "初期化に失敗しました",
   "script_rules_not_found": "拡張スクリプトファイルが見つかりません（現在のプロファイルに option.script がありません）",
   "rule_restart_hint": "ルールが変更されました。Clash を再起動して適用してください",
-  "rule_source_js": "拡張スクリプトから（Script.js）",
+  "rule_source_js": "サブスクリプション拡張スクリプトから（profiles ディレクトリ内の .js）",
   "rule_source_yaml": "YAML 設定ファイルから",
-  "script_rules_help_tip": "JS = 拡張スクリプトから（Script.js）\nYA = YAML 設定ファイルから\n\nuseScriptRule スイッチは書き込み先のみを決定し、UI は両方のソースのすべての削除可能なルールを統一表示します",
+  "script_rules_help_tip": "JS = サブスクリプション拡張スクリプトから（profiles ディレクトリ内の .js、「サブスクリプション拡張スクリプトにドメインを書き込む」スイッチで書き込み先を制御）\nYA = YAML 設定ファイルから\n\n「サブスクリプション拡張スクリプトにドメインを書き込む」スイッチは書き込み先のみを決定し、UI は両方のソースのすべての削除可能なルールを統一表示します",
+  "quick_add_help_tip": "ルールタイプの説明：\nDOMAIN：完全一致（例：example.com は example.com のみ一致）\nDOMAIN-SUFFIX：ドメインサフィックス一致（例：example.com は example.com、www.example.com、api.example.com などすべてのサブドメインに一致）\nDOMAIN-KEYWORD：キーワード含有一致（例：google は www.google.com、googleapis.com など google を含むすべてのドメインに一致）",
 
-  "settings_use_script_rule": "サブスクリプション拡張スクリプトにルールを書き込む",
+  "settings_use_script_rule": "サブスクリプション拡張スクリプトにドメインを書き込む",
   "settings_use_script_rule_hint": "チェックすると、ルールの追加/削除は現在のサブスクリプションの拡張スクリプトファイル（profiles ディレクトリ内の .js）にのみ書き込まれ、Clash Verge Rev のグローバル Script.js は変更されません",
 
   "settings_title": "設定",
