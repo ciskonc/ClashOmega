@@ -872,9 +872,14 @@ function bindDomainDetection(tabId) {
     listEl.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = true; });
   });
 
-  // 取消
+  // 取消：清空选中状态，隐藏操作栏和列表，恢复初始状态
   document.getElementById('batch-detect-deselect-all').addEventListener('click', () => {
     listEl.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = false; });
+    // 隐藏操作栏、列表、摘要，恢复到点击检测按钮前的状态
+    actionsEl.style.display = 'none';
+    listEl.style.display = 'none';
+    summaryEl.style.display = 'none';
+    listEl.innerHTML = '';
   });
 
   // 批量添加
