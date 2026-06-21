@@ -7,8 +7,9 @@
 <table>
   <tr>
     <td align="center"><img src="docs/ui-overview.png" width="280" alt="UI Overview"><br>扩展图标与 Chrome 工具栏</td>
-    <td align="center"><img src="docs/ui-popup.png" width="280" alt="UI Main"><br>主界面 — 状态栏 + 域名匹配 + 快捷添加规则</td>
     <td align="center"><img src="docs/ui-rules.png" width="280" alt="UI Rules"><br>Clash 规则列表 + 扩展脚本规则管理</td>
+    <td align="center"><img src="docs/ui-popup.png" width="280" alt="UI Main"><br>节点设置</td>
+
   </tr>
 </table>
 
