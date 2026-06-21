@@ -94,6 +94,19 @@ native-host/        # Native Messaging Host（Windows）
 
 ## 版本历史
 
+### v1.2.1 (2026-06-21)
+
+**Bug 修复**
+- 修复扩展脚本规则不生效的问题：之前 `Get-ScriptPath` 解析 current profile 的 `option.script` 指向的脚本（如 `s8XWAjDjLilq.js`），但用户希望写入默认全局脚本 `Script.js`
+- `Get-ScriptPath` 改为直接返回 `Script.js` 路径（Clash Verge Rev 预置的 UID=Script 的 type:script profile）
+- 新增 `Set-ProfileScript` 函数：修改 profiles.yaml，将 current profile 的 `option.script` 字段改为 `Script`，让 Clash Verge Rev 执行 `Script.js`
+- `initScriptFile` action 初始化后自动调用 `Set-ProfileScript`，无需用户手动在 Clash Verge Rev 界面中切换
+
+**说明**
+- Clash Verge Rev 没有真正的"全局扩展脚本"概念，`Script.js` 只是预置的默认空脚本模板
+- 每个 remote/local profile 通过 `option.script` 字段引用要执行的脚本
+- 本扩展通过修改 `option.script` 为 `Script`，让 `Script.js` 成为当前 profile 的扩展脚本
+
 ### v1.2.0 (2026-06-21)
 
 **重大功能更新**
