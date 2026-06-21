@@ -8,9 +8,9 @@
 
 ![UI Overview](docs/ui-overview.png)
 
-### Popup 主界面 — 状态栏 + 域名匹配 + 快捷添加规则
+### 主界面 — 状态栏 + 域名匹配 + 快捷添加规则
 
-![UI Popup](docs/ui-popup.png)
+![UI Main](docs/ui-popup.png)
 
 ### Clash 规则列表 + 扩展脚本规则管理
 
