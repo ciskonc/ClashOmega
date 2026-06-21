@@ -255,7 +255,39 @@ native-host/        # Native Messaging Host（Windows）
 
 ## 相关推荐
 
-- **[sublink-worker](https://github.com/ciskonc/sublink-worker)** — 订阅转换面板，自部署 Cloudflare Worker 版本，支持 Clash / V2Ray / Shadowrocket 等多种格式互转，可配合本扩展使用。
+### [sublink-worker](https://github.com/ciskonc/sublink-worker)
+
+> One Worker, All Subscriptions — 轻量级订阅转换与管理面板，可部署于 Cloudflare Workers / Vercel / Node.js / Docker。
+
+**Fork 自** [7Sageer/sublink-worker](https://github.com/7Sageer/sublink-worker)，在原版基础上做了以下重点增强：
+
+#### 新增功能
+
+- **AnyTLS 协议支持** — 新增 `anytls://` 协议解析器，AnyTLS 链接会被正确解析并转换为 Clash / Sing-Box 原生 AnyTLS 节点（原版会静默丢弃）
+- **GFWList 规则** — 基于 `geosite:category-gfw` 新增 GFWList 规则组，默认走代理
+- **GFWList 自动合并** — 选中 GFWList 但未选 Social Media / Google / Youtube / Github 时，自动拉取 `twitter/google/youtube/github/gitlab` 站点规则，修复 `x.com` 等 GFW 屏蔽但被 v2fly 归类到 `geosite:twitter` 而非 `category-gfw` 的域名
+
+#### 规则默认值调整（白名单模式）
+
+- **非中国域名** 和 **兜底规则** 默认改为 **直连**（原版为节点选择）
+- **GFWList** 默认走 **节点选择**（代理）
+- 规则优先级：特定规则（Google / Telegram / Github...）> GFWList > 非中国（直连）> 兜底（直连）
+- 实现**白名单代理模式**：只有 GFW 屏蔽的域名走代理，其他全部直连
+
+#### 多订阅合并修复
+
+- **禁用 proxy-provider** — 返回 Clash YAML 格式的订阅不再自动转为 `proxy-providers`，所有节点内联到最终配置，避免 UA 限制或 token 认证导致运行时拉取失败
+- **proxy-groups 隔离** — 订阅自带的 `proxy-groups` 不再合并到输出配置，只保留 Web UI 中选择的规则组
+
+#### 支持协议
+
+ShadowSocks、VMess、VLESS、**AnyTLS**、Hysteria2、Trojan、TUIC
+
+#### 客户端支持
+
+Sing-Box、Clash（Meta/Mihomo）、Xray/V2Ray、Surge
+
+可配合本扩展使用：sublink-worker 负责订阅转换与节点生成，ClashOmega 负责运行时规则管理与域名匹配检测。
 
 ## 许可证
 
