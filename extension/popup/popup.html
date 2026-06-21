@@ -43,8 +43,12 @@
   <!-- ──── 快捷添加：添加域名到代理组（默认当前域名，可编辑） ──── -->
   <div class="md3-card" id="quick-add-section">
     <h3 class="md3-section-title" data-i18n="quick_add_title">添加域名到代理组</h3>
+    <!-- 域名输入框单独一行 -->
+    <div id="quick-add-domain-row">
+      <input class="md3-text-field" id="quick-add-domain" type="text" data-i18n-placeholder="quick_add_domain_placeholder" placeholder="输入域名" style="width: 100%;">
+    </div>
+    <!-- 规则类型 + 代理组 + 确认添加按钮同一行，确认添加放最右 -->
     <div id="quick-add-row">
-      <input class="md3-text-field" id="quick-add-domain" type="text" data-i18n-placeholder="quick_add_domain_placeholder" placeholder="输入域名" style="flex: 1; min-width: 0;">
       <select class="md3-select" id="quick-add-rule-type">
         <option value="DOMAIN-SUFFIX" data-i18n="rule_type_domain_suffix">DOMAIN-SUFFIX</option>
         <option value="DOMAIN" data-i18n="rule_type_domain">DOMAIN</option>

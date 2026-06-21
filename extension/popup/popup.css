@@ -265,18 +265,21 @@ input, button, select, textarea {
 }
 
 /* ──── 快捷添加 ──── */
+/* 域名输入框单独一行 */
+#quick-add-domain-row {
+  margin-bottom: var(--md-spacing-2);
+}
+#quick-add-domain {
+  font: var(--md-typescale-body-medium);
+  width: 100%;
+}
+/* 规则类型 + 代理组 + 确认添加按钮同一行，确认添加靠右 */
 #quick-add-row {
   display: flex;
   gap: var(--md-spacing-2);
   align-items: center;
   flex-wrap: wrap;
-}
-#quick-add-domain {
-  font: var(--md-typescale-body-medium);
-  min-width: 100px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  justify-content: flex-end;
 }
 
 /* ──── 批量检测 ──── */
