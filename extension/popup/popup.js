@@ -449,35 +449,36 @@ function renderDomainRuleCheck(domain, matchedRules, proxies) {
     return;
   }
 
-  matchedRules.forEach(rule => {
-    const div = document.createElement('div');
-    div.className = 'matched-rule-item';
-    // 解析最终策略：递归代理组链路，优先显示「自动选择」，否则显示节点名或 DIRECT/REJECT
-    const finalProxy = resolveFinalProxy(rule.proxy, proxies);
-    const ruleStr = `${rule.type},${rule.payload},${rule.proxy}`;
-    const canDelete = isDomainRule(rule.type);
-    // 判断规则来源：在 window._scriptRulesWithSource 中查找（由 loadScriptRules 设置）
-    // JS 来源 → data-script="1"（删除时调用 useScript=true）
-    // YAML 来源 → data-script="0"（删除时调用 useScript=false）
-    let scriptFlag = '0';
-    if (canDelete && window._scriptRulesWithSource) {
-      const found = window._scriptRulesWithSource.find(
-        item => item.rule.toLowerCase() === ruleStr.toLowerCase()
-      );
-      if (found) {
-        scriptFlag = found.source === 'JS' ? '1' : '0';
-      }
+  // 方案 B：只显示第一条命中的规则（Clash first-match-wins，第一条即实际生效的规则）
+  // 如果只匹配 MATCH 兜底规则，也显示 MATCH（这是实际生效的规则）
+  const rule = matchedRules[0];
+  const div = document.createElement('div');
+  div.className = 'matched-rule-item';
+  // 解析最终策略：递归代理组链路，优先显示「自动选择」，否则显示节点名或 DIRECT/REJECT
+  const finalProxy = resolveFinalProxy(rule.proxy, proxies);
+  const ruleStr = `${rule.type},${rule.payload},${rule.proxy}`;
+  const canDelete = isDomainRule(rule.type);
+  // 判断规则来源：在 window._scriptRulesWithSource 中查找（由 loadScriptRules 设置）
+  // JS 来源 → data-script="1"（删除时调用 useScript=true）
+  // YAML 来源 → data-script="0"（删除时调用 useScript=false）
+  let scriptFlag = '0';
+  if (canDelete && window._scriptRulesWithSource) {
+    const found = window._scriptRulesWithSource.find(
+      item => item.rule.toLowerCase() === ruleStr.toLowerCase()
+    );
+    if (found) {
+      scriptFlag = found.source === 'JS' ? '1' : '0';
     }
-    div.innerHTML = `
-      <span class="rule-index">#${rule.index + 1}</span>
-      <span class="rule-type-tag">${rule.type}</span>
-      <span class="rule-payload">${rule.payload || '—'}</span>
-      <span class="rule-group-name" title="${rule.proxy}">${rule.proxy}</span>
-      <span class="rule-policy ${finalProxy.class}" title="${finalProxy.name}">${finalProxy.name}</span>
-      ${canDelete ? `<button class="rule-delete-btn" data-rule="${ruleStr}" data-script="${scriptFlag}" data-i18n-title="rule_delete" title="${I18N.t('rule_delete')}">✕</button>` : ''}
-    `;
-    matchedEl.appendChild(div);
-  });
+  }
+  div.innerHTML = `
+    <span class="rule-index">#${rule.index + 1}</span>
+    <span class="rule-type-tag">${rule.type}</span>
+    <span class="rule-payload">${rule.payload || '—'}</span>
+    <span class="rule-group-name" title="${rule.proxy}">${rule.proxy}</span>
+    <span class="rule-policy ${finalProxy.class}" title="${finalProxy.name}">${finalProxy.name}</span>
+    ${canDelete ? `<button class="rule-delete-btn" data-rule="${ruleStr}" data-script="${scriptFlag}" data-i18n-title="rule_delete" title="${I18N.t('rule_delete')}">✕</button>` : ''}
+  `;
+  matchedEl.appendChild(div);
 }
 
 function renderRuleList(rules, proxies) {
