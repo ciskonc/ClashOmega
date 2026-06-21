@@ -1,6 +1,6 @@
 # Chrome Clash Manager
 
-> v1.1.4 · Chrome 浏览器扩展，用于管理 Clash 代理规则，支持三模式代理切换、域名规则匹配检测、一键添加域名到代理组。
+> v1.1.5 · Chrome 浏览器扩展，用于管理 Clash 代理规则，支持三模式代理切换、域名规则匹配检测、一键添加域名到代理组。
 
 ## 功能
 
@@ -93,6 +93,12 @@ native-host/        # Native Messaging Host（Windows）
 ```
 
 ## 版本历史
+
+### v1.1.5 (2026-06-21)
+
+**Bug 修复**
+- 修复热重载不生效：`hotReloadConfig` 用 `{...config, rules: [...]}` PUT 给 `/configs`，但 mihomo 内核的 `PUT /configs` 对 `rules` 字段的更新会被忽略。改为 `{"payload": yamlContent}` 方式，直接传快照文件完整 YAML 内容，内核真正重新加载规则
+- `syncSnapshot` action 返回 `snapshotContent` 字段（快照文件完整内容），供扩展用 `{payload}` 方式热重载
 
 ### v1.1.4 (2026-06-21)
 

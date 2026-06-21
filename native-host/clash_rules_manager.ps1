@@ -633,7 +633,10 @@ function Main {
                         try {
                             $newContent = Sync-SnapshotRules $snapshotPath $msg.rules
                             Write-Config $snapshotPath $newContent
-                            Send-Message @{ success = $true; message = 'Snapshot synced'; snapshotPath = $snapshotPath }
+                            # 返回快照文件内容，供扩展用 {payload} 方式 PUT /configs 热重载
+                            # mihomo 的 PUT /configs {path} 在某些版本返回 "Body invalid"，
+                            # 只能用 {payload: yamlContent} 方式让内核重新加载完整配置
+                            Send-Message @{ success = $true; message = 'Snapshot synced'; snapshotPath = $snapshotPath; snapshotContent = $newContent }
                         } catch {
                             Send-Message @{ success = $false; error = "$($_.Exception.Message)" }
                         }

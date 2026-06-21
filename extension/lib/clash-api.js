@@ -153,38 +153,38 @@ async function getClashConfig() {
 
 /**
  * 热重载规则到运行中的 Clash 内核（不重启进程，代理全程在线）
- * 流程：GET /configs → 修改 rules 数组 → PUT /configs?force=true
- * @param {string[]} rules - 规则字符串数组，如 ["DOMAIN-SUFFIX,google.com,Proxy"]
+ *
+ * 实现说明：
+ *   Clash/mihomo 内核的 PUT /configs API 有三种用法：
+ *   1. 传入文件路径 {"path": "/path/to/config.yaml"} → mihomo v1.19.25 测试返回
+ *      "Body invalid"，不可用
+ *   2. 传入 YAML 内容 {"payload": "yaml content"} → 返回 204 成功，内核从
+ *      payload 重新加载完整配置（包括 rules），这是可用的方式
+ *   3. 传入配置对象 {...config, rules: [...]} → 内核只更新部分运行时配置，
+ *      rules 字段的更新会被忽略
+ *
+ * 因此本函数采用方案 2：由调用方传入 syncSnapshotRules 写好的快照文件内容，
+ * 用 {payload: content} 方式让内核重新加载完整配置。
+ *
+ * @param {string} content - 快照文件的完整 YAML 内容
  * @returns {Promise<boolean>} 是否成功
  */
-async function hotReloadConfig(rules) {
+async function hotReloadConfig(content) {
   try {
-    // 防御性检查：确保 rules 是非空数组，防止 .filter 崩溃
-    if (!Array.isArray(rules) || rules.length === 0) {
-      console.error("Clash Manager: hotReloadConfig skipped — rules is not a non-empty array");
+    if (!content || typeof content !== 'string' || content.length === 0) {
+      console.error("Clash Manager: hotReloadConfig skipped — content is empty or invalid");
       return false;
     }
 
-    // 1. 获取当前运行配置
-    const config = await clashGet("/configs");
-    if (!config) {
-      console.error("Clash Manager: hotReloadConfig failed — cannot get current config");
-      return false;
-    }
-
-    // 2. 确保 MATCH（漏网之鱼）始终在规则列表末尾
-    const matchRules = rules.filter(r => r.startsWith('MATCH,') || r.startsWith("MATCH,"));
-    const nonMatchRules = rules.filter(r => !r.startsWith('MATCH,') && !r.startsWith("MATCH,"));
-    const orderedRules = [...nonMatchRules, ...matchRules];
-
-    // 3. PUT 回配置（force=true 热重载，不重启进程）
     const { baseUrl, headers } = await getApiConfig();
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 5000);
+    const timer = setTimeout(() => ctrl.abort(), 10000);
+    // force=true 强制重新加载
+    // payload 是完整 YAML 配置内容，内核会解析并重新加载所有配置（含 rules）
     const response = await fetch(`${baseUrl}/configs?force=true`, {
       method: "PUT",
       headers,
-      body: JSON.stringify({ ...config, rules: orderedRules }),
+      body: JSON.stringify({ payload: content }),
       signal: ctrl.signal,
     });
     clearTimeout(timer);
@@ -193,7 +193,7 @@ async function hotReloadConfig(rules) {
       console.error(`Clash Manager: hotReloadConfig PUT failed HTTP ${response.status}`);
       return false;
     }
-    console.log(`Clash Manager: hot-reloaded ${orderedRules.length} rules without restart`);
+    console.log(`Clash Manager: hot-reloaded config from payload (${content.length} chars)`);
     return true;
   } catch (e) {
     console.error("Clash Manager: hotReloadConfig error:", e.message);

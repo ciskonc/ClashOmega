@@ -263,12 +263,14 @@ function scheduleHotReload(configPath) {
         const syncResult = await syncSnapshotRules(yamlResult.rules);
         if (syncResult && syncResult.success) {
           console.log(`Clash Manager: snapshot synced to ${syncResult.snapshotPath}`);
+          // 步骤 2：PUT /configs?force=true with {payload: content}
+          // 用快照文件内容作为 payload，让内核重新加载完整配置（含最新 rules）
+          // mihomo 的 {path} 方式返回 "Body invalid"，只能用 {payload} 方式
+          const ok = await hotReloadConfig(syncResult.snapshotContent);
+          console.log(`Clash Manager: async hot-reload ${ok ? 'succeeded' : 'failed'} (payload from ${syncResult.snapshotPath})`);
         } else {
-          console.warn('Clash Manager: snapshot sync failed, continuing with hot-reload only', syncResult);
+          console.warn('Clash Manager: snapshot sync failed, hot-reload aborted', syncResult);
         }
-        // 步骤 2：PUT /configs?force=true 热重载内存配置（不重启进程，代理全程在线）
-        const ok = await hotReloadConfig(yamlResult.rules);
-        console.log(`Clash Manager: async hot-reload ${ok ? 'succeeded' : 'failed'} (${yamlResult.rules.length} rules from profile, path=${pathToUse || 'auto'})`);
       } else {
         console.warn('Clash Manager: async hot-reload skipped (no valid rules from profile)', yamlResult);
       }
