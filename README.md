@@ -94,6 +94,13 @@ native-host/        # Native Messaging Host（Windows）
 
 ## 版本历史
 
+### v1.1.6 (2026-06-21)
+
+**Bug 修复**
+- 修复 F1「检测域名在哪个代理组」只显示 MATCH 的问题：当订阅规则大部分是 `RuleSet` 类型时，本地匹配无法处理（浏览器端无法解析 RuleSet），只有 `Match` 兜底规则匹配
+- `findMatchingRulesFromConnections` 增加 `sniffHost` fallback：mihomo 的 `metadata.host` 可能为空（IP 直连或 DNS 未解析），此时 `sniffHost`（TLS SNI / HTTP Host sniffing 结果）可能有值
+- 改进覆盖策略：当本地匹配只有 MATCH 时，`/connections` 的任何匹配（含 MATCH）也覆盖本地结果，因为 `chains` 含实际代理组信息，比本地 MATCH 更有价值
+
 ### v1.1.5 (2026-06-21)
 
 **Bug 修复**

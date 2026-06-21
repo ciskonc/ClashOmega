@@ -108,7 +108,10 @@ function findMatchingRulesFromConnections(domain, connections, rules) {
   const seen = new Set(); // 去重：同一 rulePayload 只记录一次
 
   for (const conn of connections) {
-    const host = (conn.metadata && conn.metadata.host || '').toLowerCase();
+    // mihomo 的 metadata.host 可能为空（IP 直连或 DNS 未解析），
+    // 此时 sniffHost（TLS SNI / HTTP Host header sniffing 结果）可能有值
+    const rawHost = (conn.metadata && (conn.metadata.host || conn.metadata.sniffHost)) || '';
+    const host = rawHost.toLowerCase();
     if (!host) continue;
 
     // ──── 严格域名匹配：不使用关键词包含，避免 com/net 等通用 TLD 造成误匹配 ────
@@ -778,13 +781,16 @@ async function initPopup() {
 
       // 始终异步查询 Clash API /connections，获取内核实际匹配的规则
       // 本地匹配无法处理 RULE-SET 等类型，/connections 返回的是内核真实匹配结果
-      // 如果 /connections 返回了非 MATCH 的精确匹配，则覆盖本地结果
+      // 覆盖策略：
+      //   1. /connections 返回了非 MATCH 的精确匹配 → 覆盖本地结果
+      //   2. 本地只有 MATCH（规则全是 RULE-SET 无法匹配）且 /connections 有匹配 →
+      //      用 /connections 结果（含 chains 实际代理组信息，比本地 MATCH 更有价值）
       sendToBackground({ action: 'getDomainConnections' }).then(connResult => {
         if (connResult.success && connResult.connections) {
           const connMatched = findMatchingRulesFromConnections(domain, connResult.connections, clashRules.rules);
-          // 仅当 connections 返回了非 MATCH 的匹配时才覆盖（MATCH 是兜底规则，不够精确）
           const hasNonMatchRule = connMatched.some(r => normalizeRuleType(r.type) !== 'MATCH');
-          if (hasNonMatchRule) {
+          const localOnlyMatch = matched.length > 0 && matched.every(r => normalizeRuleType(r.type) === 'MATCH');
+          if (hasNonMatchRule || (localOnlyMatch && connMatched.length > 0)) {
             renderDomainRuleCheck(domain, connMatched);
           }
         }
