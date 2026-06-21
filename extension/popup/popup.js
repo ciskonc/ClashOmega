@@ -553,10 +553,10 @@ function renderScriptRules(rulesWithSource, proxies) {
     // 解析最终策略：递归代理组链路，优先显示「自动选择」，否则显示节点名或 DIRECT/REJECT
     const finalProxy = resolveFinalProxy(proxy, proxies);
     const fullRule = `${type},${payload},${proxy}`;
-    // 来源标识 HTML：JS 蓝色小标签 / YAML 橙色小标签
+    // 来源标识 HTML：JS 蓝色小标签 / YA 橙色小标签（YAML 缩写为 YA 节省空间）
     const sourceTagHtml = source === 'JS'
       ? `<span class="rule-source-tag rule-source--js" title="${I18N.t('rule_source_js')}">JS</span>`
-      : `<span class="rule-source-tag rule-source--yaml" title="${I18N.t('rule_source_yaml')}">YAML</span>`;
+      : `<span class="rule-source-tag rule-source--yaml" title="${I18N.t('rule_source_yaml')}">YA</span>`;
     // 删除按钮的 data-script 属性：JS 来源 → "1"（删除时调用 useScript=true），YAML 来源 → "0"
     const scriptFlag = source === 'JS' ? '1' : '0';
     div.innerHTML = `
@@ -739,16 +739,23 @@ function bindModeSwitchEvents() {
 }
 
 function bindQuickAddRule(domain) {
-  document.getElementById('quick-add-domain').textContent = domain;
+  // 默认填入当前域名，用户可清空后输入任意域名
+  document.getElementById('quick-add-domain').value = domain;
 
   document.getElementById('quick-add-btn').addEventListener('click', async () => {
+    // 从 input 读取域名（用户可能已修改为自定义域名）
+    const inputDomain = document.getElementById('quick-add-domain').value.trim();
+    if (!inputDomain) {
+      showToast(I18N.t('quick_add_select_policy'), 'error');
+      return;
+    }
     const ruleType = document.getElementById('quick-add-rule-type').value;
     const policy = document.getElementById('quick-add-policy').value;
     if (!policy) {
       showToast(I18N.t('quick_add_select_policy'), 'error');
       return;
     }
-    const rule = `${ruleType},${domain},${policy}`;
+    const rule = `${ruleType},${inputDomain},${policy}`;
 
     const result = await sendToBackground({ action: 'addRule', rule });
     if (result && result.success) {
@@ -772,17 +779,17 @@ function bindQuickAddRule(domain) {
       }
       // 隐藏空状态提示
       document.getElementById('script-rule-empty').style.display = 'none';
-      // 来源标识 HTML
+      // 来源标识 HTML（YAML 缩写为 YA 节省空间）
       const sourceTagHtml = useScript
         ? `<span class="rule-source-tag rule-source--js" title="${I18N.t('rule_source_js')}">JS</span>`
-        : `<span class="rule-source-tag rule-source--yaml" title="${I18N.t('rule_source_yaml')}">YAML</span>`;
+        : `<span class="rule-source-tag rule-source--yaml" title="${I18N.t('rule_source_yaml')}">YA</span>`;
       const div = document.createElement('div');
       div.className = 'rule-item';
       const policyClass = getPolicyClass(policy);
       div.innerHTML = `
         ${sourceTagHtml}
         <span class="rule-type-tag">${ruleType}</span>
-        <span class="rule-payload" title="${rule}">${domain}</span>
+        <span class="rule-payload" title="${rule}">${inputDomain}</span>
         <span class="rule-group-name" title="${policy}">${policy}</span>
         <span class="rule-policy ${policyClass}">${policy}</span>
         <button class="rule-delete-btn" data-rule="${rule}" data-script="${useScript ? '1' : '0'}" data-i18n-title="rule_delete" title="${I18N.t('rule_delete')}">✕</button>

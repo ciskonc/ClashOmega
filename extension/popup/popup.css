@@ -61,7 +61,7 @@
   --md-spacing-5: 24px;
 
   /* Layout */
-  --popup-width: 360px;
+  --popup-width: 520px;
 }
 
 /* ──── Reset & Base ──── */
@@ -78,7 +78,23 @@ body {
   font: var(--md-typescale-body-medium);
   color: var(--md-sys-color-on-surface);
   background: var(--md-sys-color-surface);
+  /* 允许用户选中页面内容（域名、规则等）方便复制 */
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* 输入框、按钮、select 等交互元素保持不可选中，避免影响操作 */
+input, button, select, textarea {
   user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ──── 顶部操作栏：重启 Clash + 设置 ──── */
+#top-action-bar {
+  display: flex;
+  gap: var(--md-spacing-2);
+  justify-content: flex-end;
+  margin-bottom: var(--md-spacing-3);
 }
 
 /* ──── MD3 Card ──── */
@@ -451,6 +467,26 @@ body {
 .rule-source--yaml {
   background: #FFF3E0;
   color: #E65100;
+}
+
+/* ──── Help Tip（标题旁的小问号提示） ──── */
+.help-tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: var(--md-spacing-1);
+  border-radius: 50%;
+  background: var(--md-sys-color-surface-variant);
+  color: var(--md-sys-color-on-surface-variant);
+  font: var(--md-typescale-label-small);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: help;
+  user-select: none;
+  -webkit-user-select: none;
+  vertical-align: middle;
 }
 
 /* ──── Settings Panel Overlay ──── */

@@ -22,10 +22,11 @@
   "domain_check_mode_hint": "Cannot detect in current mode, please switch to \"Clash Proxy\" mode",
   "domain_check_detecting": "Detecting matched proxy group...",
 
-  "quick_add_title": "Quick Add Domain to Proxy Group",
+  "quick_add_title": "Add Domain to Proxy Group",
   "quick_add_confirm": "Confirm Add",
   "quick_add_loading": "Loading proxy groups...",
   "quick_add_select_policy": "Please select a proxy group",
+  "quick_add_domain_placeholder": "Enter domain",
 
   "batch_detect_title": "Detect Domains & Smart Group",
   "batch_detect_btn": "Detect Page Domains",
@@ -56,6 +57,7 @@
   "rule_restart_hint": "Rules modified, please restart Clash to apply",
   "rule_source_js": "From extension script (Script.js)",
   "rule_source_yaml": "From YAML config file",
+  "script_rules_help_tip": "JS = From extension script (Script.js)\nYA = From YAML config file\n\nThe useScriptRule switch only decides where to write. UI shows all deletable rules from both sources.",
 
   "settings_use_script_rule": "Write rules to subscription extension script",
   "settings_use_script_rule_hint": "If checked, add/delete rules are only written to the current subscription's extension script (.js in profiles dir), not the global Script.js of Clash Verge Rev",
