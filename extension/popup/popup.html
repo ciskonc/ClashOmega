@@ -5,28 +5,32 @@
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <!-- ──── 顶部操作栏：重启 Clash + 设置 ──── -->
+  <!-- ──── 顶部操作栏：状态信息 + 重启 Clash + 设置 ──── -->
   <div id="top-action-bar">
-    <button class="md3-button md3-button--outlined" id="restart-clash-btn" data-i18n="settings_restart_kernel">重启 Clash</button>
-    <button class="md3-button md3-button--outlined" id="settings-btn" data-i18n="settings_title">设置</button>
+    <div id="status-info">
+      <div class="status-row">
+        <span class="status-dot status-dot--off" id="clash-status-dot"></span>
+        <span data-i18n="clash_status" style="font: var(--md-typescale-body-small);">Clash</span>
+        <span id="clash-status-text" style="font: var(--md-typescale-body-small); margin-left: 4px; color: var(--md-sys-color-on-surface-variant); cursor: pointer;" title=""></span>
+      </div>
+      <div class="status-row" style="margin-top: var(--md-spacing-1);">
+        <span class="status-dot status-dot--warn" id="system-proxy-dot"></span>
+        <span data-i18n="system_proxy_status" style="font: var(--md-typescale-body-small);">系统代理</span>
+        <span id="system-proxy-text" style="font: var(--md-typescale-body-small); margin-left: 4px; color: var(--md-sys-color-on-surface-variant);"></span>
+      </div>
+    </div>
+    <div id="top-action-buttons">
+      <button class="md3-button md3-button--outlined" id="restart-clash-btn" data-i18n="settings_restart_kernel">重启 Clash</button>
+      <button class="md3-button md3-button--outlined" id="settings-btn" data-i18n="settings_title">设置</button>
+    </div>
   </div>
 
-  <!-- ──── 顶部：模式切换 + Clash 状态 ──── -->
+  <!-- ──── 顶部：模式切换 ──── -->
   <div class="md3-card">
     <div class="md3-segmented-button" id="mode-switch">
       <button data-mode="system" data-i18n="mode_system">系统代理</button>
       <button data-mode="direct" data-i18n="mode_direct">直连</button>
       <button data-mode="clash" data-i18n="mode_clash">Clash 代理</button>
-    </div>
-    <div style="margin-top: var(--md-spacing-3); display: flex; align-items: center; gap: var(--md-spacing-2);">
-      <span class="status-dot status-dot--off" id="clash-status-dot"></span>
-      <span data-i18n="clash_status" style="font: var(--md-typescale-body-small);">Clash 状态</span>:
-      <span id="clash-status-text" style="font: var(--md-typescale-body-small); margin-left: 4px; color: var(--md-sys-color-on-surface-variant); cursor: pointer;" title=""></span>
-    </div>
-    <div style="margin-top: var(--md-spacing-1); display: flex; align-items: center; gap: var(--md-spacing-2);">
-      <span class="status-dot status-dot--warn" id="system-proxy-dot"></span>
-      <span data-i18n="system_proxy_status" style="font: var(--md-typescale-body-small);">系统代理状态</span>:
-      <span id="system-proxy-text" style="font: var(--md-typescale-body-small); margin-left: 4px; color: var(--md-sys-color-on-surface-variant);"></span>
     </div>
   </div>
 

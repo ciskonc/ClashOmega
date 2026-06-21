@@ -3,11 +3,11 @@
   "mode_system": "System Proxy",
   "mode_direct": "Direct",
   "mode_clash": "Clash Proxy",
-  "clash_status": "Clash Status",
+  "clash_status": "Clash",
   "clash_connected": "Connected",
   "clash_running": "Running",
   "clash_not_running": "Not Running",
-  "clash_proxy_port": "Proxy Port",
+  "clash_proxy_port": "Port",
 
   "system_proxy_status": "System Proxy",
   "system_proxy_direct": "Direct",

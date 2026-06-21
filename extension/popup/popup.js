@@ -586,6 +586,7 @@ async function loadScriptRules() {
     sendToBackground({ action: 'getClashRules' })
   ]);
   const proxies = proxiesResult.success ? proxiesResult.proxies : null;
+  const clashRules = clashRulesResult.success ? clashRulesResult.rules : null;
   const needInitEl = document.getElementById('script-rule-need-init');
   const notFoundEl = document.getElementById('script-rule-not-found');
 
@@ -626,7 +627,7 @@ async function loadScriptRules() {
     } else if (!scriptResult.success) {
       notFoundEl.style.display = 'block';
     }
-    return;
+    return { clashRules, proxies };
   }
 
   // 合并：JS 来源 + YAML 来源
@@ -638,6 +639,7 @@ async function loadScriptRules() {
   // 用于 F1 域名匹配检测中的删除按钮 data-script 属性
   window._scriptRulesWithSource = merged;
   renderScriptRules(merged, proxies);
+  return { clashRules, proxies };
 }
 
 // 绑定扩展脚本规则初始化按钮
@@ -1127,11 +1129,13 @@ async function initPopup() {
   populateProxyGroupSelects();
 
   // 1c. 额外脚本规则（合并 JS + YAML 两个来源）
-  //     必须 await：渲染结果会保存到 window._scriptRulesWithSource，
-  //     供后续 renderDomainRuleCheck 判断规则来源（JS/YAML）使用
-  await loadScriptRules();
+  //     不 await：让后续渲染并行进行
+  //     返回 { clashRules, proxies } 供域名匹配检测复用，避免重复请求
+  //     window._scriptRulesWithSource 在 loadScriptRules 内部设置，
+  //     供 renderDomainRuleCheck 判断规则来源（JS/YAML）使用
+  const scriptRulesPromise = loadScriptRules();
 
-  // 1c. Clash 规则列表 + 域名匹配检测
+  // 1d. Clash 规则列表 + 域名匹配检测
   //     非 clash 模式下浏览器不走 Clash 代理，/connections 不会有该域名连接，
   //     域名匹配检测无法进行，显示提示并跳过检测
   const currentMode = settings?.currentMode || 'system';
@@ -1144,77 +1148,70 @@ async function initPopup() {
     domainCheckModeHint.style.display = 'block';
     domainCheckMatched.innerHTML = '';
     domainCheckNotMatched.style.display = 'none';
-    // 仍加载规则列表供查看，但不做域名匹配检测
-    // 并行获取 rules 和 proxies，proxies 用于解析代理组链路得到最终策略
-    Promise.all([
-      sendToBackground({ action: 'getClashRules' }),
-      sendToBackground({ action: 'getProxies' })
-    ]).then(([clashRules, proxiesResult]) => {
-      if (clashRules.success) {
-        renderRuleList(clashRules.rules, proxiesResult.success ? proxiesResult.proxies : null);
+    // 复用 loadScriptRules 返回的 clashRules 和 proxies，避免重复请求
+    scriptRulesPromise.then(({ clashRules, proxies }) => {
+      if (clashRules) {
+        renderRuleList(clashRules, proxies);
       }
     });
   } else {
     // clash 模式：隐藏提示，正常检测
     domainCheckModeHint.style.display = 'none';
-    // 并行获取 rules 和 proxies，proxies 用于解析代理组链路得到最终策略
-    Promise.all([
-      sendToBackground({ action: 'getClashRules' }),
-      sendToBackground({ action: 'getProxies' })
-    ]).then(([clashRules, proxiesResult]) => {
-      if (clashRules.success) {
-        const proxies = proxiesResult.success ? proxiesResult.proxies : null;
-        const matched = findMatchingRules(domain, clashRules.rules);
-        renderRuleList(clashRules.rules, proxies);
+    // 复用 loadScriptRules 返回的 clashRules 和 proxies
+    scriptRulesPromise.then(({ clashRules, proxies }) => {
+      if (!clashRules) return;
 
-        // 判断本地匹配结果是否"不精确"：
-        //   - 本地无任何匹配 → 不精确
-        //   - 本地匹配全是 MATCH（兜底规则）→ 不精确（RULE-SET 等类型本地无法匹配）
-        // 不精确时先显示"检测中..."占位，等待 /connections 返回内核真实匹配后再渲染
-        const localImprecise = matched.length === 0 || matched.every(r => normalizeRuleType(r.type) === 'MATCH');
+      const matched = findMatchingRules(domain, clashRules);
+      renderRuleList(clashRules, proxies);
 
-        if (localImprecise) {
-          // 显示检测中占位，避免用户误以为 MATCH 就是最终结果
-          document.getElementById('current-domain').textContent = domain;
-          const matchedEl = document.getElementById('domain-check-matched');
-          const notMatchedEl = document.getElementById('domain-check-not-matched');
-          notMatchedEl.style.display = 'none';
-          matchedEl.innerHTML = '<div style="color: var(--md-sys-color-on-surface-variant); font: var(--md-typescale-body-small); padding: var(--md-spacing-1) 0;">' + I18N.t('domain_check_detecting') + '</div>';
-        } else {
-          // 本地有精确匹配（DOMAIN/DOMAINSUFFIX 等），先渲染
-          renderDomainRuleCheck(domain, matched, proxies);
-        }
+      // 判断本地匹配结果是否"不精确"：
+      //   - 本地无任何匹配 → 不精确
+      //   - 本地匹配全是 MATCH（兜底规则）→ 不精确（RULE-SET 等类型本地无法匹配）
+      // 不精确时先显示"检测中..."占位，等待 /connections 返回内核真实匹配后再渲染
+      const localImprecise = matched.length === 0 || matched.every(r => normalizeRuleType(r.type) === 'MATCH');
 
-        // 始终异步查询 Clash API /connections，获取内核实际匹配的规则
-        // 本地匹配无法处理 RULE-SET 等类型，/connections 返回的是内核真实匹配结果
-        // 覆盖策略（放宽：/connections 有任何匹配就覆盖，因为内核结果更权威）：
-        //   1. /connections 返回了匹配（无论是否 MATCH）→ 覆盖本地结果
-        //   2. /connections 无匹配 → 保留本地结果（可能连接尚未建立）
-        //   3. 本地不精确且 /connections 无匹配 → 1.5 秒后重试一次（等待连接建立）
-        const queryConnections = (retryCount = 0) => {
-          sendToBackground({ action: 'getDomainConnections' }).then(connResult => {
-            if (connResult.success && connResult.connections) {
-              const connMatched = findMatchingRulesFromConnections(domain, connResult.connections, clashRules.rules);
-              if (connMatched.length > 0) {
-                // /connections 有匹配，覆盖本地结果
-                renderDomainRuleCheck(domain, connMatched, proxies);
-              } else if (localImprecise && retryCount === 0) {
-                // 本地不精确且 /connections 无匹配，1.5 秒后重试一次
-                setTimeout(() => queryConnections(1), 1500);
-              } else if (retryCount > 0) {
-                // 重试后仍无匹配，显示本地结果（可能是 MATCH）
-                renderDomainRuleCheck(domain, matched, proxies);
-              }
+      if (localImprecise) {
+        // 显示检测中占位，避免用户误以为 MATCH 就是最终结果
+        document.getElementById('current-domain').textContent = domain;
+        const matchedEl = document.getElementById('domain-check-matched');
+        const notMatchedEl = document.getElementById('domain-check-not-matched');
+        notMatchedEl.style.display = 'none';
+        matchedEl.innerHTML = '<div style="color: var(--md-sys-color-on-surface-variant); font: var(--md-typescale-body-small); padding: var(--md-spacing-1) 0;">' + I18N.t('domain_check_detecting') + '</div>';
+      } else {
+        // 本地有精确匹配（DOMAIN/DOMAINSUFFIX 等），先渲染
+        // window._scriptRulesWithSource 已在 loadScriptRules 中设置完成
+        renderDomainRuleCheck(domain, matched, proxies);
+      }
+
+      // 始终异步查询 Clash API /connections，获取内核实际匹配的规则
+      // 本地匹配无法处理 RULE-SET 等类型，/connections 返回的是内核真实匹配结果
+      // 覆盖策略（放宽：/connections 有任何匹配就覆盖，因为内核结果更权威）：
+      //   1. /connections 返回了匹配（无论是否 MATCH）→ 覆盖本地结果
+      //   2. /connections 无匹配 → 保留本地结果（可能连接尚未建立）
+      //   3. 本地不精确且 /connections 无匹配 → 1.5 秒后重试一次（等待连接建立）
+      const queryConnections = (retryCount = 0) => {
+        sendToBackground({ action: 'getDomainConnections' }).then(connResult => {
+          if (connResult.success && connResult.connections) {
+            const connMatched = findMatchingRulesFromConnections(domain, connResult.connections, clashRules);
+            if (connMatched.length > 0) {
+              // /connections 有匹配，覆盖本地结果
+              renderDomainRuleCheck(domain, connMatched, proxies);
             } else if (localImprecise && retryCount === 0) {
-              // /connections 请求失败，1.5 秒后重试一次
+              // 本地不精确且 /connections 无匹配，1.5 秒后重试一次
               setTimeout(() => queryConnections(1), 1500);
             } else if (retryCount > 0) {
+              // 重试后仍无匹配，显示本地结果（可能是 MATCH）
               renderDomainRuleCheck(domain, matched, proxies);
             }
-          });
-        };
-        queryConnections();
-      }
+          } else if (localImprecise && retryCount === 0) {
+            // /connections 请求失败，1.5 秒后重试一次
+            setTimeout(() => queryConnections(1), 1500);
+          } else if (retryCount > 0) {
+            renderDomainRuleCheck(domain, matched, proxies);
+          }
+        });
+      };
+      queryConnections();
     });
   }
 
