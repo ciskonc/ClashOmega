@@ -128,27 +128,23 @@ async function handleMessage(message) {
 
       // ──── 规则管理（Native Host 写入 + Clash API 热重载）────
       // 写入成功后返回，用户需手动重启 Clash 生效
+      // 用户添加的规则统一写入扩展脚本（Script.js），与内置 Clash 规则分离
+      // 好处：1) 不污染 YAML 配置文件 2) Script.js 规则前置到 rules 开头，优先级最高
       case 'addRule': {
         const settings = await getSettings();
-        const useScript = settings.useScriptRule === true;
-        const result = await addClashRule(message.rule, settings.clashConfigPath, useScript);
+        const result = await addClashRule(message.rule, settings.clashConfigPath, true);
         return result;
       }
 
       case 'batchAddRules': {
         const settings = await getSettings();
-        const useScript = settings.useScriptRule === true;
-        // useScript=true 时逐条写入 Script.js（Native Host 已支持）
-        if (useScript) {
-          let added = 0;
-          for (const rule of message.rules) {
-            const r = await addClashRule(rule, settings.clashConfigPath, true);
-            if (r && r.success) added++;
-          }
-          return { success: true, message: `${added} rules added to script` };
+        // 逐条写入 Script.js（Native Host 已支持）
+        let added = 0;
+        for (const rule of message.rules) {
+          const r = await addClashRule(rule, settings.clashConfigPath, true);
+          if (r && r.success) added++;
         }
-        const result = await batchAddClashRules(message.rules, settings.clashConfigPath);
-        return result;
+        return { success: true, message: `${added} rules added to script` };
       }
 
       case 'removeRule': {

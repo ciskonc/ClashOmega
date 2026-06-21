@@ -229,6 +229,58 @@ body {
 .status-dot--off { background: var(--md-status-off); }
 .status-dot--warn { background: var(--md-status-warn); }
 
+/* ──── Help Tip Icon (规则类型提示) ──── */
+.help-tip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 11px;
+  font-weight: bold;
+  cursor: help;
+  margin-left: var(--md-spacing-1);
+  position: relative;
+  vertical-align: middle;
+}
+.help-tip-content {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 6px;
+  padding: 10px 12px;
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface);
+  border-radius: var(--md-shape-corner-small);
+  box-shadow: var(--md-elevation-2);
+  font: var(--md-typescale-body-small);
+  font-weight: normal;
+  line-height: 1.6;
+  width: 280px;
+  z-index: 100;
+  white-space: normal;
+  text-align: left;
+}
+.help-tip-content hr {
+  border: none;
+  border-top: 1px solid var(--md-sys-color-outline-variant);
+  margin: 6px 0;
+}
+.help-tip-content code {
+  background: var(--md-sys-color-surface-container);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+.help-tip-icon:hover .help-tip-content {
+  display: block;
+}
+
 /* ──── F1: Domain Rule Check ──── */
 #f1-matched { margin-top: var(--md-spacing-2); }
 #f1-not-matched { display: none; color: var(--md-sys-color-on-surface-variant); font: var(--md-typescale-body-small); }
