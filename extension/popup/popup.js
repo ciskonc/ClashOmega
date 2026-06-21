@@ -485,7 +485,8 @@ function renderRuleList(rules, proxies) {
     div.innerHTML = `
       <span class="rule-type-tag">${rule.type}</span>
       <span class="rule-payload" title="${ruleStr}">${rule.payload || '—'}</span>
-      <span class="rule-policy ${finalProxy.class}" title="${rule.proxy}">${finalProxy.name}</span>
+      <span class="rule-group-name" title="${rule.proxy}">${rule.proxy}</span>
+      <span class="rule-policy ${finalProxy.class}" title="${finalProxy.name}">${finalProxy.name}</span>
     `;
     listEl.appendChild(div);
   });
