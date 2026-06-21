@@ -40,9 +40,22 @@
   "rule_type_domain_suffix": "DOMAIN-SUFFIX",
   "rule_type_domain_keyword": "DOMAIN-KEYWORD",
 
-  "rule_list_title": "All Clash Rules",
+  "rule_list_title": "Built-in Clash Rules",
   "rule_list_count": "",
   "rule_delete": "Delete",
+
+  "script_rules_title": "Extension Script Rules",
+  "script_rules_count": "",
+  "script_rules_empty": "No extension script rules",
+  "script_rules_need_init": "Extension script file is not initialized or corrupted. Click \"Init\" button.",
+  "script_rules_init_btn": "Init",
+  "script_rules_init_success": "Extension script file initialized",
+  "script_rules_init_failed": "Initialization failed",
+  "script_rules_not_found": "Extension script file not found (current profile has no option.script)",
+  "rule_restart_hint": "Rules modified, please restart Clash to apply",
+
+  "settings_use_script_rule": "Write rules to extension script",
+  "settings_use_script_rule_hint": "If checked, add/delete rules will be written to Clash Verge Rev's Script.js file instead of YAML config",
 
   "settings_title": "Settings",
   "settings_api_url": "Clash API URL",

@@ -127,33 +127,50 @@ async function handleMessage(message) {
       }
 
       // ──── 规则管理（Native Host 写入 + Clash API 热重载）────
-      // 写入成功后立即返回，热重载异步执行，避免串行等待导致弹窗卡顿
+      // 写入成功后返回，用户需手动重启 Clash 生效
       case 'addRule': {
         const settings = await getSettings();
-        const result = await addClashRule(message.rule, settings.clashConfigPath);
-        if (result && result.success) {
-          // 异步热重载，不阻塞响应（传入 configPath 避免自动检测失败）
-          scheduleHotReload(settings.clashConfigPath);
-        }
+        const useScript = settings.useScriptRule === true;
+        const result = await addClashRule(message.rule, settings.clashConfigPath, useScript);
         return result;
       }
 
       case 'batchAddRules': {
         const settings = await getSettings();
-        const result = await batchAddClashRules(message.rules, settings.clashConfigPath);
-        if (result && result.success) {
-          scheduleHotReload(settings.clashConfigPath);
+        const useScript = settings.useScriptRule === true;
+        // useScript=true 时逐条写入 Script.js（Native Host 已支持）
+        if (useScript) {
+          let added = 0;
+          for (const rule of message.rules) {
+            const r = await addClashRule(rule, settings.clashConfigPath, true);
+            if (r && r.success) added++;
+          }
+          return { success: true, message: `${added} rules added to script` };
         }
+        const result = await batchAddClashRules(message.rules, settings.clashConfigPath);
         return result;
       }
 
       case 'removeRule': {
         const settings = await getSettings();
-        const result = await removeClashRule(message.rule, settings.clashConfigPath);
-        if (result && result.success) {
-          scheduleHotReload(settings.clashConfigPath);
-        }
+        // 优先使用消息中的 useScript（来自扩展脚本规则列表的删除按钮），
+        // 否则使用设置中的 useScriptRule
+        const useScript = message.useScript === true || (message.useScript === undefined && settings.useScriptRule === true);
+        const result = await removeClashRule(message.rule, settings.clashConfigPath, useScript);
         return result;
+      }
+
+      // ──── Script.js 扩展脚本规则管理 ────
+      case 'getScriptPath': {
+        return await getScriptPath();
+      }
+
+      case 'getScriptRules': {
+        return await getScriptRules();
+      }
+
+      case 'initScriptFile': {
+        return await initScriptFile();
       }
 
       // ──── 域名检测 ────
@@ -235,49 +252,6 @@ async function handleMessage(message) {
     console.error(`Handle message error (${message.action}):`, e);
     return { success: false, error: e.message };
   }
-}
-
-// ──── 异步热重载（防抖：500ms 内多次调用只执行最后一次）────
-
-let hotReloadTimer = null;
-let pendingHotReloadPath = null;  // 缓存最近一次增删操作的 configPath
-
-function scheduleHotReload(configPath) {
-  // 缓存 configPath，避免定时器触发时丢失路径导致 Native Host 自动检测失败
-  if (configPath) pendingHotReloadPath = configPath;
-  if (hotReloadTimer) clearTimeout(hotReloadTimer);
-  hotReloadTimer = setTimeout(async () => {
-    hotReloadTimer = null;
-    const pathToUse = pendingHotReloadPath;
-    pendingHotReloadPath = null;
-    try {
-      // 从 profile 文件读取规则（Native Host），而非内核 API
-      // 内核 GET /rules 返回的是旧快照的规则，profile 文件才是最新数据
-      // 必须传入 configPath，否则 Native Host 自动检测可能失败或选错文件
-      const yamlResult = await getClashYamlRules(pathToUse);
-      // 使用 Array.isArray 严格检查，防止 rules 为 {} 等非数组 truthy 值导致后续调用崩溃
-      if (yamlResult && yamlResult.success && Array.isArray(yamlResult.rules) && yamlResult.rules.length > 0) {
-        // 步骤 1：同步规则到快照文件（clash-verge.yaml）
-        // 必须先写快照，否则 Clash 内核 /rules 和 /connections API 仍读取旧快照，
-        // 导致"检查当前域名在那个组"看不到新规则
-        const syncResult = await syncSnapshotRules(yamlResult.rules);
-        if (syncResult && syncResult.success) {
-          console.log(`Clash Manager: snapshot synced to ${syncResult.snapshotPath}`);
-          // 步骤 2：PUT /configs?force=true with {payload: content}
-          // 用快照文件内容作为 payload，让内核重新加载完整配置（含最新 rules）
-          // mihomo 的 {path} 方式返回 "Body invalid"，只能用 {payload} 方式
-          const ok = await hotReloadConfig(syncResult.snapshotContent);
-          console.log(`Clash Manager: async hot-reload ${ok ? 'succeeded' : 'failed'} (payload from ${syncResult.snapshotPath})`);
-        } else {
-          console.warn('Clash Manager: snapshot sync failed, hot-reload aborted', syncResult);
-        }
-      } else {
-        console.warn('Clash Manager: async hot-reload skipped (no valid rules from profile)', yamlResult);
-      }
-    } catch (e) {
-      console.error('Clash Manager: async hot-reload error:', e.message);
-    }
-  }, 500);
 }
 
 // ──── 初始化 ────

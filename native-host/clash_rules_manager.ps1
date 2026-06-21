@@ -396,6 +396,224 @@ function Get-SnapshotPath {
     return $null
 }
 
+# ──── Script.js 扩展脚本规则管理 ────
+# Clash Verge Rev 的 type:script profile 是一个 JS 文件，包含 main(config, profileName) 函数
+# 通过修改 config.rules 数组实现规则覆盖。本扩展在此 JS 文件中维护一个 EXT_RULES 数组，
+# main 函数会将 EXT_RULES 前置到 config.rules，实现"扩展脚本规则"。
+#
+# 文件格式（由本扩展自动初始化和管理）：
+#   // === Clash Manager Extension Rules (auto-managed, do not edit manually) ===
+#   const EXT_RULES = [
+#     "DOMAIN-SUFFIX,example.com,Proxy",
+#     "DOMAIN,google.com,Direct"
+#   ];
+#   // === End of Clash Manager Extension Rules ===
+#
+#   function main(config, profileName) {
+#     if (Array.isArray(config.rules) && Array.isArray(EXT_RULES)) {
+#       config.rules = EXT_RULES.concat(config.rules);
+#     }
+#     return config;
+#   }
+
+# 查找当前激活 remote profile 的 option.script 指向的 JS 文件路径
+function Get-ScriptPath {
+    foreach ($dir in $ProfilesYamlDirs) {
+        $profilesYaml = Join-Path $dir 'profiles.yaml'
+        if (-not (Test-Path $profilesYaml)) { continue }
+
+        $profileContent = [System.IO.File]::ReadAllText($profilesYaml, $encoding)
+        $lines = $profileContent -split "`n"
+
+        # 1. 解析 current 字段，找到当前激活的 profile UID
+        $currentUid = $null
+        foreach ($line in $lines) {
+            $trimmed = $line.Trim()
+            if ($trimmed -match '^current\s*:\s*(\S+)') {
+                $currentUid = $matches[1]
+                break
+            }
+        }
+        if (-not $currentUid) { continue }
+
+        # 2. 在 items 列表中查找 currentUid 对应条目的 option.script 字段
+        $itemUid = $null; $itemFile = $null; $inOption = $false; $scriptUid = $null
+        foreach ($line in $lines) {
+            $trimmed = $line.Trim()
+            if ($trimmed -match '^-\s*uid\s*:\s*(\S+)') {
+                # 遇到新条目，检查上一个条目是否是 current 且有 script
+                if ($itemUid -eq $currentUid -and $scriptUid) { break }
+                $itemUid = $matches[1]; $itemFile = $null; $inOption = $false; $scriptUid = $null
+            }
+            elseif ($trimmed -match '^\s*file\s*:\s*(\S+)') { $itemFile = $matches[1] }
+            elseif ($trimmed -match '^\s*option\s*:') { $inOption = $true }
+            elseif ($inOption -and $trimmed -match '^\s*script\s*:\s*(\S+)') { $scriptUid = $matches[1] }
+        }
+        # 检查最后一个条目
+        if (-not $scriptUid -and $itemUid -eq $currentUid) {
+            # current 条目没有 option.script，跳过
+        }
+
+        if (-not $scriptUid) { continue }
+
+        # 3. 在 items 列表中查找 scriptUid 对应的 file（type:script 条目）
+        $scriptFile = $null
+        $sUid = $null; $sType = $null; $sFile = $null
+        foreach ($line in $lines) {
+            $trimmed = $line.Trim()
+            if ($trimmed -match '^-\s*uid\s*:\s*(\S+)') {
+                if ($sUid -eq $scriptUid -and $sFile) { $scriptFile = $sFile; break }
+                $sUid = $matches[1]; $sType = $null; $sFile = $null
+            }
+            elseif ($trimmed -match '^\s*type\s*:\s*(\S+)') { $sType = $matches[1] }
+            elseif ($trimmed -match '^\s*file\s*:\s*(\S+)') { $sFile = $matches[1] }
+        }
+        if (-not $scriptFile -and $sUid -eq $scriptUid -and $sFile) { $scriptFile = $sFile }
+
+        if ($scriptFile) {
+            $scriptPath = Join-Path (Join-Path $dir 'profiles') $scriptFile
+            if (Test-Path $scriptPath) { return $scriptPath }
+        }
+    }
+    return $null
+}
+
+# 初始化 Script.js 文件为标准扩展脚本格式
+function Initialize-ScriptFile($scriptPath) {
+    $template = @"
+// === Clash Manager Extension Rules (auto-managed, do not edit manually) ===
+const EXT_RULES = [
+];
+
+// === End of Clash Manager Extension Rules ===
+
+// Define main function (script entry)
+// Clash Verge Rev 会调用 main(config, profileName)，将 EXT_RULES 前置到 config.rules
+function main(config, profileName) {
+  if (Array.isArray(config.rules) && Array.isArray(EXT_RULES)) {
+    config.rules = EXT_RULES.concat(config.rules);
+  }
+  return config;
+}
+"@
+    Write-Config $scriptPath $template
+}
+
+# 检查 Script.js 是否为本扩展管理的格式（包含 EXT_RULES 标记）
+function Test-ScriptFileManaged($content) {
+    return $content -match 'Clash Manager Extension Rules'
+}
+
+# 从 Script.js 的 EXT_RULES 数组中解析规则列表
+function Parse-ScriptRules($content) {
+    $rules = [System.Collections.ArrayList]::new()
+
+    # 匹配 EXT_RULES = [ ... ] 区块
+    if ($content -match '(?s)const\s+EXT_RULES\s*=\s*\[(.*?)\]') {
+        $arrayContent = $matches[1]
+        # 匹配每条规则字符串（单引号或双引号）
+        $matches2 = [regex]::Matches($arrayContent, "['""]([^'""]+)['""]")
+        foreach ($m in $matches2) {
+            $rule = $m.Groups[1].Value.Trim()
+            if ($rule) { [void]$rules.Add($rule) }
+        }
+    }
+    return ,$rules.ToArray()
+}
+
+# 向 Script.js 的 EXT_RULES 数组添加规则（去重：同 type+payload 替换）
+function Add-ScriptRule($content, $rule) {
+    $rule = $rule.Trim().TrimStart("'").TrimEnd("'").TrimStart('"').TrimEnd('"').Trim()
+    if (-not $rule) { return $content }
+
+    # 解析新规则的类型和 payload
+    $ruleParts = $rule -split ','
+    $newType = if ($ruleParts.Count -ge 1) { $ruleParts[0].Trim() } else { '' }
+    $newPayload = if ($ruleParts.Count -ge 2) { $ruleParts[1].Trim() } else { '' }
+
+    # 如果文件不包含 EXT_RULES 标记，先初始化
+    if (-not (Test-ScriptFileManaged $content)) {
+        return $content
+    }
+
+    $existingRules = Parse-ScriptRules $content
+    $newRules = [System.Collections.ArrayList]::new()
+    $overridden = $false
+
+    foreach ($r in $existingRules) {
+        $parts = $r -split ','
+        $exType = if ($parts.Count -ge 1) { $parts[0].Trim() } else { '' }
+        $exPayload = if ($parts.Count -ge 2) { $parts[1].Trim() } else { '' }
+        if ($exType -eq $newType -and $exPayload -eq $newPayload) {
+            # 同 type+payload 替换
+            [void]$newRules.Add($rule)
+            $overridden = $true
+        } else {
+            [void]$newRules.Add($r)
+        }
+    }
+    if (-not $overridden) { [void]$newRules.Add($rule) }
+
+    return Rebuild-ScriptContent $content $newRules
+}
+
+# 从 Script.js 的 EXT_RULES 数组删除规则（归一化比较）
+function Remove-ScriptRule($content, $rule) {
+    $rule = $rule.Trim().TrimStart("'").TrimEnd("'").TrimStart('"').TrimEnd('"').Trim()
+    if (-not $rule) { return $content }
+
+    function Normalize-RuleStr($r) {
+        $parts = $r -split ','
+        if ($parts.Count -ge 1) {
+            $parts[0] = $parts[0].ToUpper().Replace('-', '')
+        }
+        return ($parts -join ',')
+    }
+
+    $normalizedRule = Normalize-RuleStr $rule
+    $existingRules = Parse-ScriptRules $content
+    $newRules = [System.Collections.ArrayList]::new()
+
+    foreach ($r in $existingRules) {
+        if ((Normalize-RuleStr $r) -ne $normalizedRule) {
+            [void]$newRules.Add($r)
+        }
+    }
+
+    return Rebuild-ScriptContent $content $newRules
+}
+
+# 重建 Script.js 内容，保留 main 函数，更新 EXT_RULES 数组
+function Rebuild-ScriptContent($content, $rules) {
+    # 构建新的 EXT_RULES 数组文本
+    $rulesLines = [System.Collections.ArrayList]::new()
+    [void]$rulesLines.Add('// === Clash Manager Extension Rules (auto-managed, do not edit manually) ===')
+    if ($rules.Count -eq 0) {
+        [void]$rulesLines.Add('const EXT_RULES = [')
+        [void]$rulesLines.Add('];')
+    } else {
+        [void]$rulesLines.Add('const EXT_RULES = [')
+        foreach ($r in $rules) {
+            [void]$rulesLines.Add("  `"$r`",")
+        }
+        [void]$rulesLines.Add('];')
+    }
+    [void]$rulesLines.Add('')
+    [void]$rulesLines.Add('// === End of Clash Manager Extension Rules ===')
+    [void]$rulesLines.Add('')
+    [void]$rulesLines.Add('// Define main function (script entry)')
+    [void]$rulesLines.Add('// Clash Verge Rev 会调用 main(config, profileName)，将 EXT_RULES 前置到 config.rules')
+    [void]$rulesLines.Add('function main(config, profileName) {')
+    [void]$rulesLines.Add('  if (Array.isArray(config.rules) && Array.isArray(EXT_RULES)) {')
+    [void]$rulesLines.Add('    config.rules = EXT_RULES.concat(config.rules);')
+    [void]$rulesLines.Add('  }')
+    [void]$rulesLines.Add('  return config;')
+    [void]$rulesLines.Add('}')
+    [void]$rulesLines.Add('')
+
+    return ($rulesLines -join "`n")
+}
+
 # 将规则列表写入快照文件的 rules: 区块
 function Sync-SnapshotRules($snapshotPath, $rules) {
     # 参数验证：拒绝空或非数组 rules，防止清空快照文件
@@ -543,19 +761,46 @@ function Main {
                 }
 
                 'addRule' {
-                    if ($msg.configPath) { $configPath = $msg.configPath }
-                    if (-not $configPath) { $configPath = Get-ConfigPath }
-                    if (-not $configPath -or -not (Test-Path $configPath)) {
-                        Send-Message @{ success = $false; error = 'Config file not found. Please set CLASH_CONFIG_PATH or start Clash first.' }
+                    # useScript=true 时写入 Script.js 的 EXT_RULES 数组，否则写入 YAML 配置文件
+                    if ($msg.useScript) {
+                        $scriptPath = Get-ScriptPath
+                        if (-not $scriptPath) {
+                            Send-Message @{ success = $false; error = 'Script file not found. Please initialize it first.' }
+                        }
+                        elseif (-not (Test-Path $scriptPath)) {
+                            Send-Message @{ success = $false; error = "Script file does not exist: $scriptPath"; scriptPath = $scriptPath; needInit = $true }
+                        }
+                        else {
+                            try {
+                                $content = Read-Config $scriptPath
+                                if (-not (Test-ScriptFileManaged $content)) {
+                                    Send-Message @{ success = $false; error = 'Script file is not initialized or corrupted. Please initialize it first.'; scriptPath = $scriptPath; needInit = $true }
+                                }
+                                else {
+                                    $newContent = Add-ScriptRule $content $msg.rule
+                                    Write-Config $scriptPath $newContent
+                                    Send-Message @{ success = $true; message = 'Rule added to script'; scriptPath = $scriptPath }
+                                }
+                            } catch {
+                                Send-Message @{ success = $false; error = "$($_.Exception.Message) | Stack: $($_.InvocationInfo.ScriptLineNumber)" }
+                            }
+                        }
                     }
                     else {
-                        try {
-                            $content = Read-Config $configPath
-                            $newContent = Add-Rule $content $msg.rule
-                            Write-Config $configPath $newContent
-                            Send-Message @{ success = $true; message = 'Rule added'; configPath = $configPath }
-                        } catch {
-                            Send-Message @{ success = $false; error = "$($_.Exception.Message) | Stack: $($_.InvocationInfo.ScriptLineNumber)" }
+                        if ($msg.configPath) { $configPath = $msg.configPath }
+                        if (-not $configPath) { $configPath = Get-ConfigPath }
+                        if (-not $configPath -or -not (Test-Path $configPath)) {
+                            Send-Message @{ success = $false; error = 'Config file not found. Please set CLASH_CONFIG_PATH or start Clash first.' }
+                        }
+                        else {
+                            try {
+                                $content = Read-Config $configPath
+                                $newContent = Add-Rule $content $msg.rule
+                                Write-Config $configPath $newContent
+                                Send-Message @{ success = $true; message = 'Rule added'; configPath = $configPath }
+                            } catch {
+                                Send-Message @{ success = $false; error = "$($_.Exception.Message) | Stack: $($_.InvocationInfo.ScriptLineNumber)" }
+                            }
                         }
                     }
                 }
@@ -583,16 +828,40 @@ function Main {
                 }
 
                 'removeRule' {
-                    if ($msg.configPath) { $configPath = $msg.configPath }
-                    if (-not $configPath) { $configPath = Get-ConfigPath }
-                    if (-not $configPath -or -not (Test-Path $configPath)) {
-                        Send-Message @{ success = $false; error = 'Config file not found. Please set CLASH_CONFIG_PATH or start Clash first.' }
+                    # useScript=true 时从 Script.js 的 EXT_RULES 数组删除，否则从 YAML 配置文件删除
+                    if ($msg.useScript) {
+                        $scriptPath = Get-ScriptPath
+                        if (-not $scriptPath -or -not (Test-Path $scriptPath)) {
+                            Send-Message @{ success = $false; error = 'Script file not found or does not exist' }
+                        }
+                        else {
+                            try {
+                                $content = Read-Config $scriptPath
+                                if (-not (Test-ScriptFileManaged $content)) {
+                                    Send-Message @{ success = $false; error = 'Script file is not initialized or corrupted'; scriptPath = $scriptPath; needInit = $true }
+                                }
+                                else {
+                                    $newContent = Remove-ScriptRule $content $msg.rule
+                                    Write-Config $scriptPath $newContent
+                                    Send-Message @{ success = $true; message = 'Rule removed from script'; scriptPath = $scriptPath }
+                                }
+                            } catch {
+                                Send-Message @{ success = $false; error = "$($_.Exception.Message)" }
+                            }
+                        }
                     }
                     else {
-                        $content = Read-Config $configPath
-                        $newContent = Remove-Rule $content $msg.rule
-                        Write-Config $configPath $newContent
-                        Send-Message @{ success = $true; message = 'Rule removed'; configPath = $configPath }
+                        if ($msg.configPath) { $configPath = $msg.configPath }
+                        if (-not $configPath) { $configPath = Get-ConfigPath }
+                        if (-not $configPath -or -not (Test-Path $configPath)) {
+                            Send-Message @{ success = $false; error = 'Config file not found. Please set CLASH_CONFIG_PATH or start Clash first.' }
+                        }
+                        else {
+                            $content = Read-Config $configPath
+                            $newContent = Remove-Rule $content $msg.rule
+                            Write-Config $configPath $newContent
+                            Send-Message @{ success = $true; message = 'Rule removed'; configPath = $configPath }
+                        }
                     }
                 }
 
@@ -637,6 +906,58 @@ function Main {
                             # mihomo 的 PUT /configs {path} 在某些版本返回 "Body invalid"，
                             # 只能用 {payload: yamlContent} 方式让内核重新加载完整配置
                             Send-Message @{ success = $true; message = 'Snapshot synced'; snapshotPath = $snapshotPath; snapshotContent = $newContent }
+                        } catch {
+                            Send-Message @{ success = $false; error = "$($_.Exception.Message)" }
+                        }
+                    }
+                }
+
+                'getScriptPath' {
+                    $scriptPath = Get-ScriptPath
+                    if ($scriptPath) {
+                        $managed = $false
+                        if (Test-Path $scriptPath) {
+                            $content = Read-Config $scriptPath
+                            $managed = Test-ScriptFileManaged $content
+                        }
+                        Send-Message @{ success = $true; scriptPath = $scriptPath; exists = (Test-Path $scriptPath); managed = $managed }
+                    }
+                    else {
+                        Send-Message @{ success = $false; error = 'Script file not found (no option.script in current profile)' }
+                    }
+                }
+
+                'getScriptRules' {
+                    $scriptPath = Get-ScriptPath
+                    if (-not $scriptPath -or -not (Test-Path $scriptPath)) {
+                        Send-Message @{ success = $false; error = 'Script file not found or does not exist'; scriptPath = $scriptPath; needInit = $true }
+                    }
+                    else {
+                        $content = Read-Config $scriptPath
+                        if (-not (Test-ScriptFileManaged $content)) {
+                            Send-Message @{ success = $false; error = 'Script file is not initialized or corrupted'; scriptPath = $scriptPath; needInit = $true }
+                        }
+                        else {
+                            $rules = Parse-ScriptRules $content
+                            Send-Message @{ success = $true; rules = $rules; scriptPath = $scriptPath }
+                        }
+                    }
+                }
+
+                'initScriptFile' {
+                    $scriptPath = Get-ScriptPath
+                    if (-not $scriptPath) {
+                        Send-Message @{ success = $false; error = 'Cannot find script file path (no option.script in current profile)' }
+                    }
+                    else {
+                        try {
+                            # 如果文件已存在，先备份
+                            if (Test-Path $scriptPath) {
+                                $backup = "$scriptPath.bak"
+                                Copy-Item -Path $scriptPath -Destination $backup -Force
+                            }
+                            Initialize-ScriptFile $scriptPath
+                            Send-Message @{ success = $true; message = 'Script file initialized'; scriptPath = $scriptPath }
                         } catch {
                             Send-Message @{ success = $false; error = "$($_.Exception.Message)" }
                         }

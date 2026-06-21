@@ -94,6 +94,33 @@ native-host/        # Native Messaging Host（Windows）
 
 ## 版本历史
 
+### v1.2.0 (2026-06-21)
+
+**重大功能更新**
+
+1. **移除热重载，改为提示重启 Clash**
+   - 热重载机制（PUT /configs {payload}）在实测中不稳定，已移除
+   - 添加/删除规则后提示用户「规则已修改，请重启 Clash 生效」
+   - 保留底部「重启 Clash」按钮，一键同步规则并重启内核
+
+2. **新增「扩展脚本规则」功能**
+   - 在「内置 Clash 规则」上方新增「扩展脚本规则」区块，展示 Clash Verge Rev 的 Script.js 中 EXT_RULES 数组的规则
+   - 规则写入 Clash Verge Rev 的 type:script profile（Script.js），通过 main(config) 函数将 EXT_RULES 前置到 config.rules
+   - 设置面板新增「增删域名写入扩展脚本规则」复选框，勾选后 F2/F3 添加的规则直接写入 Script.js 而非 YAML 配置文件
+   - 扩展脚本规则列表支持单条删除（点击 ✕ 按钮）
+   - 文件未初始化或损坏时显示「初始化」按钮，点击后自动备份原文件并写入标准模板
+   - Script.js 标准格式包含 `// === Clash Manager Extension Rules ===` 标记，支持检测是否由本扩展管理
+
+3. **UI 调整**
+   - 「全部 Clash 规则」改名为「内置 Clash 规则」
+   - 直连模式（direct）的白色 icon 加黑色描边，避免在 Chrome 浅色工具栏中与背景融为一体
+
+**Native Host 新增 actions**
+- `getScriptPath`：获取 Script.js 文件路径及状态（exists/managed）
+- `getScriptRules`：获取 EXT_RULES 数组的规则列表
+- `initScriptFile`：初始化 Script.js 为标准扩展脚本格式（备份原文件）
+- `addRule`/`removeRule`：新增 `useScript` 参数，true 时操作 Script.js，false 时操作 YAML 配置文件
+
 ### v1.1.7 (2026-06-21)
 
 **功能改进**

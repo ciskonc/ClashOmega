@@ -40,9 +40,22 @@
   "rule_type_domain_suffix": "DOMAIN-SUFFIX",
   "rule_type_domain_keyword": "DOMAIN-KEYWORD",
 
-  "rule_list_title": "全部 Clash 规则",
+  "rule_list_title": "内置 Clash 规则",
   "rule_list_count": "条",
   "rule_delete": "删除",
+
+  "script_rules_title": "扩展脚本规则",
+  "script_rules_count": "条",
+  "script_rules_empty": "暂无扩展脚本规则",
+  "script_rules_need_init": "扩展脚本文件未初始化或已损坏，请点击「初始化」按钮",
+  "script_rules_init_btn": "初始化",
+  "script_rules_init_success": "扩展脚本文件已初始化",
+  "script_rules_init_failed": "初始化失败",
+  "script_rules_not_found": "未找到扩展脚本文件（当前订阅未配置 option.script）",
+  "rule_restart_hint": "规则已修改，请重启 Clash 生效",
+
+  "settings_use_script_rule": "增删域名写入扩展脚本规则",
+  "settings_use_script_rule_hint": "勾选后添加/删除规则将写入 Clash Verge Rev 的 Script.js 扩展脚本文件，而非 YAML 配置文件",
 
   "settings_title": "设置",
   "settings_api_url": "Clash API 地址",

@@ -20,12 +20,13 @@ function sendToNative(message) {
 }
 
 /**
- * 添加单条规则到 Clash YAML
+ * 添加单条规则到 Clash YAML 或 Script.js
  * @param {string} rule - 规则字符串，如 "DOMAIN-SUFFIX,bilibili.com,Proxy"
- * @param {string} [configPath] - 可选，配置文件路径
+ * @param {string} [configPath] - 可选，配置文件路径（useScript=false 时使用）
+ * @param {boolean} [useScript=false] - 是否写入 Script.js 的 EXT_RULES 数组
  */
-async function addClashRule(rule, configPath) {
-  const msg = { action: 'addRule', rule };
+async function addClashRule(rule, configPath, useScript = false) {
+  const msg = { action: 'addRule', rule, useScript };
   if (configPath) msg.configPath = configPath;
   return await sendToNative(msg);
 }
@@ -42,12 +43,13 @@ async function batchAddClashRules(rules, configPath) {
 }
 
 /**
- * 从 Clash YAML 删除规则
+ * 从 Clash YAML 或 Script.js 删除规则
  * @param {string} rule - 规则字符串
- * @param {string} [configPath] - 可选，配置文件路径
+ * @param {string} [configPath] - 可选，配置文件路径（useScript=false 时使用）
+ * @param {boolean} [useScript=false] - 是否从 Script.js 的 EXT_RULES 数组删除
  */
-async function removeClashRule(rule, configPath) {
-  const msg = { action: 'removeRule', rule };
+async function removeClashRule(rule, configPath, useScript = false) {
+  const msg = { action: 'removeRule', rule, useScript };
   if (configPath) msg.configPath = configPath;
   return await sendToNative(msg);
 }
@@ -104,4 +106,30 @@ async function getSystemProxyStatus() {
  */
 async function syncSnapshotRules(rules) {
   return await sendToNative({ action: 'syncSnapshot', rules });
+}
+
+// ──── Script.js 扩展脚本规则管理 ────
+
+/**
+ * 获取 Script.js 文件路径及状态
+ * @returns {Promise<{success: boolean, scriptPath?: string, exists?: boolean, managed?: boolean, error?: string}>}
+ */
+async function getScriptPath() {
+  return await sendToNative({ action: 'getScriptPath' });
+}
+
+/**
+ * 获取 Script.js 中 EXT_RULES 数组的规则列表
+ * @returns {Promise<{success: boolean, rules?: string[], scriptPath?: string, needInit?: boolean, error?: string}>}
+ */
+async function getScriptRules() {
+  return await sendToNative({ action: 'getScriptRules' });
+}
+
+/**
+ * 初始化 Script.js 文件为标准扩展脚本格式（备份原文件）
+ * @returns {Promise<{success: boolean, scriptPath?: string, error?: string}>}
+ */
+async function initScriptFile() {
+  return await sendToNative({ action: 'initScriptFile' });
 }

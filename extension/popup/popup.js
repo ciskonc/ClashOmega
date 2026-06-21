@@ -382,6 +382,91 @@ function renderRuleList(rules) {
   });
 }
 
+// ──── 扩展脚本规则渲染 ────
+
+function renderScriptRules(rules) {
+  const listEl = document.getElementById('script-rule-list');
+  const countEl = document.getElementById('script-rule-count');
+  const emptyEl = document.getElementById('script-rule-empty');
+  const needInitEl = document.getElementById('script-rule-need-init');
+  const notFoundEl = document.getElementById('script-rule-not-found');
+
+  // 隐藏所有状态
+  emptyEl.style.display = 'none';
+  needInitEl.style.display = 'none';
+  notFoundEl.style.display = 'none';
+  listEl.innerHTML = '';
+
+  if (!rules) {
+    // rules 为 null 表示文件未找到或未初始化，由调用方处理状态显示
+    return;
+  }
+
+  countEl.textContent = rules.length;
+
+  if (rules.length === 0) {
+    emptyEl.style.display = 'block';
+    return;
+  }
+
+  rules.forEach((ruleStr) => {
+    const parts = ruleStr.split(',');
+    const type = parts[0] || '';
+    const payload = parts[1] || '';
+    const proxy = parts[2] || '';
+    const div = document.createElement('div');
+    div.className = 'rule-item';
+    const policyClass = getPolicyClass(proxy);
+    const fullRule = `${type},${payload},${proxy}`;
+    div.innerHTML = `
+      <span class="rule-text" title="${fullRule}">${fullRule}</span>
+      <span class="rule-policy ${policyClass}">${proxy}</span>
+      <button class="rule-delete-btn" data-rule="${fullRule}" data-script="1" data-i18n-title="rule_delete" title="${I18N.t('rule_delete')}">✕</button>
+    `;
+    listEl.appendChild(div);
+  });
+}
+
+// 加载扩展脚本规则
+async function loadScriptRules() {
+  const result = await sendToBackground({ action: 'getScriptRules' });
+  const needInitEl = document.getElementById('script-rule-need-init');
+  const notFoundEl = document.getElementById('script-rule-not-found');
+
+  if (!result.success) {
+    if (result.needInit) {
+      // 文件未初始化或损坏
+      renderScriptRules(null);
+      needInitEl.style.display = 'block';
+      document.getElementById('script-rule-count').textContent = '0';
+    } else {
+      // 文件未找到
+      renderScriptRules(null);
+      notFoundEl.style.display = 'block';
+      document.getElementById('script-rule-count').textContent = '0';
+    }
+    return;
+  }
+
+  renderScriptRules(result.rules || []);
+}
+
+// 绑定扩展脚本规则初始化按钮
+function bindScriptInitButton() {
+  document.getElementById('script-init-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('script-init-btn');
+    btn.disabled = true;
+    const result = await sendToBackground({ action: 'initScriptFile' });
+    btn.disabled = false;
+    if (result.success) {
+      showToast(I18N.t('script_rules_init_success'), 'success');
+      await loadScriptRules();
+    } else {
+      showToast(I18N.t('script_rules_init_failed') + ': ' + (result.error || ''), 'error');
+    }
+  });
+}
+
 function renderLanguageSetting() {
   const select = document.getElementById('language-select');
   select.innerHTML = '';
@@ -478,13 +563,25 @@ function bindQuickAddRule(domain) {
 
     const result = await sendToBackground({ action: 'addRule', rule });
     if (result && result.success) {
-      showToast(I18N.t('success_rule_added'), 'success');
-      // 乐观更新：直接插入 DOM，不重新从内核 API 拉取（内核尚未热重载）
-      const listEl = document.getElementById('rule-list');
+      // 提示用户需重启 Clash 生效（已移除热重载）
+      showToast(I18N.t('success_rule_added') + ' — ' + I18N.t('rule_restart_hint'), 'success');
+      // 乐观更新：根据 useScriptRule 决定插入哪个列表
+      const settings = await sendToBackground({ action: 'getSettings' });
+      const useScript = settings.useScriptRule === true;
+      const listEl = useScript
+        ? document.getElementById('script-rule-list')
+        : document.getElementById('rule-list');
+      const countEl = useScript
+        ? document.getElementById('script-rule-count')
+        : document.getElementById('rule-count');
       // 如果列表显示的是空占位文本，先清掉
       const placeholder = listEl.querySelector('div[style]');
       if (placeholder && !placeholder.classList.contains('rule-item')) {
         listEl.innerHTML = '';
+      }
+      // 隐藏空状态提示
+      if (useScript) {
+        document.getElementById('script-rule-empty').style.display = 'none';
       }
       const div = document.createElement('div');
       div.className = 'rule-item';
@@ -492,10 +589,9 @@ function bindQuickAddRule(domain) {
       div.innerHTML = `
         <span class="rule-text" title="${rule}">${rule}</span>
         <span class="rule-policy ${policyClass}">${policy}</span>
-        <button class="rule-delete-btn" data-rule="${rule}" data-i18n-title="rule_delete" title="${I18N.t('rule_delete')}">✕</button>
+        <button class="rule-delete-btn" data-rule="${rule}" data-script="${useScript ? '1' : '0'}" data-i18n-title="rule_delete" title="${I18N.t('rule_delete')}">✕</button>
       `;
       listEl.appendChild(div);
-      const countEl = document.getElementById('rule-count');
       countEl.textContent = parseInt(countEl.textContent) + 1;
     } else {
       showNativeError(result, 'error_native_host');
@@ -628,22 +724,39 @@ function bindF1DeleteEvents() {
 }
 
 function bindRuleListDeleteEvents() {
-  document.getElementById('rule-list').addEventListener('click', async (e) => {
+  // 使用事件委托，同时处理 rule-list 和 script-rule-list 的删除按钮
+  document.body.addEventListener('click', async (e) => {
     const btn = e.target.closest('.rule-delete-btn');
     if (!btn) return;
 
     const ruleStr = btn.dataset.rule;
+    const isScript = btn.dataset.script === '1';
     // 乐观更新：先移除 DOM，再发请求，消除连点时的视觉延迟
     const ruleItem = btn.closest('.rule-item');
+    if (!ruleItem) return;
     ruleItem.style.opacity = '0.5';
     btn.disabled = true;
 
-    const result = await sendToBackground({ action: 'removeRule', rule: ruleStr });
+    // 扩展脚本规则的删除需要 useScript=true
+    let result;
+    if (isScript) {
+      result = await sendToBackground({ action: 'removeRule', rule: ruleStr, useScript: true });
+    } else {
+      result = await sendToBackground({ action: 'removeRule', rule: ruleStr });
+    }
+
     if (result && result.success) {
-      showToast(I18N.t('success_rule_deleted'), 'success');
+      // 提示用户需重启 Clash 生效（已移除热重载）
+      showToast(I18N.t('success_rule_deleted') + ' — ' + I18N.t('rule_restart_hint'), 'success');
       ruleItem.remove();
-      const countEl = document.getElementById('rule-count');
+      const countEl = isScript
+        ? document.getElementById('script-rule-count')
+        : document.getElementById('rule-count');
       countEl.textContent = Math.max(0, parseInt(countEl.textContent) - 1);
+      // 如果扩展脚本规则列表清空，显示空状态
+      if (isScript && parseInt(countEl.textContent) === 0) {
+        document.getElementById('script-rule-empty').style.display = 'block';
+      }
     } else {
       // 失败时恢复
       ruleItem.style.opacity = '1';
@@ -687,6 +800,7 @@ function bindSettingsEvents() {
       clashProxyHost: document.getElementById('settings-proxy-host').value.trim(),
       clashProxyPort: parseInt(document.getElementById('settings-proxy-port').value) || 7890,
       clashConfigPath: configPath,
+      useScriptRule: document.getElementById('settings-use-script-rule').checked,
       language: document.getElementById('language-select').value
     };
     await sendToBackground({ action: 'saveSettings', settings });
@@ -737,6 +851,7 @@ async function openSettings() {
   document.getElementById('settings-proxy-host').value = settings.clashProxyHost || '127.0.0.1';
   document.getElementById('settings-proxy-port').value = settings.clashProxyPort || 7890;
   document.getElementById('settings-config-path').value = settings.clashConfigPath || '';
+  document.getElementById('settings-use-script-rule').checked = settings.useScriptRule === true;
   panel.classList.add('open');
 }
 
@@ -774,6 +889,9 @@ async function initPopup() {
 
   // 1b. 代理组下拉框（F2/F3 共用）
   populateProxyGroupSelects();
+
+  // 1c. 扩展脚本规则（独立于 Clash 规则列表，从 Script.js 读取）
+  loadScriptRules();
 
   // 1c. Clash 规则列表 + F1 域名匹配
   //     非 clash 模式下浏览器不走 Clash 代理，/connections 不会有该域名连接，
@@ -828,6 +946,7 @@ async function initPopup() {
   if (!window._popupEventsBound) {
     bindQuickAddRule(domain);
     bindDomainDetection(tab.id);
+    bindScriptInitButton();
     window._popupEventsBound = true;
   }
 }

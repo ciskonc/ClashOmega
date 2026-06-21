@@ -40,9 +40,22 @@
   "rule_type_domain_suffix": "DOMAIN-SUFFIX",
   "rule_type_domain_keyword": "DOMAIN-KEYWORD",
 
-  "rule_list_title": "全 Clash ルール",
+  "rule_list_title": "組み込み Clash ルール",
   "rule_list_count": "件",
   "rule_delete": "削除",
+
+  "script_rules_title": "拡張スクリプトルール",
+  "script_rules_count": "件",
+  "script_rules_empty": "拡張スクリプトルールがありません",
+  "script_rules_need_init": "拡張スクリプトファイルが初期化されていないか破損しています。「初期化」ボタンをクリックしてください",
+  "script_rules_init_btn": "初期化",
+  "script_rules_init_success": "拡張スクリプトファイルを初期化しました",
+  "script_rules_init_failed": "初期化に失敗しました",
+  "script_rules_not_found": "拡張スクリプトファイルが見つかりません（現在のプロファイルに option.script がありません）",
+  "rule_restart_hint": "ルールが変更されました。Clash を再起動して適用してください",
+
+  "settings_use_script_rule": "拡張スクリプトにルールを書き込む",
+  "settings_use_script_rule_hint": "チェックすると、ルールの追加/削除は YAML 設定ファイルではなく Clash Verge Rev の Script.js ファイルに書き込まれます",
 
   "settings_title": "設定",
   "settings_api_url": "Clash API URL",
