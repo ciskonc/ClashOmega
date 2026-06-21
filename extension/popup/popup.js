@@ -807,6 +807,7 @@ function bindDomainDetection(tabId) {
   const summaryEl = document.getElementById('batch-detect-summary');
   const listEl = document.getElementById('batch-detect-domain-list');
   const batchBtn = document.getElementById('batch-detect-batch-btn');
+  const actionsEl = document.getElementById('batch-detect-actions');
 
   let currentSuggestions = [];
 
@@ -822,6 +823,7 @@ function bindDomainDetection(tabId) {
       summaryEl.style.display = 'block';
       summaryEl.textContent = `${I18N.t('batch_detect_collected')} 0 ${I18N.t('batch_detect_domains')}`;
       listEl.style.display = 'none';
+      actionsEl.style.display = 'none';
       return;
     }
 
@@ -834,6 +836,8 @@ function bindDomainDetection(tabId) {
 
     listEl.style.display = 'block';
     listEl.innerHTML = '';
+    // 检测到域名后显示操作栏（全选/取消/代理组/批量添加）
+    actionsEl.style.display = 'flex';
 
     suggestions.forEach((s, idx) => {
       const div = document.createElement('div');
