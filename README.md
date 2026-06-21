@@ -4,7 +4,17 @@
 
 ## 界面预览
 
-![ClashOmega Popup](docs/popup-preview.png)
+### 扩展图标与 Chrome 工具栏
+
+![UI Overview](docs/ui-overview.png)
+
+### Popup 主界面 — 状态栏 + 域名匹配 + 快捷添加规则
+
+![UI Popup](docs/ui-popup.png)
+
+### Clash 规则列表 + 扩展脚本规则管理
+
+![UI Rules](docs/ui-rules.png)
 
 ## 功能
 
