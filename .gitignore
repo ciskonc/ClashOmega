@@ -23,3 +23,10 @@ node_modules/
 
 # 文档
 .trae/
+
+# TRAE 工具产物（不应提交到仓库）
+agent-browser-*.exe
+
+# AOS 状态文件（不应提交到仓库）
+AGENT_STATUS.md
+STATUS.md
