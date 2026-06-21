@@ -1,4 +1,4 @@
-# ClashOmega - Native Host Installer / 安装脚本
+﻿# ClashOmega - Native Host Installer / 安装脚本
 # Usage: Right-click -> Run with PowerShell
 # 用法: 右键 -> 使用 PowerShell 运行
 
