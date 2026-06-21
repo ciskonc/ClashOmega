@@ -456,13 +456,25 @@ function renderDomainRuleCheck(domain, matchedRules, proxies) {
     const finalProxy = resolveFinalProxy(rule.proxy, proxies);
     const ruleStr = `${rule.type},${rule.payload},${rule.proxy}`;
     const canDelete = isDomainRule(rule.type);
+    // 判断规则来源：在 window._scriptRulesWithSource 中查找（由 loadScriptRules 设置）
+    // JS 来源 → data-script="1"（删除时调用 useScript=true）
+    // YAML 来源 → data-script="0"（删除时调用 useScript=false）
+    let scriptFlag = '0';
+    if (canDelete && window._scriptRulesWithSource) {
+      const found = window._scriptRulesWithSource.find(
+        item => item.rule.toLowerCase() === ruleStr.toLowerCase()
+      );
+      if (found) {
+        scriptFlag = found.source === 'JS' ? '1' : '0';
+      }
+    }
     div.innerHTML = `
       <span class="rule-index">#${rule.index + 1}</span>
       <span class="rule-type-tag">${rule.type}</span>
       <span class="rule-payload">${rule.payload || '—'}</span>
       <span class="rule-group-name" title="${rule.proxy}">${rule.proxy}</span>
       <span class="rule-policy ${finalProxy.class}" title="${finalProxy.name}">${finalProxy.name}</span>
-      ${canDelete ? `<button class="rule-delete-btn" data-rule="${ruleStr}" data-i18n-title="rule_delete" title="${I18N.t('rule_delete')}">✕</button>` : ''}
+      ${canDelete ? `<button class="rule-delete-btn" data-rule="${ruleStr}" data-script="${scriptFlag}" data-i18n-title="rule_delete" title="${I18N.t('rule_delete')}">✕</button>` : ''}
     `;
     matchedEl.appendChild(div);
   });
@@ -498,15 +510,14 @@ function renderRuleList(rules, proxies) {
   });
 }
 
-// ──── 扩展脚本规则渲染 ────
+// ──── 额外脚本规则渲染 ────
 
 /**
- * 渲染「额外脚本规则」列表
- * @param {Array<string>|null} rules - 规则字符串数组（"TYPE,PAYLOAD,PROXY"），null 表示文件未找到/未初始化
+ * 渲染「额外脚本规则」列表（支持混合来源）
+ * @param {Array<{rule: string, source: string}>|null} rulesWithSource - 规则数组，每项含 rule（"TYPE,PAYLOAD,PROXY"）和 source（'JS'/'YAML'）；null 表示文件未找到/未初始化
  * @param {object} proxies - /proxies API 返回的代理组字典，用于解析最终策略
- * @param {string} source - 来源标识：'JS'（来自 Script.js）或 'YAML'（来自 YAML 配置文件）
  */
-function renderScriptRules(rules, proxies, source) {
+function renderScriptRules(rulesWithSource, proxies) {
   const listEl = document.getElementById('script-rule-list');
   const countEl = document.getElementById('script-rule-count');
   const emptyEl = document.getElementById('script-rule-empty');
@@ -519,26 +530,19 @@ function renderScriptRules(rules, proxies, source) {
   notFoundEl.style.display = 'none';
   listEl.innerHTML = '';
 
-  if (!rules) {
-    // rules 为 null 表示文件未找到或未初始化，由调用方处理状态显示
+  if (!rulesWithSource) {
+    // rulesWithSource 为 null 表示文件未找到或未初始化，由调用方处理状态显示
     return;
   }
 
-  countEl.textContent = rules.length;
+  countEl.textContent = rulesWithSource.length;
 
-  if (rules.length === 0) {
+  if (rulesWithSource.length === 0) {
     emptyEl.style.display = 'block';
     return;
   }
 
-  // 来源标识 HTML：JS 蓝色小标签 / YAML 橙色小标签
-  const sourceTagHtml = source === 'JS'
-    ? `<span class="rule-source-tag rule-source--js" title="${I18N.t('rule_source_js')}">JS</span>`
-    : `<span class="rule-source-tag rule-source--yaml" title="${I18N.t('rule_source_yaml')}">YAML</span>`;
-  // 删除按钮的 data-script 属性：JS 来源 → "1"（删除时调用 useScript=true），YAML 来源 → "0"
-  const scriptFlag = source === 'JS' ? '1' : '0';
-
-  rules.forEach((ruleStr) => {
+  rulesWithSource.forEach(({ rule: ruleStr, source }) => {
     const parts = ruleStr.split(',');
     const type = parts[0] || '';
     const payload = parts[1] || '';
@@ -548,6 +552,12 @@ function renderScriptRules(rules, proxies, source) {
     // 解析最终策略：递归代理组链路，优先显示「自动选择」，否则显示节点名或 DIRECT/REJECT
     const finalProxy = resolveFinalProxy(proxy, proxies);
     const fullRule = `${type},${payload},${proxy}`;
+    // 来源标识 HTML：JS 蓝色小标签 / YAML 橙色小标签
+    const sourceTagHtml = source === 'JS'
+      ? `<span class="rule-source-tag rule-source--js" title="${I18N.t('rule_source_js')}">JS</span>`
+      : `<span class="rule-source-tag rule-source--yaml" title="${I18N.t('rule_source_yaml')}">YAML</span>`;
+    // 删除按钮的 data-script 属性：JS 来源 → "1"（删除时调用 useScript=true），YAML 来源 → "0"
+    const scriptFlag = source === 'JS' ? '1' : '0';
     div.innerHTML = `
       ${sourceTagHtml}
       <span class="rule-type-tag">${type}</span>
@@ -560,52 +570,73 @@ function renderScriptRules(rules, proxies, source) {
   });
 }
 
-// 加载额外脚本规则
-// 数据源由 useScriptRule 开关决定：
-//   - useScriptRule=true  → 从 Script.js 的 EXT_RULES 读取（来源标识 JS）
-//   - useScriptRule=false → 从 Clash API /rules 过滤 DOMAIN 类规则读取（来源标识 YAML）
+// 加载额外脚本规则（合并 JS + YAML 两个来源）
+// 数据源：
+//   - JS 来源：Script.js 的 EXT_RULES（用户在 useScriptRule=true 时添加的规则）
+//   - YAML 来源：Clash API /rules 中 DOMAIN 类规则，减去 JS 来源（去重）
+//   - 合并显示，每条带来源标识（JS/YAML）
+// 去重原因：Script.js 的规则通过 main(config) 前置到 config.rules，
+//           会同时出现在 /rules 中，需按 "TYPE,PAYLOAD,PROXY" 字符串去重
 async function loadScriptRules() {
   // 并行获取所有所需数据
-  const [scriptResult, proxiesResult, settingsResult, clashRulesResult] = await Promise.all([
+  const [scriptResult, proxiesResult, clashRulesResult] = await Promise.all([
     sendToBackground({ action: 'getScriptRules' }),
     sendToBackground({ action: 'getProxies' }),
-    sendToBackground({ action: 'getSettings' }),
     sendToBackground({ action: 'getClashRules' })
   ]);
   const proxies = proxiesResult.success ? proxiesResult.proxies : null;
-  const useScript = settingsResult.success ? settingsResult.useScriptRule === true : true;
   const needInitEl = document.getElementById('script-rule-need-init');
   const notFoundEl = document.getElementById('script-rule-not-found');
 
-  if (useScript) {
-    // ──── 数据源：Script.js 的 EXT_RULES ────
-    if (!scriptResult.success) {
-      if (scriptResult.needInit) {
-        // 文件未初始化或损坏
-        renderScriptRules(null, proxies, 'JS');
-        needInitEl.style.display = 'block';
-        document.getElementById('script-rule-count').textContent = '0';
-      } else {
-        // 文件未找到
-        renderScriptRules(null, proxies, 'JS');
-        notFoundEl.style.display = 'block';
-        document.getElementById('script-rule-count').textContent = '0';
-      }
-      return;
+  // ──── JS 来源：Script.js 的 EXT_RULES ────
+  let jsRules = [];
+  let jsFileOk = true;
+  if (!scriptResult.success) {
+    jsFileOk = false;
+    if (scriptResult.needInit) {
+      needInitEl.style.display = 'block';
+    } else {
+      notFoundEl.style.display = 'block';
     }
-    renderScriptRules(scriptResult.rules || [], proxies, 'JS');
+    document.getElementById('script-rule-count').textContent = '0';
   } else {
-    // ──── 数据源：Clash API /rules 中 DOMAIN 类规则 ────
-    if (!clashRulesResult.success) {
-      renderScriptRules([], proxies, 'YAML');
-      return;
-    }
-    // 过滤出 DOMAIN/DOMAINSUFFIX/DOMAINKEYWORD 类规则，转换为 "TYPE,PAYLOAD,PROXY" 字符串数组
-    const domainRules = clashRulesResult.rules
-      .filter(r => isDomainRule(r.type))
-      .map(r => `${r.type},${r.payload},${r.proxy}`);
-    renderScriptRules(domainRules, proxies, 'YAML');
+    jsRules = scriptResult.rules || [];
   }
+
+  // ──── YAML 来源：Clash API /rules 中 DOMAIN 类规则 ────
+  // 去重：排除已在 Script.js 中的规则（按 "TYPE,PAYLOAD,PROXY" 字符串小写匹配）
+  let yamlRules = [];
+  if (clashRulesResult.success) {
+    const jsRuleSet = new Set(jsRules.map(r => r.toLowerCase()));
+    yamlRules = clashRulesResult.rules
+      .filter(r => isDomainRule(r.type))
+      .map(r => `${r.type},${r.payload},${r.proxy}`)
+      .filter(ruleStr => !jsRuleSet.has(ruleStr.toLowerCase()));
+  }
+
+  // ──── 合并显示 ────
+  // 如果 Script.js 文件未找到/未初始化，只显示 YAML 来源（若有）
+  if (!jsFileOk) {
+    const merged = yamlRules.map(rule => ({ rule, source: 'YAML' }));
+    renderScriptRules(merged, proxies);
+    // 重新隐藏 needInit/notFound（renderScriptRules 会隐藏所有状态），再恢复显示
+    if (scriptResult.needInit) {
+      needInitEl.style.display = 'block';
+    } else if (!scriptResult.success) {
+      notFoundEl.style.display = 'block';
+    }
+    return;
+  }
+
+  // 合并：JS 来源 + YAML 来源
+  const merged = [
+    ...jsRules.map(rule => ({ rule, source: 'JS' })),
+    ...yamlRules.map(rule => ({ rule, source: 'YAML' }))
+  ];
+  // 保存到全局变量，供 renderDomainRuleCheck 判断规则来源（JS/YAML）使用
+  // 用于 F1 域名匹配检测中的删除按钮 data-script 属性
+  window._scriptRulesWithSource = merged;
+  renderScriptRules(merged, proxies);
 }
 
 // 绑定扩展脚本规则初始化按钮
@@ -871,7 +902,17 @@ function bindDomainCheckDeleteEvents() {
     if (!btn) return;
 
     const ruleStr = btn.dataset.rule;
-    const result = await sendToBackground({ action: 'removeRule', rule: ruleStr });
+    const isScript = btn.dataset.script === '1';
+    // 根据规则来源决定删除方式：
+    // JS 来源 → useScript=true（从 Script.js 删除）
+    // YAML 来源 → useScript=false（从 YAML 配置文件删除）
+    // 必须显式传 useScript，否则 background.js 会回退到 settings.useScriptRule 导致误删
+    let result;
+    if (isScript) {
+      result = await sendToBackground({ action: 'removeRule', rule: ruleStr, useScript: true });
+    } else {
+      result = await sendToBackground({ action: 'removeRule', rule: ruleStr, useScript: false });
+    }
     if (result && result.success) {
       // 提示用户需重启 Clash 生效，toast 内带「重启 Clash」按钮可直接点击
       showToast(I18N.t('success_rule_deleted') + ' — ' + I18N.t('rule_restart_hint'), 'success', {
@@ -907,12 +948,15 @@ function bindRuleListDeleteEvents() {
     ruleItem.style.opacity = '0.5';
     btn.disabled = true;
 
-    // 扩展脚本规则的删除需要 useScript=true
+    // 根据规则来源决定删除方式：
+    // JS 来源 → useScript=true（从 Script.js 删除）
+    // YAML 来源 → useScript=false（从 YAML 配置文件删除）
+    // 必须显式传 useScript，否则 background.js 会回退到 settings.useScriptRule 导致误删
     let result;
     if (isScript) {
       result = await sendToBackground({ action: 'removeRule', rule: ruleStr, useScript: true });
     } else {
-      result = await sendToBackground({ action: 'removeRule', rule: ruleStr });
+      result = await sendToBackground({ action: 'removeRule', rule: ruleStr, useScript: false });
     }
 
     if (result && result.success) {
@@ -1065,8 +1109,10 @@ async function initPopup() {
   // 1b. 代理组下拉框（快捷添加/批量检测共用）
   populateProxyGroupSelects();
 
-  // 1c. 额外脚本规则（独立于 Clash 规则列表，从 Script.js 或 /rules 读取）
-  loadScriptRules();
+  // 1c. 额外脚本规则（合并 JS + YAML 两个来源）
+  //     必须 await：渲染结果会保存到 window._scriptRulesWithSource，
+  //     供后续 renderDomainRuleCheck 判断规则来源（JS/YAML）使用
+  await loadScriptRules();
 
   // 1c. Clash 规则列表 + 域名匹配检测
   //     非 clash 模式下浏览器不走 Clash 代理，/connections 不会有该域名连接，
