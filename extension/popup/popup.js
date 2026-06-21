@@ -68,6 +68,10 @@ async function triggerRestartClash() {
   btn.textContent = originalText;
   if (result && result.success) {
     showToast(I18N.t('restart_clash_success'), 'success');
+    // 重启成功后自动刷新 popup UI，无需用户重新打开
+    // 刷新范围：F1 域名在哪个组、Clash 规则列表、扩展脚本规则
+    // 延迟 300ms 等 toast 先渲染，避免视觉抖动
+    setTimeout(() => { initPopup(); }, 300);
   } else {
     showToast(I18N.t('restart_clash_failed'), 'error');
   }

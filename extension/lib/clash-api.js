@@ -145,6 +145,37 @@ async function getClashConnections() {
 }
 
 /**
+ * 关闭 Clash 所有活跃连接
+ * 用于「重启 Clash」后强制新连接重新匹配规则。
+ * 根因：PUT /configs 热重载只更新配置，不断开已建立连接；
+ *       Clash 规则匹配只在连接建立时进行，旧连接不会重新匹配新规则。
+ *       因此需要主动关闭所有连接，让后续请求建立新连接并匹配最新规则。
+ * @returns {Promise<boolean>} 是否成功
+ */
+async function closeAllConnections() {
+  const { baseUrl, headers } = await getApiConfig();
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5000);
+    const response = await fetch(`${baseUrl}/connections`, {
+      method: 'DELETE',
+      headers,
+      signal: ctrl.signal
+    });
+    clearTimeout(timer);
+    if (!response.ok) {
+      console.error(`Clash Manager: closeAllConnections failed HTTP ${response.status}`);
+      return false;
+    }
+    console.log('Clash Manager: all connections closed');
+    return true;
+  } catch (e) {
+    console.error('Clash Manager: closeAllConnections error:', e.message);
+    return false;
+  }
+}
+
+/**
  * 获取 Clash 配置
  */
 async function getClashConfig() {

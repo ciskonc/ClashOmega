@@ -256,6 +256,17 @@ async function handleMessage(message) {
           const reloaded = await reloadConfigFromPath(snapshotPathResult.snapshotPath);
           if (reloaded) {
             console.log('[restartClash] Step 4 OK: config reloaded via PUT /configs');
+            // Step 4.5: 关闭所有活跃连接，强制新连接重新匹配最新规则
+            // 根因：PUT /configs 热重载只更新配置，不断开已建立连接；
+            //       Clash 规则匹配只在连接建立时进行，旧连接不会重新匹配新规则。
+            //       不关闭连接会导致用户感觉"重启 Clash 不生效"。
+            console.log('[restartClash] Step 4.5: Closing all active connections to force rule re-match...');
+            const closed = await closeAllConnections();
+            if (closed) {
+              console.log('[restartClash] Step 4.5 OK: all connections closed');
+            } else {
+              console.warn('[restartClash] Step 4.5 WARN: failed to close connections (rules will take effect on new connections only)');
+            }
             return { success: true, method: 'reload' };
           }
           console.warn('[restartClash] Step 4 FAILED: PUT /configs failed, falling back to POST /restart');

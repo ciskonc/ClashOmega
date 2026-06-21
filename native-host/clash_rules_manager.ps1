@@ -304,41 +304,31 @@ function Add-Rule($content, $rule) {
     }
 
     # 标准 Clash 配置格式
+    # 关键：新规则前置到 rules 部分开头，优先于所有 RULE-SET
+    # 根因：原逻辑将规则追加到 RULE-SET 之后（MATCH 之前），
+    #       导致被 RULE-SET 先匹配，用户添加的规则永远不生效
     $lines = [System.Collections.ArrayList]::new($content -split "`n")
-    $inRules = $false; $insertIdx = -1; $overrideIdx = -1; $lastSameTypeIdx = -1
+    $inRules = $false; $insertIdx = -1; $overrideIdx = -1
     for ($i = 0; $i -lt $lines.Count; $i++) {
         $trimmed = $lines[$i].Trim()
         if (-not $inRules) {
-            if ($trimmed -eq 'rules:' -or $trimmed.StartsWith('rules:')) { $inRules = $true }
+            if ($trimmed -eq 'rules:' -or $trimmed.StartsWith('rules:')) {
+                $inRules = $true
+                $insertIdx = $i + 1
+            }
             continue
         }
-        if (-not $trimmed -or $trimmed.StartsWith('#')) { $insertIdx = $i + 1; continue }
-        # 检查是否与同类型规则冲突
+        if (-not $trimmed -or $trimmed.StartsWith('#')) { continue }
         if ($trimmed -match "^-\s*'?([^,]+),([^,]+),") {
             $existingType = $Matches[1].Trim()
             $existingPayload = $Matches[2].Trim()
-            if ($existingType -eq $newType) {
-                $lastSameTypeIdx = $i
-                if ($existingPayload -eq $newPayload -and $overrideIdx -lt 0) {
-                    $overrideIdx = $i
-                }
+            if ($existingType -eq $newType -and $existingPayload -eq $newPayload -and $overrideIdx -lt 0) {
+                $overrideIdx = $i
             }
         }
-        if ($trimmed.StartsWith('- ') -or $trimmed.StartsWith("- '") -or $trimmed.StartsWith('- "')) { $insertIdx = $i + 1; continue }
-        if (-not $lines[$i].StartsWith(' ') -and -not $lines[$i].StartsWith("`t") -and $trimmed.Contains(':')) { $insertIdx = $i; break }
     }
-    if ($overrideIdx -ge 0) { $insertIdx = $overrideIdx }
-    elseif ($lastSameTypeIdx -ge 0) { $insertIdx = $lastSameTypeIdx + 1 }
     if ($insertIdx -lt 0) { return $content }
-    # 确保新规则插入到 MATCH（漏网之鱼）之前，避免被兜底规则拦截
-    for ($j = 0; $j -lt $lines.Count; $j++) {
-        if ($lines[$j] -match "^\s*-\s*'?MATCH,") {
-            if ($insertIdx -gt $j) { $insertIdx = $j }
-            break
-        }
-    }
     $newLine = if ($rule.Contains(',')) { "  - '$rule'" } else { "  - $rule" }
-    # 检测到重复规则时，替换原行（而非 Insert 导致重复）
     if ($overrideIdx -ge 0) {
         $lines[$overrideIdx] = $newLine
     } else {
