@@ -244,7 +244,7 @@ native-host/        # Native Messaging Host（Windows）
 ## 兼容性
 
 - **浏览器**: Chrome / Edge / 其他 Chromium 内核浏览器（需支持 MV3）
-- **代理内核**: Clash / Clash Verge Rev / Mihomo（需开启 RESTful API）
+- **代理内核**: 本扩展基于 **Clash Verge Rev** 开发与测试，其他 Clash 内核（如 Clash for Windows / Mihomo 等）未测试，可能可用但不保证
 - **操作系统**: Windows（Native Host 依赖 PowerShell）
 
 ## 许可证
