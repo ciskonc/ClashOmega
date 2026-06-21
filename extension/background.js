@@ -222,42 +222,55 @@ async function handleMessage(message) {
         }
         console.log(`[restartClash] Step 1 OK: ${yamlResult.rules.length} rules read`);
 
-        // 仅当有规则时才同步到快照，避免空规则清空快照文件
-        if (yamlResult.rules.length > 0) {
-          console.log('[restartClash] Step 2: Syncing rules to snapshot...');
-          const syncResult = await syncSnapshotRules(yamlResult.rules);
-          if (!syncResult || !syncResult.success) {
-            console.error('[restartClash] FAILED at step 2: snapshot sync failed', syncResult);
-            return { success: false, error: syncResult?.error || 'Failed to sync snapshot' };
-          }
-          console.log(`[restartClash] Step 2 OK: snapshot synced to ${syncResult.snapshotPath}`);
+        // Step 2: 读取扩展脚本的 customRules，前置到 profile 规则列表
+        // 关键：Clash Verge Rev 生成 clash-verge.yaml 时才执行扩展脚本，
+        // 但我们直接修改 clash-verge.yaml 不会触发脚本执行，
+        // 所以需要手动读取扩展脚本的规则并前置到合并后的规则列表
+        let mergedRules = yamlResult.rules;
+        console.log('[restartClash] Step 2: Reading script rules...');
+        const scriptResult = await getScriptRules();
+        if (scriptResult && scriptResult.success && Array.isArray(scriptResult.rules) && scriptResult.rules.length > 0) {
+          console.log(`[restartClash] Step 2 OK: ${scriptResult.rules.length} script rules read, prepending to profile rules`);
+          mergedRules = [...scriptResult.rules, ...yamlResult.rules];
         } else {
-          console.log('[restartClash] Step 2 SKIPPED: no rules to sync (profile append is empty)');
+          console.log('[restartClash] Step 2 SKIPPED: no script rules or script not initialized');
         }
 
-        // Step 3: 优先尝试 PUT /configs {path} 热重载（不中断代理）
-        // clash-verge.yaml 已包含扩展脚本执行后的完整规则，reload 即可让扩展脚本规则生效
-        console.log('[restartClash] Step 3: Trying PUT /configs reload (no proxy interruption)...');
+        // Step 3: 同步合并后的规则到快照（包含扩展脚本规则）
+        if (mergedRules.length > 0) {
+          console.log('[restartClash] Step 3: Syncing merged rules to snapshot...');
+          const syncResult = await syncSnapshotRules(mergedRules);
+          if (!syncResult || !syncResult.success) {
+            console.error('[restartClash] FAILED at step 3: snapshot sync failed', syncResult);
+            return { success: false, error: syncResult?.error || 'Failed to sync snapshot' };
+          }
+          console.log(`[restartClash] Step 3 OK: snapshot synced to ${syncResult.snapshotPath}`);
+        } else {
+          console.log('[restartClash] Step 3 SKIPPED: no rules to sync');
+        }
+
+        // Step 4: 优先尝试 PUT /configs {path} 热重载（不中断代理）
+        console.log('[restartClash] Step 4: Trying PUT /configs reload (no proxy interruption)...');
         const snapshotPathResult = await getSnapshotPath();
         if (snapshotPathResult && snapshotPathResult.success && snapshotPathResult.snapshotPath) {
           const reloaded = await reloadConfigFromPath(snapshotPathResult.snapshotPath);
           if (reloaded) {
-            console.log('[restartClash] Step 3 OK: config reloaded via PUT /configs');
+            console.log('[restartClash] Step 4 OK: config reloaded via PUT /configs');
             return { success: true, method: 'reload' };
           }
-          console.warn('[restartClash] Step 3 FAILED: PUT /configs failed, falling back to POST /restart');
+          console.warn('[restartClash] Step 4 FAILED: PUT /configs failed, falling back to POST /restart');
         } else {
-          console.warn('[restartClash] Step 3 SKIPPED: cannot get snapshot path, falling back to POST /restart');
+          console.warn('[restartClash] Step 4 SKIPPED: cannot get snapshot path, falling back to POST /restart');
         }
 
-        // Step 4: 兜底 POST /restart（会短暂中断代理）
-        console.log('[restartClash] Step 4: Calling POST /restart (fallback)...');
+        // Step 5: 兜底 POST /restart（会短暂中断代理）
+        console.log('[restartClash] Step 5: Calling POST /restart (fallback)...');
         const restarted = await restartKernel();
         if (!restarted) {
-          console.error('[restartClash] FAILED at step 4: POST /restart failed (check API URL & secret in settings)');
+          console.error('[restartClash] FAILED at step 5: POST /restart failed (check API URL & secret in settings)');
           return { success: false, error: 'Clash API unreachable — check API URL & secret in settings' };
         }
-        console.log('[restartClash] Step 4 OK: kernel restarted successfully');
+        console.log('[restartClash] Step 5 OK: kernel restarted successfully');
         return { success: true, method: 'restart' };
       }
 

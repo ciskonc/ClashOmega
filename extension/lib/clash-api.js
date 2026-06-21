@@ -211,18 +211,21 @@ async function reloadClashConfig() {
 /**
  * 通过 PUT /configs {path} 让 mihomo 重新加载指定配置文件
  * 不重启内核，代理不中断，用于「重启 Clash」按钮的优先路径
+ * 注意：mihomo 要求路径使用正斜杠（/），Windows 反斜杠（\）会返回 400 Bad Request
  * @param {string} path - 配置文件绝对路径（clash-verge.yaml）
  * @returns {Promise<boolean>} 是否成功
  */
 async function reloadConfigFromPath(path) {
   const { baseUrl, headers } = await getApiConfig();
   try {
+    // 将 Windows 反斜杠转换为正斜杠，否则 mihomo 返回 400 Bad Request
+    const normalizedPath = path.replace(/\\/g, '/');
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 5000);
     const response = await fetch(`${baseUrl}/configs?force=true`, {
       method: 'PUT',
       headers,
-      body: JSON.stringify({ path }),
+      body: JSON.stringify({ path: normalizedPath }),
       signal: ctrl.signal
     });
     clearTimeout(timer);
