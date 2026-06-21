@@ -1,6 +1,6 @@
 // Native Messaging 通信封装
 // 与 Python Native Host (clash_rules_manager.py) 通信
-const NATIVE_HOST_NAME = 'com.clash.manager';
+const NATIVE_HOST_NAME = 'com.clash.omega';
 
 /**
  * 发送消息给 Native Host

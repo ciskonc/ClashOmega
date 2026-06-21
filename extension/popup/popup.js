@@ -1,4 +1,4 @@
-// Clash Manager — Popup JS
+// ClashOmega — Popup JS
 // 与 background.js 通过 chrome.runtime.sendMessage 通信
 
 // ──── 工具函数 ────

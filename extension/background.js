@@ -1,4 +1,4 @@
-// Clash Manager — Service Worker (Background)
+// ClashOmega — Service Worker (Background)
 // 导入所有模块
 importScripts(
   'lib/proxy-manager.js',
@@ -80,11 +80,11 @@ async function handleMessage(message) {
               clashProxy = detected;
               // 同步更新保存的端口，下次离线时也能用
               settings.clashProxyPort = detected.port;
-              console.log(`Clash Manager: detected proxy port ${detected.port} from Clash config`);
+              console.log(`ClashOmega: detected proxy port ${detected.port} from Clash config`);
             }
           } catch (e) {
             // 离线时回退到已保存的端口
-            console.log('Clash Manager: cannot detect proxy port, using saved:', settings.clashProxyPort);
+            console.log('ClashOmega: cannot detect proxy port, using saved:', settings.clashProxyPort);
           }
         }
 
@@ -101,7 +101,7 @@ async function handleMessage(message) {
               chrome.tabs.reload(tab.id);
             }
           } catch (e) {
-            console.log('Clash Manager: tab reload failed:', e.message);
+            console.log('ClashOmega: tab reload failed:', e.message);
           }
         }
 

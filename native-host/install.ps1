@@ -1,4 +1,4 @@
-﻿# Clash Manager - Native Host Installer / 安装脚本
+# ClashOmega - Native Host Installer / 安装脚本
 # Usage: Right-click -> Run with PowerShell
 # 用法: 右键 -> 使用 PowerShell 运行
 
@@ -11,12 +11,12 @@ if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 
 $ErrorActionPreference = 'Stop'
 $HostDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$JsonFile = Join-Path $HostDir 'com.clash.manager.json'
+$JsonFile = Join-Path $HostDir 'com.clash.omega.json'
 $BatFile = Join-Path $HostDir 'clash_rules_manager.bat'
 
 Write-Host '========================================' -ForegroundColor Cyan
-Write-Host '  Clash Manager - Native Host Installer' -ForegroundColor Cyan
-Write-Host '  Clash Manager - Native Host 安装程序' -ForegroundColor Cyan
+Write-Host '  ClashOmega - Native Host Installer' -ForegroundColor Cyan
+Write-Host '  ClashOmega - Native Host 安装程序' -ForegroundColor Cyan
 Write-Host '========================================' -ForegroundColor Cyan
 Write-Host ''
 
@@ -34,8 +34,8 @@ Write-Host '  1. Open chrome://extensions/ in address bar'
 Write-Host '     在地址栏打开 chrome://extensions/'
 Write-Host '  2. Enable "Developer mode" (toggle at top-right)'
 Write-Host '     打开右上角 "开发者模式" 开关'
-Write-Host '  3. Find "Clash Manager" in the list'
-Write-Host '     在列表中找到 "Clash Manager"'
+Write-Host '  3. Find "ClashOmega" in the list'
+Write-Host '     在列表中找到 "ClashOmega"'
 Write-Host '  4. Copy the ID string (32 chars, like abcdef...)'
 Write-Host '     复制 ID 字符串 (32位字符, 类似 abcdef...)'
 Write-Host ''
@@ -44,8 +44,8 @@ Write-Host '  1. Open edge://extensions/ in address bar'
 Write-Host '     在地址栏打开 edge://extensions/'
 Write-Host '  2. Enable "Developer mode" (toggle at bottom-left)'
 Write-Host '     打开左下角 "开发人员模式" 开关'
-Write-Host '  3. Find "Clash Manager" in the list'
-Write-Host '     在列表中找到 "Clash Manager"'
+Write-Host '  3. Find "ClashOmega" in the list'
+Write-Host '     在列表中找到 "ClashOmega"'
 Write-Host '  4. Copy the ID string'
 Write-Host '     复制 ID 字符串'
 Write-Host ''
@@ -59,8 +59,8 @@ if ([string]::IsNullOrWhiteSpace($ExtId)) {
 
 # Generate JSON manifest / 生成清单文件
 $json = @{
-    name = 'com.clash.manager'
-    description = 'Clash Manager Native Messaging Host'
+    name = 'com.clash.omega'
+    description = 'ClashOmega Native Messaging Host'
     path = $BatFile
     type = 'stdio'
     allowed_origins = @("chrome-extension://$ExtId/")
@@ -75,7 +75,7 @@ Write-Host "[OK] Generated: $JsonFile" -ForegroundColor Gray
 Write-Host "[OK] 已生成: $JsonFile" -ForegroundColor Gray
 
 # Register in HKCU / 写入注册表
-$regPath = 'HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.clash.manager'
+$regPath = 'HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.clash.omega'
 try {
     New-Item -Path $regPath -Force | Out-Null
     Set-ItemProperty -Path $regPath -Name '(Default)' -Value $JsonFile -Type String
@@ -93,7 +93,7 @@ catch {
     Write-Host "[错误] 注册表写入失败: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host ''
     Write-Host 'Manual registry path / 手动注册表路径:' -ForegroundColor Yellow
-    Write-Host "  HKCU\Software\Google\Chrome\NativeMessagingHosts\com.clash.manager"
+    Write-Host "  HKCU\Software\Google\Chrome\NativeMessagingHosts\com.clash.omega"
     Write-Host "  Value: $JsonFile"
 }
 

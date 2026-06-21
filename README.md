@@ -1,15 +1,19 @@
-# Chrome Clash Manager
+# ClashOmega
 
-> v1.1.5 · Chrome 浏览器扩展，用于管理 Clash 代理规则，支持三模式代理切换、域名规则匹配检测、一键添加域名到代理组。
+> Chrome 浏览器扩展，用于管理 Clash 代理规则。致敬 SwitchyOmega / ZeroOmega。
+
+## 界面预览
+
+![ClashOmega Popup](docs/popup-preview.png)
 
 ## 功能
 
 | 功能 | 说明 |
 |------|------|
 | **三模式切换** | 系统代理 → 直连 → Clash 代理，一键切换，图标颜色实时变化 |
-| **F1: 规则匹配检测** | 检测当前域名匹配的 Clash 规则，显示匹配的分组和策略（支持 RULE-SET 回退到 `/connections` API 查询） |
-| **F2: 快捷添加规则** | 将当前域名添加到代理组（动态获取 Clash 代理组列表） |
-| **F3: 智能域名分组** | 检测页面所有域名，自动分组建议（如 `i1.art.com`, `i2.art.com` → `*.art.com`） |
+| **域名匹配检测** | 检测当前域名匹配的 Clash 规则，显示匹配的分组和策略（支持 RULE-SET 回退到 `/connections` API 查询） |
+| **快捷添加规则** | 将当前域名添加到代理组（动态获取 Clash 代理组列表） |
+| **智能域名分组** | 检测页面所有域名，自动分组建议（如 `i1.art.com`, `i2.art.com` → `*.art.com`） |
 | **系统代理状态** | 实时显示 Windows 系统代理状态（通过 Native Host 读取注册表） |
 | **规则管理** | 查看、添加、删除 Clash YAML 配置文件中的规则（增删后自动热重载） |
 | **重启 Clash** | 一键将 profile 规则同步到 Clash Verge Rev 快照文件并重启内核（热重载失效时使用） |
@@ -42,7 +46,7 @@ Native Host 用于读写 Clash 本地 YAML 配置文件（仅 Windows）。
 > 2. 执行：`Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`
 > 3. 输入 `Y` 确认
 
-1. 在 `chrome://extensions/` 中找到 Clash Manager 扩展，复制其 **ID**
+1. 在 `chrome://extensions/` 中找到 ClashOmega 扩展，复制其 **ID**
 2. 右键 `native-host/install.ps1` → **使用 PowerShell 运行**
 3. 粘贴扩展 ID，回车完成安装
 4. 刷新扩展
@@ -148,7 +152,7 @@ native-host/        # Native Messaging Host（Windows）
    - 设置面板新增「增删域名写入扩展脚本规则」复选框，勾选后 F2/F3 添加的规则直接写入 Script.js 而非 YAML 配置文件
    - 扩展脚本规则列表支持单条删除（点击 ✕ 按钮）
    - 文件未初始化或损坏时显示「初始化」按钮，点击后自动备份原文件并写入标准模板
-   - Script.js 标准格式包含 `// === Clash Manager Extension Rules ===` 标记，支持检测是否由本扩展管理
+   - Script.js 标准格式包含 `// === ClashOmega Extension Rules ===` 标记，支持检测是否由本扩展管理
 
 3. **UI 调整**
    - 「全部 Clash 规则」改名为「内置 Clash 规则」

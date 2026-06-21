@@ -1,4 +1,4 @@
-﻿# Clash Rules Manager - Native Messaging Host (PowerShell)
+# Clash Rules Manager - Native Messaging Host (PowerShell)
 # 被 Chrome 按需调用，读写 Clash 配置文件中的 rules 字段。
 # 协议: stdin/stdout 二进制消息 (4字节小端序长度 + UTF-8 JSON)
 # 依赖: 仅 Windows 内置 PowerShell，零额外安装
@@ -392,7 +392,7 @@ function Get-SnapshotPath {
 # customRules 数组，main 函数会将 customRules 前置到 config.rules，实现"扩展脚本规则"。
 #
 # 文件格式（由本扩展自动初始化和管理，对齐 Clash Verge Rev 官方推荐写法）：
-#   // === Clash Manager Extension Rules (auto-managed, do not edit manually) ===
+#   // === ClashOmega Extension Rules (auto-managed, do not edit manually) ===
 #   function main(config) {
 #     const customRules = [
 #       "DOMAIN-SUFFIX,example.com,Proxy",
@@ -405,7 +405,7 @@ function Get-SnapshotPath {
 #     }
 #     return config;
 #   }
-#   // === End of Clash Manager Extension Rules ===
+#   // === End of ClashOmega Extension Rules ===
 #
 # 关键点：规则数组必须定义在 main 函数内部（局部变量），不能放在函数外部，
 # 否则 Clash Verge Rev 的脚本执行环境（QuickJS 沙箱）可能无法捕获外部全局常量，
@@ -483,9 +483,9 @@ function Get-ScriptPath {
 # 初始化脚本文件为标准扩展脚本格式（对齐 Clash Verge Rev 官方推荐写法）
 function Initialize-ScriptFile($scriptPath) {
     $template = @"
-// === Clash Manager Extension Rules (auto-managed, do not edit manually) ===
+// === ClashOmega Extension Rules (auto-managed, do not edit manually) ===
 function main(config) {
-  // 1. 定义自定义规则（由 Clash Manager 扩展自动维护）
+  // 1. 定义自定义规则（由 ClashOmega 扩展自动维护）
   const customRules = [
   ];
 
@@ -499,14 +499,14 @@ function main(config) {
   // 3. 返回修改后的配置
   return config;
 }
-// === End of Clash Manager Extension Rules ===
+// === End of ClashOmega Extension Rules ===
 "@
     Write-Config $scriptPath $template
 }
 
 # 检查脚本文件是否为本扩展管理的格式（包含扩展规则标记）
 function Test-ScriptFileManaged($content) {
-    return $content -match 'Clash Manager Extension Rules'
+    return $content -match 'ClashOmega Extension Rules'
 }
 
 # 从脚本文件的 customRules 数组中解析规则列表
@@ -593,9 +593,9 @@ function Remove-ScriptRule($content, $rule) {
 function Rebuild-ScriptContent($content, $rules) {
     # 构建 main 函数内部的 customRules 数组文本
     $rulesLines = [System.Collections.ArrayList]::new()
-    [void]$rulesLines.Add('// === Clash Manager Extension Rules (auto-managed, do not edit manually) ===')
+    [void]$rulesLines.Add('// === ClashOmega Extension Rules (auto-managed, do not edit manually) ===')
     [void]$rulesLines.Add('function main(config) {')
-    [void]$rulesLines.Add('  // 1. 定义自定义规则（由 Clash Manager 扩展自动维护）')
+    [void]$rulesLines.Add('  // 1. 定义自定义规则（由 ClashOmega 扩展自动维护）')
     [void]$rulesLines.Add('  const customRules = [')
     if ($rules.Count -gt 0) {
         foreach ($r in $rules) {
@@ -614,7 +614,7 @@ function Rebuild-ScriptContent($content, $rules) {
     [void]$rulesLines.Add('  // 3. 返回修改后的配置')
     [void]$rulesLines.Add('  return config;')
     [void]$rulesLines.Add('}')
-    [void]$rulesLines.Add('// === End of Clash Manager Extension Rules ===')
+    [void]$rulesLines.Add('// === End of ClashOmega Extension Rules ===')
     [void]$rulesLines.Add('')
 
     return ($rulesLines -join "`n")

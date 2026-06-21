@@ -1,5 +1,5 @@
 {
-  "app_name": "Clash 管理器",
+  "app_name": "ClashOmega",
   "mode_system": "系统代理",
   "mode_direct": "直连",
   "mode_clash": "Clash 代理",
@@ -78,6 +78,7 @@
   "settings_language": "界面语言",
   "settings_save": "保存设置",
   "settings_close": "关闭",
+  "settings_about": "关于 ClashOmega",
 
   "restart_clash": "重启 Clash",
   "restart_clash_hint": "将 profile 文件中的规则同步到 Clash 内核并重启",

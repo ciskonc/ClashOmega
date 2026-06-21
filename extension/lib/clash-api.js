@@ -50,7 +50,7 @@ async function clashGet(endpoint) {
       // 自动保存探测到的端口
       settings.clashApiUrl = `http://127.0.0.1:${port}`;
       await chrome.storage.local.set({ settings });
-      console.log(`Clash Manager: auto-detected API at http://127.0.0.1:${port}`);
+      console.log(`ClashOmega: auto-detected API at http://127.0.0.1:${port}`);
       return r;
     }
   }
@@ -118,7 +118,7 @@ async function clashPost(endpoint) {
     if (r === true) {
       settings.clashApiUrl = `http://127.0.0.1:${port}`;
       await chrome.storage.local.set({ settings });
-      console.log(`Clash Manager: auto-detected API at http://127.0.0.1:${port} (via POST)`);
+      console.log(`ClashOmega: auto-detected API at http://127.0.0.1:${port} (via POST)`);
       return true;
     }
     if (r === false) {
@@ -164,13 +164,13 @@ async function closeAllConnections() {
     });
     clearTimeout(timer);
     if (!response.ok) {
-      console.error(`Clash Manager: closeAllConnections failed HTTP ${response.status}`);
+      console.error(`ClashOmega: closeAllConnections failed HTTP ${response.status}`);
       return false;
     }
-    console.log('Clash Manager: all connections closed');
+    console.log('ClashOmega: all connections closed');
     return true;
   } catch (e) {
-    console.error('Clash Manager: closeAllConnections error:', e.message);
+    console.error('ClashOmega: closeAllConnections error:', e.message);
     return false;
   }
 }
@@ -203,7 +203,7 @@ async function getClashConfig() {
 async function hotReloadConfig(content) {
   try {
     if (!content || typeof content !== 'string' || content.length === 0) {
-      console.error("Clash Manager: hotReloadConfig skipped — content is empty or invalid");
+      console.error("ClashOmega: hotReloadConfig skipped — content is empty or invalid");
       return false;
     }
 
@@ -221,13 +221,13 @@ async function hotReloadConfig(content) {
     clearTimeout(timer);
 
     if (!response.ok) {
-      console.error(`Clash Manager: hotReloadConfig PUT failed HTTP ${response.status}`);
+      console.error(`ClashOmega: hotReloadConfig PUT failed HTTP ${response.status}`);
       return false;
     }
-    console.log(`Clash Manager: hot-reloaded config from payload (${content.length} chars)`);
+    console.log(`ClashOmega: hot-reloaded config from payload (${content.length} chars)`);
     return true;
   } catch (e) {
-    console.error("Clash Manager: hotReloadConfig error:", e.message);
+    console.error("ClashOmega: hotReloadConfig error:", e.message);
     return false;
   }
 }

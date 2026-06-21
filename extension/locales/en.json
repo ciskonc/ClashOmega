@@ -1,5 +1,5 @@
 {
-  "app_name": "Clash Manager",
+  "app_name": "ClashOmega",
   "mode_system": "System Proxy",
   "mode_direct": "Direct",
   "mode_clash": "Clash Proxy",
@@ -78,6 +78,7 @@
   "settings_language": "Language",
   "settings_save": "Save",
   "settings_close": "Close",
+  "settings_about": "About ClashOmega",
 
   "restart_clash": "Restart Clash",
   "restart_clash_hint": "Sync rules from profile file to Clash kernel and restart",

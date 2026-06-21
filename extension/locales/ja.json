@@ -1,5 +1,5 @@
 {
-  "app_name": "Clash マネージャー",
+  "app_name": "ClashOmega",
   "mode_system": "システムプロキシ",
   "mode_direct": "直接接続",
   "mode_clash": "Clash プロキシ",
@@ -78,6 +78,7 @@
   "settings_language": "言語",
   "settings_save": "保存",
   "settings_close": "閉じる",
+  "settings_about": "ClashOmega について",
 
   "restart_clash": "Clash 再起動",
   "restart_clash_hint": "プロファイルからClashカーネルにルールを同期して再起動",
