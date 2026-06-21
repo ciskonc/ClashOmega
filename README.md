@@ -2,6 +2,8 @@
 
 > Chrome 浏览器扩展，用于管理 Clash 代理规则。致敬 SwitchyOmega / ZeroOmega。
 
+[中文](README.md) | [English](README_EN.md)
+
 ## 界面预览
 
 <table>
