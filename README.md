@@ -247,6 +247,10 @@ native-host/        # Native Messaging Host（Windows）
 - **代理内核**: 本扩展基于 **Clash Verge Rev** 开发与测试，其他 Clash 内核（如 Clash for Windows / Mihomo 等）未测试，可能可用但不保证
 - **操作系统**: Windows（Native Host 依赖 PowerShell）
 
+## 相关推荐
+
+- **[sublink-worker](https://github.com/ciskonc/sublink-worker)** — 订阅转换面板，自部署 Cloudflare Worker 版本，支持 Clash / V2Ray / Shadowrocket 等多种格式互转，可配合本扩展使用。
+
 ## 许可证
 
 MIT License
