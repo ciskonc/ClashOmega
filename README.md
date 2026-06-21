@@ -4,17 +4,13 @@
 
 ## 界面预览
 
-### 扩展图标与 Chrome 工具栏
-
-![UI Overview](docs/ui-overview.png)
-
-### 主界面 — 状态栏 + 域名匹配 + 快捷添加规则
-
-![UI Main](docs/ui-popup.png)
-
-### Clash 规则列表 + 扩展脚本规则管理
-
-![UI Rules](docs/ui-rules.png)
+<table>
+  <tr>
+    <td align="center"><img src="docs/ui-overview.png" width="280" alt="UI Overview"><br>扩展图标与 Chrome 工具栏</td>
+    <td align="center"><img src="docs/ui-popup.png" width="280" alt="UI Main"><br>主界面 — 状态栏 + 域名匹配 + 快捷添加规则</td>
+    <td align="center"><img src="docs/ui-rules.png" width="280" alt="UI Rules"><br>Clash 规则列表 + 扩展脚本规则管理</td>
+  </tr>
+</table>
 
 ## 功能
 
