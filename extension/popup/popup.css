@@ -242,12 +242,7 @@ body {
 .matched-rule-item .rule-index {
   color: var(--md-sys-color-on-surface-variant);
   min-width: 24px;
-}
-.matched-rule-item .rule-detail {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* ──── F2: Quick Add ──── */
@@ -376,7 +371,8 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.rule-item .rule-type-tag {
+.rule-item .rule-type-tag,
+.matched-rule-item .rule-type-tag {
   flex-shrink: 0;
   padding: 2px 6px;
   border-radius: var(--md-shape-corner-extra-small);
@@ -386,14 +382,16 @@ body {
   font-family: var(--md-typescale-label-medium-font);
   margin-right: var(--md-spacing-1);
 }
-.rule-item .rule-payload {
+.rule-item .rule-payload,
+.matched-rule-item .rule-payload {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font: var(--md-typescale-body-small);
 }
-.rule-item .rule-group-name {
+.rule-item .rule-group-name,
+.matched-rule-item .rule-group-name {
   flex: 0 1 auto;
   max-width: 120px;
   overflow: hidden;

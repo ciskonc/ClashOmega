@@ -436,7 +436,7 @@ function isDomainRule(type) {
   return t === 'DOMAIN' || t === 'DOMAINSUFFIX' || t === 'DOMAINKEYWORD';
 }
 
-function renderDomainRuleCheck(domain, matchedRules) {
+function renderDomainRuleCheck(domain, matchedRules, proxies) {
   document.getElementById('current-domain').textContent = domain;
   const matchedEl = document.getElementById('f1-matched');
   const notMatchedEl = document.getElementById('f1-not-matched');
@@ -452,13 +452,16 @@ function renderDomainRuleCheck(domain, matchedRules) {
   matchedRules.forEach(rule => {
     const div = document.createElement('div');
     div.className = 'matched-rule-item';
-    const policyClass = getPolicyClass(rule.proxy);
+    // 解析最终策略：递归代理组链路，优先显示「自动选择」，否则显示节点名或 DIRECT/REJECT
+    const finalProxy = resolveFinalProxy(rule.proxy, proxies);
     const ruleStr = `${rule.type},${rule.payload},${rule.proxy}`;
     const canDelete = isDomainRule(rule.type);
     div.innerHTML = `
       <span class="rule-index">#${rule.index + 1}</span>
-      <span class="rule-detail">${rule.type},${rule.payload}</span>
-      <span class="rule-policy ${policyClass}">${rule.proxy}</span>
+      <span class="rule-type-tag">${rule.type}</span>
+      <span class="rule-payload">${rule.payload || '—'}</span>
+      <span class="rule-group-name" title="${rule.proxy}">${rule.proxy}</span>
+      <span class="rule-policy ${finalProxy.class}" title="${finalProxy.name}">${finalProxy.name}</span>
       ${canDelete ? `<button class="rule-delete-btn" data-rule="${ruleStr}" data-i18n-title="rule_delete" title="${I18N.t('rule_delete')}">✕</button>` : ''}
     `;
     matchedEl.appendChild(div);
@@ -494,7 +497,7 @@ function renderRuleList(rules, proxies) {
 
 // ──── 扩展脚本规则渲染 ────
 
-function renderScriptRules(rules) {
+function renderScriptRules(rules, proxies) {
   const listEl = document.getElementById('script-rule-list');
   const countEl = document.getElementById('script-rule-count');
   const emptyEl = document.getElementById('script-rule-empty');
@@ -526,11 +529,14 @@ function renderScriptRules(rules) {
     const proxy = parts[2] || '';
     const div = document.createElement('div');
     div.className = 'rule-item';
-    const policyClass = getPolicyClass(proxy);
+    // 解析最终策略：递归代理组链路，优先显示「自动选择」，否则显示节点名或 DIRECT/REJECT
+    const finalProxy = resolveFinalProxy(proxy, proxies);
     const fullRule = `${type},${payload},${proxy}`;
     div.innerHTML = `
-      <span class="rule-text" title="${fullRule}">${fullRule}</span>
-      <span class="rule-policy ${policyClass}">${proxy}</span>
+      <span class="rule-type-tag">${type}</span>
+      <span class="rule-payload" title="${fullRule}">${payload || '—'}</span>
+      <span class="rule-group-name" title="${proxy}">${proxy}</span>
+      <span class="rule-policy ${finalProxy.class}" title="${finalProxy.name}">${finalProxy.name}</span>
       <button class="rule-delete-btn" data-rule="${fullRule}" data-script="1" data-i18n-title="rule_delete" title="${I18N.t('rule_delete')}">✕</button>
     `;
     listEl.appendChild(div);
@@ -539,26 +545,31 @@ function renderScriptRules(rules) {
 
 // 加载扩展脚本规则
 async function loadScriptRules() {
-  const result = await sendToBackground({ action: 'getScriptRules' });
+  // 并行获取脚本规则和代理组数据，proxies 用于解析代理组链路得到最终策略
+  const [result, proxiesResult] = await Promise.all([
+    sendToBackground({ action: 'getScriptRules' }),
+    sendToBackground({ action: 'getProxies' })
+  ]);
+  const proxies = proxiesResult.success ? proxiesResult.proxies : null;
   const needInitEl = document.getElementById('script-rule-need-init');
   const notFoundEl = document.getElementById('script-rule-not-found');
 
   if (!result.success) {
     if (result.needInit) {
       // 文件未初始化或损坏
-      renderScriptRules(null);
+      renderScriptRules(null, proxies);
       needInitEl.style.display = 'block';
       document.getElementById('script-rule-count').textContent = '0';
     } else {
       // 文件未找到
-      renderScriptRules(null);
+      renderScriptRules(null, proxies);
       notFoundEl.style.display = 'block';
       document.getElementById('script-rule-count').textContent = '0';
     }
     return;
   }
 
-  renderScriptRules(result.rules || []);
+  renderScriptRules(result.rules || [], proxies);
 }
 
 // 绑定扩展脚本规则初始化按钮
@@ -1068,7 +1079,7 @@ async function initPopup() {
           matchedEl.innerHTML = '<div style="color: var(--md-sys-color-on-surface-variant); font: var(--md-typescale-body-small); padding: var(--md-spacing-1) 0;">' + I18N.t('f1_detecting') + '</div>';
         } else {
           // 本地有精确匹配（DOMAIN/DOMAINSUFFIX 等），先渲染
-          renderDomainRuleCheck(domain, matched);
+          renderDomainRuleCheck(domain, matched, proxies);
         }
 
         // 始终异步查询 Clash API /connections，获取内核实际匹配的规则
@@ -1083,19 +1094,19 @@ async function initPopup() {
               const connMatched = findMatchingRulesFromConnections(domain, connResult.connections, clashRules.rules);
               if (connMatched.length > 0) {
                 // /connections 有匹配，覆盖本地结果
-                renderDomainRuleCheck(domain, connMatched);
+                renderDomainRuleCheck(domain, connMatched, proxies);
               } else if (localImprecise && retryCount === 0) {
                 // 本地不精确且 /connections 无匹配，1.5 秒后重试一次
                 setTimeout(() => queryConnections(1), 1500);
               } else if (retryCount > 0) {
                 // 重试后仍无匹配，显示本地结果（可能是 MATCH）
-                renderDomainRuleCheck(domain, matched);
+                renderDomainRuleCheck(domain, matched, proxies);
               }
             } else if (localImprecise && retryCount === 0) {
               // /connections 请求失败，1.5 秒后重试一次
               setTimeout(() => queryConnections(1), 1500);
             } else if (retryCount > 0) {
-              renderDomainRuleCheck(domain, matched);
+              renderDomainRuleCheck(domain, matched, proxies);
             }
           });
         };
