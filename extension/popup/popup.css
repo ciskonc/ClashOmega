@@ -104,6 +104,15 @@ input, button, select, textarea {
   flex-shrink: 0;
 }
 
+/* 状态信息小框：Clash 状态 + 系统代理状态 */
+#status-info {
+  background: var(--md-sys-color-surface);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-shape-corner-medium);
+  padding: var(--md-spacing-2) var(--md-spacing-3);
+  box-shadow: var(--md-elevation-1);
+}
+
 .status-row {
   display: flex;
   align-items: center;
