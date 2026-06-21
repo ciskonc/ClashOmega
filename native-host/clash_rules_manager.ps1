@@ -396,29 +396,34 @@ function Get-SnapshotPath {
     return $null
 }
 
-# ──── Script.js 扩展脚本规则管理 ────
-# Clash Verge Rev 的 type:script profile 是一个 JS 文件，包含 main(config, profileName) 函数
-# 通过修改 config.rules 数组实现规则覆盖。本扩展在此 JS 文件中维护一个 EXT_RULES 数组，
-# main 函数会将 EXT_RULES 前置到 config.rules，实现"扩展脚本规则"。
+# ──── 扩展脚本规则管理 ────
+# Clash Verge Rev 的 type:script profile 是一个 JS 文件，包含 main(config) 函数
+# 通过修改 config.rules 数组实现规则覆盖。本扩展在此 JS 文件的 main 函数内部维护
+# customRules 数组，main 函数会将 customRules 前置到 config.rules，实现"扩展脚本规则"。
 #
-# 文件格式（由本扩展自动初始化和管理）：
+# 文件格式（由本扩展自动初始化和管理，对齐 Clash Verge Rev 官方推荐写法）：
 #   // === Clash Manager Extension Rules (auto-managed, do not edit manually) ===
-#   const EXT_RULES = [
-#     "DOMAIN-SUFFIX,example.com,Proxy",
-#     "DOMAIN,google.com,Direct"
-#   ];
-#   // === End of Clash Manager Extension Rules ===
-#
-#   function main(config, profileName) {
-#     if (Array.isArray(config.rules) && Array.isArray(EXT_RULES)) {
-#       config.rules = EXT_RULES.concat(config.rules);
+#   function main(config) {
+#     const customRules = [
+#       "DOMAIN-SUFFIX,example.com,Proxy",
+#       "DOMAIN,google.com,Direct"
+#     ];
+#     if (config.rules) {
+#       config.rules = [...customRules, ...config.rules];
+#     } else {
+#       config.rules = customRules;
 #     }
 #     return config;
 #   }
+#   // === End of Clash Manager Extension Rules ===
+#
+# 关键点：规则数组必须定义在 main 函数内部（局部变量），不能放在函数外部，
+# 否则 Clash Verge Rev 的脚本执行环境（QuickJS 沙箱）可能无法捕获外部全局常量，
+# 导致 main 函数内引用时变量不可见，规则不生效。
 
 # 查找当前激活 profile 的 option.script 指向的 JS 文件路径
 # Clash Verge Rev 的每个 remote/local profile 可通过 option.script 引用一个 type:script profile
-# 本扩展将规则写入该脚本文件的 EXT_RULES 数组，main 函数将 EXT_RULES 前置到 config.rules
+# 本扩展将规则写入该脚本文件 main 函数内部的 customRules 数组，main 函数将其前置到 config.rules
 function Get-ScriptPath {
     foreach ($dir in $ProfilesYamlDirs) {
         $profilesYaml = Join-Path $dir 'profiles.yaml'
@@ -485,38 +490,42 @@ function Get-ScriptPath {
     return $null
 }
 
-# 初始化 Script.js 文件为标准扩展脚本格式
+# 初始化脚本文件为标准扩展脚本格式（对齐 Clash Verge Rev 官方推荐写法）
 function Initialize-ScriptFile($scriptPath) {
     $template = @"
 // === Clash Manager Extension Rules (auto-managed, do not edit manually) ===
-const EXT_RULES = [
-];
+function main(config) {
+  // 1. 定义自定义规则（由 Clash Manager 扩展自动维护）
+  const customRules = [
+  ];
 
-// === End of Clash Manager Extension Rules ===
-
-// Define main function (script entry)
-// Clash Verge Rev 会调用 main(config, profileName)，将 EXT_RULES 前置到 config.rules
-function main(config, profileName) {
-  if (Array.isArray(config.rules) && Array.isArray(EXT_RULES)) {
-    config.rules = EXT_RULES.concat(config.rules);
+  // 2. 将自定义规则插入到 config.rules 最前面
+  if (config.rules) {
+    config.rules = [...customRules, ...config.rules];
+  } else {
+    config.rules = customRules;
   }
+
+  // 3. 返回修改后的配置
   return config;
 }
+// === End of Clash Manager Extension Rules ===
 "@
     Write-Config $scriptPath $template
 }
 
-# 检查 Script.js 是否为本扩展管理的格式（包含 EXT_RULES 标记）
+# 检查脚本文件是否为本扩展管理的格式（包含扩展规则标记）
 function Test-ScriptFileManaged($content) {
     return $content -match 'Clash Manager Extension Rules'
 }
 
-# 从 Script.js 的 EXT_RULES 数组中解析规则列表
+# 从脚本文件的 customRules 数组中解析规则列表
+# 规则数组定义在 main 函数内部（const customRules = [...]），需用单行模式跨行匹配
 function Parse-ScriptRules($content) {
     $rules = [System.Collections.ArrayList]::new()
 
-    # 匹配 EXT_RULES = [ ... ] 区块
-    if ($content -match '(?s)const\s+EXT_RULES\s*=\s*\[(.*?)\]') {
+    # 匹配 customRules = [ ... ] 区块（兼容旧版 EXT_RULES 命名）
+    if ($content -match '(?s)const\s+(?:customRules|EXT_RULES)\s*=\s*\[(.*?)\]') {
         $arrayContent = $matches[1]
         # 匹配每条规则字符串（单引号或双引号）
         $matches2 = [regex]::Matches($arrayContent, "['""]([^'""]+)['""]")
@@ -528,7 +537,7 @@ function Parse-ScriptRules($content) {
     return ,$rules.ToArray()
 }
 
-# 向 Script.js 的 EXT_RULES 数组添加规则（去重：同 type+payload 替换）
+# 向脚本文件的 customRules 数组添加规则（去重：同 type+payload 替换）
 function Add-ScriptRule($content, $rule) {
     $rule = $rule.Trim().TrimStart("'").TrimEnd("'").TrimStart('"').TrimEnd('"').Trim()
     if (-not $rule) { return $content }
@@ -538,7 +547,7 @@ function Add-ScriptRule($content, $rule) {
     $newType = if ($ruleParts.Count -ge 1) { $ruleParts[0].Trim() } else { '' }
     $newPayload = if ($ruleParts.Count -ge 2) { $ruleParts[1].Trim() } else { '' }
 
-    # 如果文件不包含 EXT_RULES 标记，先初始化
+    # 如果文件不包含扩展规则标记，先初始化
     if (-not (Test-ScriptFileManaged $content)) {
         return $content
     }
@@ -564,7 +573,7 @@ function Add-ScriptRule($content, $rule) {
     return Rebuild-ScriptContent $content $newRules
 }
 
-# 从 Script.js 的 EXT_RULES 数组删除规则（归一化比较）
+# 从脚本文件的 customRules 数组删除规则（归一化比较）
 function Remove-ScriptRule($content, $rule) {
     $rule = $rule.Trim().TrimStart("'").TrimEnd("'").TrimStart('"').TrimEnd('"').Trim()
     if (-not $rule) { return $content }
@@ -590,32 +599,32 @@ function Remove-ScriptRule($content, $rule) {
     return Rebuild-ScriptContent $content $newRules
 }
 
-# 重建 Script.js 内容，保留 main 函数，更新 EXT_RULES 数组
+# 重建脚本内容，规则数组定义在 main 函数内部（对齐 Clash Verge Rev 官方推荐写法）
 function Rebuild-ScriptContent($content, $rules) {
-    # 构建新的 EXT_RULES 数组文本
+    # 构建 main 函数内部的 customRules 数组文本
     $rulesLines = [System.Collections.ArrayList]::new()
     [void]$rulesLines.Add('// === Clash Manager Extension Rules (auto-managed, do not edit manually) ===')
-    if ($rules.Count -eq 0) {
-        [void]$rulesLines.Add('const EXT_RULES = [')
-        [void]$rulesLines.Add('];')
-    } else {
-        [void]$rulesLines.Add('const EXT_RULES = [')
+    [void]$rulesLines.Add('function main(config) {')
+    [void]$rulesLines.Add('  // 1. 定义自定义规则（由 Clash Manager 扩展自动维护）')
+    [void]$rulesLines.Add('  const customRules = [')
+    if ($rules.Count -gt 0) {
         foreach ($r in $rules) {
-            [void]$rulesLines.Add("  `"$r`",")
+            [void]$rulesLines.Add("    `"$r`",")
         }
-        [void]$rulesLines.Add('];')
     }
+    [void]$rulesLines.Add('  ];')
     [void]$rulesLines.Add('')
-    [void]$rulesLines.Add('// === End of Clash Manager Extension Rules ===')
-    [void]$rulesLines.Add('')
-    [void]$rulesLines.Add('// Define main function (script entry)')
-    [void]$rulesLines.Add('// Clash Verge Rev 会调用 main(config, profileName)，将 EXT_RULES 前置到 config.rules')
-    [void]$rulesLines.Add('function main(config, profileName) {')
-    [void]$rulesLines.Add('  if (Array.isArray(config.rules) && Array.isArray(EXT_RULES)) {')
-    [void]$rulesLines.Add('    config.rules = EXT_RULES.concat(config.rules);')
+    [void]$rulesLines.Add('  // 2. 将自定义规则插入到 config.rules 最前面')
+    [void]$rulesLines.Add('  if (config.rules) {')
+    [void]$rulesLines.Add('    config.rules = [...customRules, ...config.rules];')
+    [void]$rulesLines.Add('  } else {')
+    [void]$rulesLines.Add('    config.rules = customRules;')
     [void]$rulesLines.Add('  }')
+    [void]$rulesLines.Add('')
+    [void]$rulesLines.Add('  // 3. 返回修改后的配置')
     [void]$rulesLines.Add('  return config;')
     [void]$rulesLines.Add('}')
+    [void]$rulesLines.Add('// === End of Clash Manager Extension Rules ===')
     [void]$rulesLines.Add('')
 
     return ($rulesLines -join "`n")
