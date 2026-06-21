@@ -94,6 +94,19 @@ native-host/        # Native Messaging Host（Windows）
 
 ## 版本历史
 
+### v1.2.2 (2026-06-21)
+
+**回退**
+- 回退 v1.2.1 的 `Script.js` 方案：不再写入默认全局 `Script.js`，不再修改 `profiles.yaml` 的 `option.script` 字段
+- 恢复 v1.2.0 的逻辑：`Get-ScriptPath` 解析 current profile 的 `option.script` 指向的脚本文件（如 `s8XWAjDjLilq.js`），将规则写入该文件
+- 移除 `Set-ProfileScript` 函数和 `initScriptFile` 中的调用
+- 每个订阅的扩展脚本独立维护，切换订阅时规则不跨订阅共享
+
+**说明**
+- Clash Verge Rev 每个 remote/local profile 通过 `option.script` 引用独立的 type:script 脚本
+- 本扩展将规则写入当前激活 profile 的扩展脚本文件，通过 `main(config)` 函数将 `EXT_RULES` 前置到 `config.rules`
+- 添加规则后需重启 Clash Verge Rev 使脚本重新执行
+
 ### v1.2.1 (2026-06-21)
 
 **Bug 修复**

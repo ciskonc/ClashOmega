@@ -416,97 +416,73 @@ function Get-SnapshotPath {
 #     return config;
 #   }
 
-# 查找 Clash Verge Rev 的默认全局扩展脚本文件 Script.js
-# Clash Verge Rev 预置了一个 UID=Script 的 type:script profile，文件名 Script.js
-# 默认不会被任何 profile 引用，需要通过 Set-ProfileScript 将 current profile 的
-# option.script 字段改为 Script，Clash Verge Rev 才会执行 Script.js
+# 查找当前激活 profile 的 option.script 指向的 JS 文件路径
+# Clash Verge Rev 的每个 remote/local profile 可通过 option.script 引用一个 type:script profile
+# 本扩展将规则写入该脚本文件的 EXT_RULES 数组，main 函数将 EXT_RULES 前置到 config.rules
 function Get-ScriptPath {
-    foreach ($dir in $ProfilesYamlDirs) {
-        $scriptPath = Join-Path (Join-Path $dir 'profiles') 'Script.js'
-        if (Test-Path $scriptPath) { return $scriptPath }
-    }
-    return $null
-}
-
-# 修改 profiles.yaml，将 current profile 的 option.script 字段改为 Script
-# 让 Clash Verge Rev 执行默认全局脚本 Script.js
-function Set-ProfileScript {
     foreach ($dir in $ProfilesYamlDirs) {
         $profilesYaml = Join-Path $dir 'profiles.yaml'
         if (-not (Test-Path $profilesYaml)) { continue }
 
-        $content = [System.IO.File]::ReadAllText($profilesYaml, $encoding)
-        $lines = $content -split "`n"
+        $profileContent = [System.IO.File]::ReadAllText($profilesYaml, $encoding)
+        $lines = $profileContent -split "`n"
 
-        # 1. 解析 current 字段
+        # 1. 解析 current 字段，找到当前激活的 profile UID
         $currentUid = $null
         foreach ($line in $lines) {
-            if ($line -match '^\s*current\s*:\s*(\S+)') {
+            $trimmed = $line.Trim()
+            if ($trimmed -match '^current\s*:\s*(\S+)') {
                 $currentUid = $matches[1]
                 break
             }
         }
         if (-not $currentUid) { continue }
 
-        # 2. 找到 currentUid 对应的 item，定位其 option.script 行
-        $itemUid = $null; $inOption = $false; $scriptLineIdx = -1; $inCurrent = $false
+        # 2. 在 items 列表中查找 currentUid 对应条目的 option.script 字段
+        $itemUid = $null; $inOption = $false; $scriptUid = $null; $inCurrent = $false
         for ($i = 0; $i -lt $lines.Count; $i++) {
             $trimmed = $lines[$i].Trim()
             if ($trimmed -match '^-\s*uid\s*:\s*(\S+)') {
+                # 遇到新条目前，检查上一个条目是否是 current 且有 script
+                if ($inCurrent -and $scriptUid) { break }
                 $itemUid = $matches[1]
                 $inCurrent = ($itemUid -eq $currentUid)
                 $inOption = $false
+                $scriptUid = $null
             }
             elseif ($inCurrent -and $trimmed -match '^\s*option\s*:') {
                 $inOption = $true
             }
             elseif ($inOption -and $trimmed -match '^\s*script\s*:\s*(\S+)') {
-                $scriptLineIdx = $i
-                break
+                $scriptUid = $matches[1]
             }
+        }
+        # 检查最后一个条目（如果 current 是最后一个 item）
+        if (-not $scriptUid -and $inCurrent) {
+            # current 条目没有 option.script
         }
 
-        if ($scriptLineIdx -ge 0) {
-            # 3. 修改 script 行为 Script
-            $oldLine = $lines[$scriptLineIdx]
-            $indent = ''
-            if ($oldLine -match '^(\s*)') { $indent = $matches[1] }
-            $lines[$scriptLineIdx] = "${indent}script: Script"
-            $newContent = $lines -join "`n"
-            [System.IO.File]::WriteAllText($profilesYaml, $newContent, $encoding)
-            return $true
+        if (-not $scriptUid) { continue }
+
+        # 3. 在 items 列表中查找 scriptUid 对应的 file（type:script 条目）
+        $scriptFile = $null
+        $sUid = $null; $sFile = $null
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            $trimmed = $lines[$i].Trim()
+            if ($trimmed -match '^-\s*uid\s*:\s*(\S+)') {
+                if ($sUid -eq $scriptUid -and $sFile) { $scriptFile = $sFile; break }
+                $sUid = $matches[1]; $sFile = $null
+            }
+            elseif ($trimmed -match '^\s*file\s*:\s*(\S+)') { $sFile = $matches[1] }
         }
-        else {
-            # current profile 没有 option.script 字段，需要在 option 区块内添加
-            # 找到 option: 行，在其后插入 script: Script
-            $itemUid = $null; $inOption = $false; $inCurrent = $false; $optionIdx = -1
-            for ($i = 0; $i -lt $lines.Count; $i++) {
-                $trimmed = $lines[$i].Trim()
-                if ($trimmed -match '^-\s*uid\s*:\s*(\S+)') {
-                    $itemUid = $matches[1]
-                    $inCurrent = ($itemUid -eq $currentUid)
-                    $inOption = $false
-                }
-                elseif ($inCurrent -and $trimmed -match '^\s*option\s*:') {
-                    $inOption = $true
-                    $optionIdx = $i
-                }
-                elseif ($inOption -and $trimmed -match '^\s*option\s*:' -eq $false -and $trimmed -match '^\S') {
-                    # 离开 option 区块
-                    $inOption = $false
-                }
-            }
-            if ($optionIdx -ge 0) {
-                # 在 option: 行后插入 script: Script
-                $indent = '  '
-                $lines = $lines[0..$optionIdx] + "${indent}script: Script" + $lines[($optionIdx + 1)..($lines.Count - 1)]
-                $newContent = $lines -join "`n"
-                [System.IO.File]::WriteAllText($profilesYaml, $newContent, $encoding)
-                return $true
-            }
+        if (-not $scriptFile -and $sUid -eq $scriptUid -and $sFile) { $scriptFile = $sFile }
+
+        if ($scriptFile) {
+            $scriptPath = Join-Path (Join-Path $dir 'profiles') $scriptFile
+            if (Test-Path $scriptPath) { return $scriptPath }
         }
     }
-    return $false
+    return $null
 }
 
 # 初始化 Script.js 文件为标准扩展脚本格式
@@ -978,7 +954,7 @@ function Main {
                 'initScriptFile' {
                     $scriptPath = Get-ScriptPath
                     if (-not $scriptPath) {
-                        Send-Message @{ success = $false; error = 'Cannot find Script.js (Clash Verge Rev profiles directory not found)' }
+                        Send-Message @{ success = $false; error = 'Cannot find script file (current profile has no option.script, or Clash Verge Rev profiles directory not found)' }
                     }
                     else {
                         try {
@@ -988,15 +964,7 @@ function Main {
                                 Copy-Item -Path $scriptPath -Destination $backup -Force
                             }
                             Initialize-ScriptFile $scriptPath
-                            # 初始化后自动修改 profiles.yaml，将 current profile 的
-                            # option.script 改为 Script，让 Clash Verge Rev 执行 Script.js
-                            $profileUpdated = Set-ProfileScript
-                            $msg = if ($profileUpdated) {
-                                'Script file initialized and profile option.script updated to Script'
-                            } else {
-                                'Script file initialized (WARNING: failed to update profile option.script, please manually set in Clash Verge Rev)'
-                            }
-                            Send-Message @{ success = $true; message = $msg; scriptPath = $scriptPath; profileUpdated = $profileUpdated }
+                            Send-Message @{ success = $true; message = 'Script file initialized'; scriptPath = $scriptPath }
                         } catch {
                             Send-Message @{ success = $false; error = "$($_.Exception.Message)" }
                         }
