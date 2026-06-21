@@ -19,6 +19,7 @@
   "f1_current_site": "Current Site",
   "f1_matched": "Matched Proxy Group",
   "f1_not_matched": "Not in any Proxy Group",
+  "f1_mode_hint": "Cannot detect in current mode, please switch to \"Clash Proxy\" mode",
 
   "f2_title": "Quick Add Domain to Proxy Group",
   "f2_confirm_add": "Confirm Add",

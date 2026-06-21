@@ -19,6 +19,7 @@
   "f1_current_site": "当前网站",
   "f1_matched": "匹配到代理组",
   "f1_not_matched": "未匹配到代理组",
+  "f1_mode_hint": "当前模式无法检测域名代理组，请切换到「Clash 代理」模式",
 
   "f2_title": "快捷添加域名到代理组",
   "f2_confirm_add": "确认添加",

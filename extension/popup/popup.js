@@ -455,6 +455,9 @@ function bindModeSwitchEvents() {
     const result = await sendToBackground({ action: 'setMode', mode });
     if (result.success) {
       renderModeSwitch(mode);
+      // 模式切换后重新初始化 popup，更新 F1 检测状态
+      // （非 clash 模式下 F1 应显示提示，clash 模式下应正常检测）
+      await initPopup();
     } else {
       showToast(result?.error || I18N.t('error_clash_unreachable'), 'error');
     }
@@ -773,34 +776,60 @@ async function initPopup() {
   populateProxyGroupSelects();
 
   // 1c. Clash 规则列表 + F1 域名匹配
-  sendToBackground({ action: 'getClashRules' }).then(clashRules => {
-    if (clashRules.success) {
-      const matched = findMatchingRules(domain, clashRules.rules);
-      renderDomainRuleCheck(domain, matched);
-      renderRuleList(clashRules.rules);
+  //     非 clash 模式下浏览器不走 Clash 代理，/connections 不会有该域名连接，
+  //     F1 无法检测实际代理组，显示提示并跳过检测
+  const currentMode = settings?.currentMode || 'system';
+  const f1ModeHint = document.getElementById('f1-mode-hint');
+  const f1Matched = document.getElementById('f1-matched');
+  const f1NotMatched = document.getElementById('f1-not-matched');
 
-      // 始终异步查询 Clash API /connections，获取内核实际匹配的规则
-      // 本地匹配无法处理 RULE-SET 等类型，/connections 返回的是内核真实匹配结果
-      // 覆盖策略：
-      //   1. /connections 返回了非 MATCH 的精确匹配 → 覆盖本地结果
-      //   2. 本地只有 MATCH（规则全是 RULE-SET 无法匹配）且 /connections 有匹配 →
-      //      用 /connections 结果（含 chains 实际代理组信息，比本地 MATCH 更有价值）
-      sendToBackground({ action: 'getDomainConnections' }).then(connResult => {
-        if (connResult.success && connResult.connections) {
-          const connMatched = findMatchingRulesFromConnections(domain, connResult.connections, clashRules.rules);
-          const hasNonMatchRule = connMatched.some(r => normalizeRuleType(r.type) !== 'MATCH');
-          const localOnlyMatch = matched.length > 0 && matched.every(r => normalizeRuleType(r.type) === 'MATCH');
-          if (hasNonMatchRule || (localOnlyMatch && connMatched.length > 0)) {
-            renderDomainRuleCheck(domain, connMatched);
+  if (currentMode !== 'clash') {
+    // 非 clash 模式：显示提示，隐藏匹配结果
+    f1ModeHint.style.display = 'block';
+    f1Matched.innerHTML = '';
+    f1NotMatched.style.display = 'none';
+    // 仍加载规则列表供查看，但不做 F1 域名匹配检测
+    sendToBackground({ action: 'getClashRules' }).then(clashRules => {
+      if (clashRules.success) {
+        renderRuleList(clashRules.rules);
+      }
+    });
+  } else {
+    // clash 模式：隐藏提示，正常检测
+    f1ModeHint.style.display = 'none';
+    sendToBackground({ action: 'getClashRules' }).then(clashRules => {
+      if (clashRules.success) {
+        const matched = findMatchingRules(domain, clashRules.rules);
+        renderDomainRuleCheck(domain, matched);
+        renderRuleList(clashRules.rules);
+
+        // 始终异步查询 Clash API /connections，获取内核实际匹配的规则
+        // 本地匹配无法处理 RULE-SET 等类型，/connections 返回的是内核真实匹配结果
+        // 覆盖策略：
+        //   1. /connections 返回了非 MATCH 的精确匹配 → 覆盖本地结果
+        //   2. 本地只有 MATCH（规则全是 RULE-SET 无法匹配）且 /connections 有匹配 →
+        //      用 /connections 结果（含 chains 实际代理组信息，比本地 MATCH 更有价值）
+        sendToBackground({ action: 'getDomainConnections' }).then(connResult => {
+          if (connResult.success && connResult.connections) {
+            const connMatched = findMatchingRulesFromConnections(domain, connResult.connections, clashRules.rules);
+            const hasNonMatchRule = connMatched.some(r => normalizeRuleType(r.type) !== 'MATCH');
+            const localOnlyMatch = matched.length > 0 && matched.every(r => normalizeRuleType(r.type) === 'MATCH');
+            if (hasNonMatchRule || (localOnlyMatch && connMatched.length > 0)) {
+              renderDomainRuleCheck(domain, connMatched);
+            }
           }
-        }
-      });
-    }
-  });
+        });
+      }
+    });
+  }
 
   // 绑定事件（同步，不依赖异步数据）
-  bindQuickAddRule(domain);
-  bindDomainDetection(tab.id);
+  // 使用标志避免模式切换重新 initPopup 时重复绑定
+  if (!window._popupEventsBound) {
+    bindQuickAddRule(domain);
+    bindDomainDetection(tab.id);
+    window._popupEventsBound = true;
+  }
 }
 
 // ──── 入口 ────
