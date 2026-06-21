@@ -440,7 +440,8 @@ body {
 /* ──── Toast ──── */
 .toast {
   position: fixed;
-  bottom: var(--md-spacing-4);
+  top: var(--md-spacing-4);
+  bottom: auto;
   left: var(--md-spacing-4);
   right: var(--md-spacing-4);
   padding: var(--md-spacing-3) var(--md-spacing-4);
@@ -470,7 +471,36 @@ body {
   color: var(--md-sys-color-on-tertiary);
   border-color: #5D4037;
 }
+/* 带按钮的 toast：允许交互 */
+.toast--actionable {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--md-spacing-2);
+  text-align: left;
+}
+.toast--actionable > .toast-text {
+  flex: 1;
+}
+.toast-action-btn {
+  flex-shrink: 0;
+  padding: var(--md-spacing-1) var(--md-spacing-3);
+  border-radius: var(--md-shape-corner-small);
+  border: 1px solid var(--md-sys-color-on-primary);
+  background: transparent;
+  color: var(--md-sys-color-on-primary);
+  font: var(--md-typescale-label-medium);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.toast-action-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+.toast-action-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 @keyframes toastIn {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(-8px); }
   to { opacity: 1; transform: translateY(0); }
 }

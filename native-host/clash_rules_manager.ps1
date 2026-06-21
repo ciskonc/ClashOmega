@@ -928,6 +928,16 @@ function Main {
                     }
                 }
 
+                'getSnapshotPath' {
+                    # 返回 clash-verge.yaml 快照文件路径，供扩展调用 PUT /configs {path} 热重载
+                    $snapshotPath = Get-SnapshotPath
+                    if ($snapshotPath) {
+                        Send-Message @{ success = $true; snapshotPath = $snapshotPath }
+                    } else {
+                        Send-Message @{ success = $false; error = 'Snapshot file not found (clash-verge.yaml)' }
+                    }
+                }
+
                 'getScriptPath' {
                     $scriptPath = Get-ScriptPath
                     if ($scriptPath) {

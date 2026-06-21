@@ -11,16 +11,67 @@ function sendToBackground(message) {
   });
 }
 
-function showToast(message, type = '') {
+function showToast(message, type = '', options = {}) {
   const old = document.querySelector('.toast');
   if (old) old.remove();
 
   const toast = document.createElement('div');
   toast.className = `toast ${type ? 'toast--' + type : ''}`;
-  toast.textContent = message;
+
+  if (options.action) {
+    // 带按钮的提示：允许交互
+    toast.classList.add('toast--actionable');
+    const textSpan = document.createElement('span');
+    textSpan.className = 'toast-text';
+    textSpan.textContent = message;
+    toast.appendChild(textSpan);
+
+    const btn = document.createElement('button');
+    btn.className = 'toast-action-btn';
+    btn.textContent = options.action.label;
+    btn.addEventListener('click', async () => {
+      if (btn.disabled) return;
+      btn.disabled = true;
+      const originalLabel = btn.textContent;
+      btn.textContent = '...';
+      try {
+        await options.action.callback();
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+        toast.remove();
+      }
+    });
+    toast.appendChild(btn);
+  } else {
+    toast.textContent = message;
+  }
+
   document.body.appendChild(toast);
 
-  setTimeout(() => toast.remove(), 2500);
+  // 带按钮的提示显示更久，给用户时间点击
+  const duration = options.duration || (options.action ? 8000 : 2500);
+  setTimeout(() => toast.remove(), duration);
+}
+
+/**
+ * 触发重启 Clash（复用底部按钮的逻辑，供 toast 按钮调用）
+ * @returns {Promise<{success: boolean}>}
+ */
+async function triggerRestartClash() {
+  const btn = document.getElementById('restart-clash-btn');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '...';
+  const result = await sendToBackground({ action: 'restartClash' });
+  btn.disabled = false;
+  btn.textContent = originalText;
+  if (result && result.success) {
+    showToast(I18N.t('restart_clash_success'), 'success');
+  } else {
+    showToast(I18N.t('restart_clash_failed'), 'error');
+  }
+  return result;
 }
 
 /**
@@ -563,8 +614,13 @@ function bindQuickAddRule(domain) {
 
     const result = await sendToBackground({ action: 'addRule', rule });
     if (result && result.success) {
-      // 提示用户需重启 Clash 生效（已移除热重载）
-      showToast(I18N.t('success_rule_added') + ' — ' + I18N.t('rule_restart_hint'), 'success');
+      // 提示用户需重启 Clash 生效，toast 内带「重启 Clash」按钮可直接点击
+      showToast(I18N.t('success_rule_added') + ' — ' + I18N.t('rule_restart_hint'), 'success', {
+        action: {
+          label: I18N.t('restart_clash'),
+          callback: triggerRestartClash
+        }
+      });
       // 乐观更新：根据 useScriptRule 决定插入哪个列表
       const settings = await sendToBackground({ action: 'getSettings' });
       const useScript = settings.useScriptRule === true;
@@ -746,8 +802,13 @@ function bindRuleListDeleteEvents() {
     }
 
     if (result && result.success) {
-      // 提示用户需重启 Clash 生效（已移除热重载）
-      showToast(I18N.t('success_rule_deleted') + ' — ' + I18N.t('rule_restart_hint'), 'success');
+      // 提示用户需重启 Clash 生效，toast 内带「重启 Clash」按钮可直接点击
+      showToast(I18N.t('success_rule_deleted') + ' — ' + I18N.t('rule_restart_hint'), 'success', {
+        action: {
+          label: I18N.t('restart_clash'),
+          callback: triggerRestartClash
+        }
+      });
       ruleItem.remove();
       const countEl = isScript
         ? document.getElementById('script-rule-count')
@@ -963,21 +1024,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   bindSettingsEvents();
   renderLanguageSetting();
 
-  // 底部「重启 Clash 内核」按钮
-  document.getElementById('restart-clash-btn').addEventListener('click', async () => {
-    const btn = document.getElementById('restart-clash-btn');
-    const originalText = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = '...';
-    const result = await sendToBackground({ action: 'restartClash' });
-    btn.disabled = false;
-    btn.textContent = I18N.t('settings_restart_kernel');
-    if (result && result.success) {
-      showToast(I18N.t('restart_clash_success'), 'success');
-    } else {
-      showToast(I18N.t('restart_clash_failed'), 'error');
-    }
-  });
+  // 底部「重启 Clash 内核」按钮（复用 triggerRestartClash，与 toast 按钮逻辑统一）
+  document.getElementById('restart-clash-btn').addEventListener('click', triggerRestartClash);
 
   await initPopup();
 });

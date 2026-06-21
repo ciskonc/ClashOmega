@@ -235,14 +235,30 @@ async function handleMessage(message) {
           console.log('[restartClash] Step 2 SKIPPED: no rules to sync (profile append is empty)');
         }
 
-        console.log('[restartClash] Step 3: Calling POST /restart...');
+        // Step 3: 优先尝试 PUT /configs {path} 热重载（不中断代理）
+        // clash-verge.yaml 已包含扩展脚本执行后的完整规则，reload 即可让扩展脚本规则生效
+        console.log('[restartClash] Step 3: Trying PUT /configs reload (no proxy interruption)...');
+        const snapshotPathResult = await getSnapshotPath();
+        if (snapshotPathResult && snapshotPathResult.success && snapshotPathResult.snapshotPath) {
+          const reloaded = await reloadConfigFromPath(snapshotPathResult.snapshotPath);
+          if (reloaded) {
+            console.log('[restartClash] Step 3 OK: config reloaded via PUT /configs');
+            return { success: true, method: 'reload' };
+          }
+          console.warn('[restartClash] Step 3 FAILED: PUT /configs failed, falling back to POST /restart');
+        } else {
+          console.warn('[restartClash] Step 3 SKIPPED: cannot get snapshot path, falling back to POST /restart');
+        }
+
+        // Step 4: 兜底 POST /restart（会短暂中断代理）
+        console.log('[restartClash] Step 4: Calling POST /restart (fallback)...');
         const restarted = await restartKernel();
         if (!restarted) {
-          console.error('[restartClash] FAILED at step 3: POST /restart failed (check API URL & secret in settings)');
+          console.error('[restartClash] FAILED at step 4: POST /restart failed (check API URL & secret in settings)');
           return { success: false, error: 'Clash API unreachable — check API URL & secret in settings' };
         }
-        console.log('[restartClash] Step 3 OK: kernel restarted successfully');
-        return { success: true };
+        console.log('[restartClash] Step 4 OK: kernel restarted successfully');
+        return { success: true, method: 'restart' };
       }
 
       default:

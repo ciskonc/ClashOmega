@@ -108,6 +108,15 @@ async function syncSnapshotRules(rules) {
   return await sendToNative({ action: 'syncSnapshot', rules });
 }
 
+/**
+ * 获取 Clash Verge Rev 快照文件路径（clash-verge.yaml）
+ * 用于调用 mihomo PUT /configs {path} 热重载配置
+ * @returns {Promise<{success: boolean, snapshotPath?: string, error?: string}>}
+ */
+async function getSnapshotPath() {
+  return await sendToNative({ action: 'getSnapshotPath' });
+}
+
 // ──── Script.js 扩展脚本规则管理 ────
 
 /**

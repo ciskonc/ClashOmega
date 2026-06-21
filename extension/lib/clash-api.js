@@ -209,6 +209,30 @@ async function reloadClashConfig() {
 }
 
 /**
+ * 通过 PUT /configs {path} 让 mihomo 重新加载指定配置文件
+ * 不重启内核，代理不中断，用于「重启 Clash」按钮的优先路径
+ * @param {string} path - 配置文件绝对路径（clash-verge.yaml）
+ * @returns {Promise<boolean>} 是否成功
+ */
+async function reloadConfigFromPath(path) {
+  const { baseUrl, headers } = await getApiConfig();
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5000);
+    const response = await fetch(`${baseUrl}/configs?force=true`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ path }),
+      signal: ctrl.signal
+    });
+    clearTimeout(timer);
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * 重启 Clash 内核（POST /restart）
  * 内核重启后从快照文件重新加载配置，需先调用 syncSnapshotRules 更新快照
  * @returns {Promise<boolean>} 是否成功
