@@ -691,23 +691,31 @@ function bindQuickAddRule(domain) {
           callback: triggerRestartClash
         }
       });
-      // 乐观更新：规则统一写入扩展脚本（Script.js），始终插入到扩展脚本规则列表
-      const listEl = document.getElementById('script-rule-list');
-      const countEl = document.getElementById('script-rule-count');
+      // 乐观更新：根据 useScriptRule 决定插入哪个列表
+      const settings = await sendToBackground({ action: 'getSettings' });
+      const useScript = settings.useScriptRule === true;
+      const listEl = useScript
+        ? document.getElementById('script-rule-list')
+        : document.getElementById('rule-list');
+      const countEl = useScript
+        ? document.getElementById('script-rule-count')
+        : document.getElementById('rule-count');
       // 如果列表显示的是空占位文本，先清掉
       const placeholder = listEl.querySelector('div[style]');
       if (placeholder && !placeholder.classList.contains('rule-item')) {
         listEl.innerHTML = '';
       }
       // 隐藏空状态提示
-      document.getElementById('script-rule-empty').style.display = 'none';
+      if (useScript) {
+        document.getElementById('script-rule-empty').style.display = 'none';
+      }
       const div = document.createElement('div');
       div.className = 'rule-item';
       const policyClass = getPolicyClass(policy);
       div.innerHTML = `
         <span class="rule-text" title="${rule}">${rule}</span>
         <span class="rule-policy ${policyClass}">${policy}</span>
-        <button class="rule-delete-btn" data-rule="${rule}" data-script="1" data-i18n-title="rule_delete" title="${I18N.t('rule_delete')}">✕</button>
+        <button class="rule-delete-btn" data-rule="${rule}" data-script="${useScript ? '1' : '0'}" data-i18n-title="rule_delete" title="${I18N.t('rule_delete')}">✕</button>
       `;
       listEl.appendChild(div);
       countEl.textContent = parseInt(countEl.textContent) + 1;
