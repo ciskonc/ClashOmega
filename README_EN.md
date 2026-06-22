@@ -230,6 +230,10 @@ Can be used with this extension: sublink-worker handles subscription conversion 
 
 - [MagicalYu](https://github.com/MagicalYuYu) — Chief guinea pig & AI coding whisperer. Throughout this project's development, he patiently tested every bug repeatedly and wielded unique "whispering" skills to make the AI produce usable code. Without his sacrifice (and countless "this doesn't work, try again"), ClashOmega wouldn't exist today.
 
+---
+
+This project is built with [AOS](https://aos.magicalyu.online/) (Agent Operating System) framework
+
 ## Version History
 
 For complete version history, see [CHANGELOG.md](CHANGELOG.md).

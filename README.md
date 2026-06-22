@@ -230,6 +230,10 @@ Sing-Box、Clash（Meta/Mihomo）、Xray/V2Ray、Surge
 
 - [MagicalYu](https://github.com/MagicalYuYu) — 首席小白鼠兼 AI 编码调教师。本项目开发期间，以独到的"调教"技巧让 AI 高效产出可用的代码。没有他的阴阳怪气，就没有现在的 ClashOmega。
 
+---
+
+本项目基于 [AOS](https://aos.magicalyu.online/)（Agent Operating System）框架协作完成
+
 ## 版本历史
 
 完整版本历史请查阅 [CHANGELOG.md](CHANGELOG.md)。
