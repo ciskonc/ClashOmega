@@ -973,19 +973,19 @@
         </div>
         <div class="chat-bubble user">
           <div class="chat-meta" data-i18n="compare_b1_meta">用户</div>
-          <span data-i18n="compare_b1_text">这个网站打不开，需要加规则</span>
+          <span data-i18n="compare_b1_text">这个网站怎么打不开？是不是代理没开？</span>
         </div>
         <div class="chat-bubble bot-cold">
           <div class="chat-meta" data-i18n="compare_b2_meta">操作</div>
-          <span data-i18n="compare_b2_text">打开 Clash 配置文件 → 找到 rules → 手动添加 → 保存 → 热重载</span>
+          <span data-i18n="compare_b2_text">打开系统设置 → 检查代理 → 打开 Clash → 翻日志 → 还是不确定</span>
         </div>
         <div class="chat-bubble user">
           <div class="chat-meta" data-i18n="compare_b3_meta">用户</div>
-          <span data-i18n="compare_b3_text">不知道该加到哪个代理组...</span>
+          <span data-i18n="compare_b3_text">到底走没走代理啊？</span>
         </div>
         <div class="chat-bubble bot-cold">
           <div class="chat-meta" data-i18n="compare_b4_meta">结果</div>
-          <span data-i18n="compare_b4_text">翻文档查规则格式 → 试错 → 可能配错 → 浪费 10 分钟</span>
+          <span data-i18n="compare_b4_text">来回切换试 → 可能忘了切回来 → 其他网站也受影响</span>
         </div>
       </div>
       <div class="compare-col after reveal">
@@ -995,19 +995,19 @@
         </div>
         <div class="chat-bubble user">
           <div class="chat-meta" data-i18n="compare_a1_meta">用户</div>
-          <span data-i18n="compare_a1_text">这个网站打不开，需要加规则</span>
+          <span data-i18n="compare_a1_text">这个网站怎么打不开？是不是代理没开？</span>
         </div>
         <div class="chat-bubble bot-warm">
           <div class="chat-meta" data-i18n="compare_a2_meta">ClashOmega</div>
-          <span data-i18n="compare_a2_text">[检测域名] → 匹配代理组 → 一键添加</span>
+          <span data-i18n="compare_a2_text">[代理状态] 系统代理已开启 → [域名检测] 当前域名匹配规则：Proxy</span>
         </div>
         <div class="chat-bubble user">
           <div class="chat-meta" data-i18n="compare_a3_meta">用户</div>
-          <span data-i18n="compare_a3_text">搞定了？</span>
+          <span data-i18n="compare_a3_text">那换个模式试试</span>
         </div>
         <div class="chat-bubble bot-warm">
           <div class="chat-meta" data-i18n="compare_a4_meta">ClashOmega</div>
-          <span data-i18n="compare_a4_text">[自动重载] 规则已生效，无需手动重启</span>
+          <span data-i18n="compare_a4_text">[一键切换] 已切换到 Clash 代理模式，当前域名将通过代理访问</span>
         </div>
       </div>
     </div>
@@ -1202,14 +1202,14 @@
         compare_title: '没有 Omega vs <span class="accent">有了 Omega</span>',
         compare_desc: '同样是 Clash 用户，体验完全不同',
         compare_before_title: '没有 ClashOmega', compare_after_title: '有了 ClashOmega',
-        compare_b1_meta: '用户', compare_b1_text: '这个网站打不开，需要加规则',
-        compare_b2_meta: '操作', compare_b2_text: '打开 Clash 配置文件 → 找到 rules → 手动添加 → 保存 → 热重载',
-        compare_b3_meta: '用户', compare_b3_text: '不知道该加到哪个代理组...',
-        compare_b4_meta: '结果', compare_b4_text: '翻文档查规则格式 → 试错 → 可能配错 → 浪费 10 分钟',
-        compare_a1_meta: '用户', compare_a1_text: '这个网站打不开，需要加规则',
-        compare_a2_meta: 'ClashOmega', compare_a2_text: '[检测域名] → 匹配代理组 → 一键添加',
-        compare_a3_meta: '用户', compare_a3_text: '搞定了？',
-        compare_a4_meta: 'ClashOmega', compare_a4_text: '[自动重载] 规则已生效，无需手动重启',
+        compare_b1_meta: '用户', compare_b1_text: '这个网站怎么打不开？是不是代理没开？',
+        compare_b2_meta: '操作', compare_b2_text: '打开系统设置 → 检查代理 → 打开 Clash → 翻日志 → 还是不确定',
+        compare_b3_meta: '用户', compare_b3_text: '到底走没走代理啊？',
+        compare_b4_meta: '结果', compare_b4_text: '来回切换试 → 可能忘了切回来 → 其他网站也受影响',
+        compare_a1_meta: '用户', compare_a1_text: '这个网站怎么打不开？是不是代理没开？',
+        compare_a2_meta: 'ClashOmega', compare_a2_text: '[代理状态] 系统代理已开启 → [域名检测] 当前域名匹配规则：Proxy',
+        compare_a3_meta: '用户', compare_a3_text: '那换个模式试试',
+        compare_a4_meta: 'ClashOmega', compare_a4_text: '[一键切换] 已切换到 Clash 代理模式，当前域名将通过代理访问',
         flow_title: '规则匹配<span class="accent">处理流程</span>',
         flow_desc: '从打开网页到规则生效，全程自动化',
         flow_1_title: '打开网页', flow_1_desc: '浏览器加载页面，扩展自动检测当前域名',
@@ -1258,14 +1258,14 @@
         compare_title: 'Without Omega vs <span class="accent">With Omega</span>',
         compare_desc: 'Same Clash users, completely different experience',
         compare_before_title: 'Without ClashOmega', compare_after_title: 'With ClashOmega',
-        compare_b1_meta: 'User', compare_b1_text: 'This site won\'t load, need to add a rule',
-        compare_b2_meta: 'Action', compare_b2_text: 'Open Clash config → find rules → manually add → save → hot-reload',
-        compare_b3_meta: 'User', compare_b3_text: 'Don\'t know which proxy group to add to...',
-        compare_b4_meta: 'Result', compare_b4_text: 'Search docs for rule format → trial and error → might misconfigure → 10 min wasted',
-        compare_a1_meta: 'User', compare_a1_text: 'This site won\'t load, need to add a rule',
-        compare_a2_meta: 'ClashOmega', compare_a2_text: '[Detect domain] → Match proxy group → One-click add',
-        compare_a3_meta: 'User', compare_a3_text: 'Done?',
-        compare_a4_meta: 'ClashOmega', compare_a4_text: '[Auto hot-reload] Rule active, 3 seconds done',
+        compare_b1_meta: 'User', compare_b1_text: 'Why won\'t this site load? Is the proxy on?',
+        compare_b2_meta: 'Action', compare_b2_text: 'Open system settings → check proxy → open Clash → check logs → still unsure',
+        compare_b3_meta: 'User', compare_b3_text: 'Is it going through proxy or not?',
+        compare_b4_meta: 'Result', compare_b4_text: 'Toggle back and forth → might forget to switch back → other sites affected',
+        compare_a1_meta: 'User', compare_a1_text: 'Why won\'t this site load? Is the proxy on?',
+        compare_a2_meta: 'ClashOmega', compare_a2_text: '[Proxy Status] System proxy enabled → [Domain Detect] Current domain matched rule: Proxy',
+        compare_a3_meta: 'User', compare_a3_text: 'Let me try switching mode',
+        compare_a4_meta: 'ClashOmega', compare_a4_text: '[One-Click Switch] Switched to Clash proxy mode, current domain will go through proxy',
         flow_title: 'Rule Matching<span class="accent"> Workflow</span>',
         flow_desc: 'From opening a page to rule activation, fully automated',
         flow_1_title: 'Open Page', flow_1_desc: 'Browser loads page, extension auto-detects current domain',
