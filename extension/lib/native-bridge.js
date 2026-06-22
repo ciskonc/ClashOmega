@@ -104,7 +104,7 @@ async function checkNativeHost() {
 /**
  * 获取系统代理状态
  * 优先使用 Native Host 读取 Windows 注册表（系统级代理）
- * 若 Native Host 不可用，回退到 chrome.proxy.settings.get() 读取浏览器级代理（兼容豆包等 Chromium 内核浏览器）
+ * 若 Native Host 不可用，回退到 chrome.proxy.settings.get() 读取浏览器级代理（兼容部分 Chromium 内核浏览器）
  * @returns {Promise<{success: boolean, proxyEnable?: boolean, proxyServer?: string, autoConfigUrl?: string, browserMode?: string}>}
  */
 async function getSystemProxyStatus() {
@@ -119,7 +119,7 @@ async function getSystemProxyStatus() {
   }
 
   // 兜底方案：使用 chrome.proxy.settings.get() 读取浏览器代理配置
-  // 适用于豆包等 Chromium 内核浏览器，或 Native Host 未注册的场景
+  // 适用于部分 Chromium 内核浏览器，或 Native Host 未注册的场景
   try {
     const details = await chrome.proxy.settings.get({});
     const value = details?.value;

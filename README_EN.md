@@ -35,7 +35,7 @@
 | Domain Match Detection | Detects which Clash rule the current domain matches, shows the matched group and policy (supports RULE-SET fallback to `/connections` API) |
 | Quick Rule Add | Add current domain to a proxy group (dynamically fetches Clash proxy group list) |
 | Smart Domain Grouping | Detects all domains on the page, auto-groups suggestions (e.g. `i1.art.com`, `i2.art.com` → `*.art.com`) |
-| System Proxy Status | Real-time system proxy status (Native Host registry read + browser proxy API fallback, compatible with Doubao and other browsers) |
+| System Proxy Status | Real-time system proxy status (Native Host registry read + browser proxy API fallback, compatible with some Chromium-based browsers) |
 | Rule Management | View, add, delete rules in Clash YAML config file (auto hot-reload after changes) |
 | Restart Clash | One-click sync profile rules to Clash Verge Rev snapshot file and restart kernel (use when hot-reload fails) |
 
@@ -53,18 +53,17 @@
 
 | Feature | Description |
 |---------|-------------|
-| Auto Install Script | `install_all.ps1` supports 9 browsers auto-detection and installation (Chrome/Edge/Brave/Opera/Vivaldi/Doubao/360/QQ/Sogou) |
+| Auto Install Script | `install.ps1` supports Chrome browser Native Host auto-registration |
 | Clash API Auto-discovery | Reads port from Clash Verge Rev config file + port scanning + 401 auth detection |
 | Security Hardening | Fixed 13 security vulnerabilities (XSS, path traversal, process injection, missing CSP, etc.) |
 
 ## Installation
 
-### Option 1: Auto Install (Recommended, v1.3.0 New)
+### Option 1: Auto Install (Recommended)
 
-1. Right-click `native-host/install_all.ps1` → **Run with PowerShell**
-2. The script will auto-detect installed browsers, select target browser
-3. The script will auto-load extension, prompt for extension ID, register Native Host, detect Clash API
-4. Done
+1. Right-click `native-host/install.ps1` → **Run with PowerShell**
+2. The script will auto-register Native Host and generate config files
+3. Done
 
 > Prerequisite: PowerShell script execution must be enabled (see below)
 
@@ -135,7 +134,7 @@ Possible reasons:
 
 ### Why does system proxy status show abnormal? (v1.3.0 Improvement)
 
-Some Chromium-based browsers (like Doubao) have abnormal Native Host support, preventing system proxy reading via registry. v1.3.0 adds `chrome.proxy.settings.get()` browser API as fallback, supporting 5 proxy mode detection (direct / auto_detect / pac_script / fixed_servers / system).
+Some Chromium-based browsers have abnormal Native Host support, preventing system proxy reading via registry. v1.3.0 adds `chrome.proxy.settings.get()` browser API as fallback, supporting 5 proxy mode detection (direct / auto_detect / pac_script / fixed_servers / system).
 
 </details>
 
@@ -170,8 +169,7 @@ extension/          # Chrome extension
 └── icons/          # Mode icons
 
 native-host/        # Native Messaging Host (Windows)
-├── install.ps1              # Manual installer (registers Native Host)
-├── install_all.ps1          # Auto installer (multi-browser, v1.3.0 new)
+├── install.ps1              # Installer (registers Native Host)
 ├── clash_rules_manager.bat  # Entry point
 ├── clash_rules_manager.ps1  # Main program (YAML read/write + system proxy query)
 └── com.clash.omega.json     # Native Host manifest template
@@ -181,7 +179,7 @@ native-host/        # Native Messaging Host (Windows)
 
 ## Compatibility
 
-- Browser: Chrome / Edge / Doubao / 360 / QQ / Brave / Opera / Vivaldi and other Chromium-based browsers (MV3 support required)
+- Browser: Chrome / Edge / 360 / QQ / Brave / Opera / Vivaldi and other Chromium-based browsers (MV3 support required)
 - Proxy Kernel: This extension is developed and tested on Clash Verge Rev. Other Clash kernels (Clash for Windows / Mihomo etc.) are untested, may work but not guaranteed
 - OS: Windows (Native Host depends on PowerShell 5.1+)
 
