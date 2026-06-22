@@ -1,13 +1,7 @@
 ﻿# ClashOmega - Native Host Installer / 安装脚本
 # Usage: Right-click -> Run with PowerShell
 # 用法: 右键 -> 使用 PowerShell 运行
-
-# ---- Auto UAC elevation / 自动管理员提权 ----
-if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    $arguments = "-ExecutionPolicy Bypass -File `"" + $MyInvocation.MyCommand.Path + "`""
-    Start-Process powershell.exe -Verb RunAs -ArgumentList $arguments
-    exit
-}
+# S-006 修复：移除多余的 UAC 自动提权（HKCU 注册表写入无需管理员权限）
 
 $ErrorActionPreference = 'Stop'
 $HostDir = Split-Path -Parent $MyInvocation.MyCommand.Path
