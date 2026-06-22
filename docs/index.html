@@ -1,0 +1,1384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClashOmega — Clash 代理规则管理扩展 | 致敬 SwitchyOmega</title>
+  <meta name="description" content="ClashOmega 是一款 Chrome 浏览器扩展，用于管理 Clash 代理规则。三模式切换、域名匹配检测、快捷规则管理，致敬 SwitchyOmega / ZeroOmega。">
+  <meta name="keywords" content="ClashOmega, Clash, 代理, SwitchyOmega, ZeroOmega, Chrome扩展, 浏览器扩展, 规则管理, MD3">
+  <meta name="author" content="ciskonc">
+  <meta name="robots" content="index, follow">
+
+  <!-- Canonical -->
+  <link rel="canonical" href="https://magicalyuyu.github.io/ClashOmega/">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="ClashOmega — Clash 代理规则管理扩展">
+  <meta property="og:description" content="三模式切换、域名匹配检测、快捷规则管理，致敬 SwitchyOmega / ZeroOmega">
+  <meta property="og:url" content="https://magicalyuyu.github.io/ClashOmega/">
+  <meta property="og:image" content="https://magicalyuyu.github.io/ClashOmega/og-image.png">
+  <meta property="og:site_name" content="ClashOmega">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="ClashOmega — Clash 代理规则管理扩展">
+  <meta name="twitter:description" content="三模式切换、域名匹配检测、快捷规则管理，致敬 SwitchyOmega / ZeroOmega">
+  <meta name="twitter:image" content="https://magicalyuyu.github.io/ClashOmega/og-image.png">
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#6750A4">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ClashOmega">
+
+  <!-- Performance -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" media="print" onload="this.media='all'">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "ClashOmega",
+    "description": "Chrome 浏览器扩展，用于管理 Clash 代理规则。三模式切换、域名匹配检测、快捷规则管理，致敬 SwitchyOmega / ZeroOmega。",
+    "applicationCategory": "BrowserExtension",
+    "operatingSystem": "Windows",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "author": {
+      "@type": "Person",
+      "name": "ciskonc"
+    }
+  }
+  </script>
+
+  <style>
+    /* ============ CSS 变量 ============ */
+    :root {
+      --md-primary: #6750A4;
+      --md-primary-light: #D0BCFF;
+      --md-primary-dark: #4F378B;
+      --md-primary-container: #EADDFF;
+      --md-tertiary: #7D5260;
+      --md-tertiary-light: #EFB8C8;
+      --md-surface: #0A0612;
+      --md-surface-2: #15101F;
+      --md-surface-3: #1E1830;
+      --md-on-surface: #E6E1E5;
+      --md-on-surface-variant: #CAC4D0;
+      --md-outline: #49454F;
+      --md-outline-variant: #79747E;
+      --md-error: #B3261E;
+      --md-success: #4CAF50;
+      --md-warning: #FF9800;
+
+      --bg-base: #0A0612;
+      --bg-elevated: rgba(103, 80, 164, 0.08);
+      --bg-glass: rgba(255, 255, 255, 0.04);
+      --bg-glass-hover: rgba(255, 255, 255, 0.08);
+      --border-glass: rgba(208, 188, 255, 0.12);
+      --border-glass-hover: rgba(208, 188, 255, 0.25);
+
+      --text-primary: #E6E1E5;
+      --text-secondary: #CAC4D0;
+      --text-muted: #79747E;
+
+      --accent-gradient: linear-gradient(135deg, #6750A4 0%, #D0BCFF 100%);
+      --accent-gradient-2: linear-gradient(135deg, #7D5260 0%, #EFB8C8 100%);
+      --aurora-1: rgba(103, 80, 164, 0.35);
+      --aurora-2: rgba(125, 82, 96, 0.25);
+      --aurora-3: rgba(208, 188, 255, 0.15);
+
+      --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+      --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+      --shadow-lg: 0 8px 32px rgba(103, 80, 164, 0.15);
+      --shadow-glow: 0 0 40px rgba(103, 80, 164, 0.3);
+
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --radius-xl: 24px;
+      --radius-full: 9999px;
+
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+      --max-width: 1200px;
+      --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* ============ 基础重置 ============ */
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 80px;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-base);
+      color: var(--text-primary);
+      line-height: 1.6;
+      overflow-x: hidden;
+      min-height: 100vh;
+    }
+
+    /* ============ Skip to Content ============ */
+    .skip-to-content {
+      position: absolute;
+      top: -100px;
+      left: 0;
+      background: var(--md-primary);
+      color: #fff;
+      padding: 12px 24px;
+      border-radius: 0 0 var(--radius-md) 0;
+      z-index: 10000;
+      transition: top var(--transition);
+    }
+    .skip-to-content:focus { top: 0; }
+
+    /* ============ Aurora 背景 ============ */
+    .aurora-bg {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      overflow: hidden;
+      pointer-events: none;
+    }
+    .aurora-bg::before,
+    .aurora-bg::after {
+      content: '';
+      position: absolute;
+      width: 800px;
+      height: 800px;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.5;
+      animation: aurora-float 20s ease-in-out infinite;
+    }
+    .aurora-bg::before {
+      background: var(--aurora-1);
+      top: -200px;
+      left: -200px;
+    }
+    .aurora-bg::after {
+      background: var(--aurora-2);
+      bottom: -200px;
+      right: -200px;
+      animation-delay: -10s;
+    }
+    .aurora-bg .aurora-3 {
+      position: absolute;
+      width: 600px;
+      height: 600px;
+      border-radius: 50%;
+      background: var(--aurora-3);
+      filter: blur(100px);
+      top: 30%;
+      left: 50%;
+      transform: translateX(-50%);
+      animation: aurora-float 25s ease-in-out infinite reverse;
+    }
+    @keyframes aurora-float {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(100px, -50px) scale(1.1); }
+      66% { transform: translate(-50px, 100px) scale(0.9); }
+    }
+
+    /* ============ 鼠标光晕 ============ */
+    .cursor-glow {
+      position: fixed;
+      width: 320px;
+      height: 320px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(103, 80, 164, 0.12) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 9999;
+      transform: translate(-50%, -50%);
+      transition: opacity 0.3s;
+      opacity: 0;
+    }
+    @media (hover: hover) {
+      .cursor-glow { opacity: 1; }
+    }
+
+    /* ============ 导航栏 ============ */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 1000;
+      padding: 16px 0;
+      transition: all var(--transition);
+      background: rgba(10, 6, 18, 0.4);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid transparent;
+    }
+    nav.scrolled {
+      background: rgba(10, 6, 18, 0.8);
+      border-bottom-color: var(--border-glass);
+      padding: 10px 0;
+    }
+    .nav-container {
+      max-width: var(--max-width);
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+      text-decoration: none;
+    }
+    .nav-logo-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-sm);
+      background: var(--accent-gradient);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 800;
+      color: #fff;
+      box-shadow: var(--shadow-glow);
+    }
+    .nav-links {
+      display: flex;
+      gap: 32px;
+      align-items: center;
+    }
+    .nav-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      transition: color var(--transition);
+    }
+    .nav-links a:hover { color: var(--md-primary-light); }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .lang-switch {
+      display: flex;
+      gap: 4px;
+      background: var(--bg-glass);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-full);
+      padding: 4px;
+    }
+    .lang-btn {
+      padding: 6px 14px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 500;
+      border-radius: var(--radius-full);
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .lang-btn.active {
+      background: var(--accent-gradient);
+      color: #fff;
+    }
+    .nav-toggle {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--text-primary);
+      font-size: 24px;
+      cursor: pointer;
+    }
+
+    /* ============ Hero ============ */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 120px 24px 60px;
+      position: relative;
+    }
+    .hero-content {
+      max-width: 800px;
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 20px;
+      background: var(--bg-glass);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-full);
+      font-size: 13px;
+      color: var(--md-primary-light);
+      margin-bottom: 32px;
+      backdrop-filter: blur(10px);
+    }
+    .hero-badge .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--md-success);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(1.2); }
+    }
+    .hero-title {
+      font-size: clamp(40px, 6vw, 72px);
+      font-weight: 800;
+      line-height: 1.1;
+      margin-bottom: 24px;
+      background: linear-gradient(135deg, #E6E1E5 0%, #D0BCFF 50%, #EFB8C8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero-title .accent {
+      display: block;
+      background: var(--accent-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero-subtitle {
+      font-size: clamp(16px, 2vw, 20px);
+      color: var(--text-secondary);
+      max-width: 600px;
+      margin: 0 auto 40px;
+      line-height: 1.7;
+    }
+    .hero-subtitle strong {
+      color: var(--md-primary-light);
+      font-weight: 600;
+    }
+    .hero-cta {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 60px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 32px;
+      border-radius: var(--radius-full);
+      font-size: 15px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all var(--transition);
+      cursor: pointer;
+      border: none;
+    }
+    .btn-primary {
+      background: var(--accent-gradient);
+      color: #fff;
+      box-shadow: var(--shadow-glow);
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 60px rgba(103, 80, 164, 0.5);
+    }
+    .btn-secondary {
+      background: var(--bg-glass);
+      color: var(--text-primary);
+      border: 1px solid var(--border-glass);
+      backdrop-filter: blur(10px);
+    }
+    .btn-secondary:hover {
+      background: var(--bg-glass-hover);
+      border-color: var(--border-glass-hover);
+    }
+    .hero-stats {
+      display: flex;
+      gap: 48px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .stat-item {
+      text-align: center;
+    }
+    .stat-number {
+      font-size: 36px;
+      font-weight: 800;
+      background: var(--accent-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .stat-label {
+      font-size: 13px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    /* ============ Section 通用 ============ */
+    .section {
+      padding: 100px 24px;
+      max-width: var(--max-width);
+      margin: 0 auto;
+    }
+    .section-header {
+      text-align: center;
+      margin-bottom: 64px;
+    }
+    .section-tag {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--md-primary-light);
+      margin-bottom: 16px;
+    }
+    .section-title {
+      font-size: clamp(28px, 4vw, 42px);
+      font-weight: 700;
+      margin-bottom: 16px;
+      line-height: 1.2;
+    }
+    .section-title .accent {
+      background: var(--accent-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .section-desc {
+      font-size: 16px;
+      color: var(--text-secondary);
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* ============ 功能卡片 ============ */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 24px;
+    }
+    .feature-card {
+      background: var(--bg-glass);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-lg);
+      padding: 32px 24px;
+      backdrop-filter: blur(10px);
+      transition: all var(--transition);
+      position: relative;
+      overflow: hidden;
+    }
+    .feature-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--accent-gradient);
+      opacity: 0;
+      transition: opacity var(--transition);
+    }
+    .feature-card:hover {
+      transform: translateY(-4px);
+      border-color: var(--border-glass-hover);
+      background: var(--bg-glass-hover);
+      box-shadow: var(--shadow-lg);
+    }
+    .feature-card:hover::before { opacity: 1; }
+    .feature-icon {
+      font-size: 32px;
+      margin-bottom: 16px;
+      display: inline-block;
+    }
+    .feature-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .feature-desc {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    /* ============ 对比 ============ */
+    .compare-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+    }
+    .compare-col {
+      border-radius: var(--radius-lg);
+      padding: 32px;
+      border: 1px solid var(--border-glass);
+    }
+    .compare-col.before {
+      background: rgba(179, 38, 30, 0.05);
+      border-color: rgba(179, 38, 30, 0.15);
+    }
+    .compare-col.after {
+      background: rgba(103, 80, 164, 0.08);
+      border-color: rgba(103, 80, 164, 0.2);
+    }
+    .compare-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .compare-emoji { font-size: 28px; }
+    .compare-title {
+      font-size: 20px;
+      font-weight: 600;
+    }
+    .chat-bubble {
+      padding: 12px 16px;
+      border-radius: var(--radius-md);
+      margin-bottom: 12px;
+      font-size: 14px;
+      animation: fadeInUp 0.5s ease forwards;
+      opacity: 0;
+    }
+    .chat-bubble.user {
+      background: var(--bg-glass);
+      border: 1px solid var(--border-glass);
+    }
+    .chat-bubble.bot-cold {
+      background: rgba(179, 38, 30, 0.08);
+      border: 1px solid rgba(179, 38, 30, 0.15);
+      color: var(--text-muted);
+    }
+    .chat-bubble.bot-warm {
+      background: rgba(103, 80, 164, 0.12);
+      border: 1px solid rgba(103, 80, 164, 0.2);
+    }
+    .chat-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ============ 流程 ============ */
+    .flow-container {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+    .flow-step {
+      background: var(--bg-glass);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      text-align: center;
+      position: relative;
+      backdrop-filter: blur(10px);
+    }
+    .flow-number {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--accent-gradient);
+      color: #fff;
+      font-size: 16px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px;
+    }
+    .flow-icon { font-size: 28px; margin-bottom: 12px; }
+    .flow-title {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .flow-desc {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    /* ============ 模式切换 ============ */
+    .modes-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+    .mode-card {
+      background: var(--bg-glass);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-lg);
+      padding: 32px 24px;
+      text-align: center;
+      backdrop-filter: blur(10px);
+      transition: all var(--transition);
+    }
+    .mode-card:hover {
+      border-color: var(--border-glass-hover);
+      transform: translateY(-4px);
+    }
+    .mode-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      margin: 0 auto 20px;
+    }
+    .mode-icon.system { background: rgba(76, 175, 80, 0.15); }
+    .mode-icon.direct { background: rgba(255, 152, 0, 0.15); }
+    .mode-icon.clash { background: rgba(103, 80, 164, 0.15); }
+    .mode-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .mode-desc {
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    /* ============ 安装 ============ */
+    .install-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+    .install-step {
+      background: var(--bg-glass);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-lg);
+      padding: 32px 24px;
+      backdrop-filter: blur(10px);
+    }
+    .install-number {
+      font-size: 48px;
+      font-weight: 800;
+      background: var(--accent-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 16px;
+    }
+    .install-title {
+      font-size: 17px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .install-desc {
+      font-size: 14px;
+      color: var(--text-secondary);
+      word-break: break-all;
+    }
+    .install-code {
+      margin-top: 12px;
+      padding: 12px 16px;
+      background: var(--md-surface-2);
+      border-radius: var(--radius-sm);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--md-primary-light);
+      overflow-x: auto;
+    }
+
+    /* ============ 兼容性 ============ */
+    .compat-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+    .compat-card {
+      background: var(--bg-glass);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-lg);
+      padding: 32px 24px;
+      text-align: center;
+      backdrop-filter: blur(10px);
+    }
+    .compat-icon { font-size: 36px; margin-bottom: 16px; }
+    .compat-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+    .compat-list {
+      list-style: none;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+    .compat-list li {
+      padding: 4px 0;
+    }
+
+    /* ============ Footer ============ */
+    footer {
+      padding: 60px 24px 40px;
+      border-top: 1px solid var(--border-glass);
+      background: rgba(10, 6, 18, 0.6);
+      backdrop-filter: blur(20px);
+    }
+    .footer-container {
+      max-width: var(--max-width);
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 48px;
+      margin-bottom: 40px;
+    }
+    .footer-brand .nav-logo { margin-bottom: 16px; }
+    .footer-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+    .footer-col h4 {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: var(--text-primary);
+    }
+    .footer-col ul {
+      list-style: none;
+    }
+    .footer-col li {
+      margin-bottom: 8px;
+    }
+    .footer-col a {
+      font-size: 13px;
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: color var(--transition);
+    }
+    .footer-col a:hover { color: var(--md-primary-light); }
+    .footer-bottom {
+      max-width: var(--max-width);
+      margin: 0 auto;
+      padding-top: 24px;
+      border-top: 1px solid var(--border-glass);
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* ============ 滚动入场 ============ */
+    .reveal {
+      opacity: 0;
+      transform: translateY(40px) scale(0.96);
+      transition: opacity 0.8s ease, transform 0.8s ease;
+    }
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+
+    /* ============ 响应式 ============ */
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+      .nav-toggle { display: block; }
+      .nav-links.open {
+        display: flex;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        flex-direction: column;
+        background: rgba(10, 6, 18, 0.95);
+        padding: 24px;
+        gap: 16px;
+        border-bottom: 1px solid var(--border-glass);
+      }
+      .compare-grid { grid-template-columns: 1fr; }
+      .flow-container { grid-template-columns: 1fr 1fr; }
+      .modes-grid { grid-template-columns: 1fr; }
+      .install-grid { grid-template-columns: 1fr; }
+      .compat-grid { grid-template-columns: 1fr; }
+      .footer-container { grid-template-columns: 1fr; gap: 32px; }
+      .hero-stats { gap: 24px; }
+    }
+  </style>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-content">Skip to content</a>
+  <div class="aurora-bg" aria-hidden="true">
+    <div class="aurora-3"></div>
+  </div>
+  <div class="cursor-glow" aria-hidden="true"></div>
+
+  <!-- 导航 -->
+  <nav>
+    <div class="nav-container">
+      <a href="#" class="nav-logo">
+        <div class="nav-logo-icon">Ω</div>
+        <span>ClashOmega</span>
+      </a>
+      <div class="nav-links" id="navLinks">
+        <a href="#features" data-i18n="nav_features">功能</a>
+        <a href="#compare" data-i18n="nav_compare">对比</a>
+        <a href="#flow" data-i18n="nav_flow">流程</a>
+        <a href="#modes" data-i18n="nav_modes">模式</a>
+        <a href="#install" data-i18n="nav_install">安装</a>
+        <a href="#compat" data-i18n="nav_compat">兼容</a>
+      </div>
+      <div class="nav-actions">
+        <div class="lang-switch">
+          <button class="lang-btn active" data-lang="zh">中</button>
+          <button class="lang-btn" data-lang="en">EN</button>
+        </div>
+        <button class="nav-toggle" id="navToggle" aria-label="Menu">☰</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero" id="main-content">
+    <div class="hero-content">
+      <div class="hero-badge">
+        <span class="dot"></span>
+        <span data-i18n="hero_badge">Chrome 扩展 · v1.3.0 · 致敬 SwitchyOmega</span>
+      </div>
+      <h1 class="hero-title">
+        <span data-i18n="hero_title_1">掌控 Clash</span>
+        <span class="accent" data-i18n="hero_title_2">一键切换 Ω</span>
+      </h1>
+      <p class="hero-subtitle" data-i18n="hero_subtitle">
+        ClashOmega 是一款 Chrome 浏览器扩展，让你<strong>三模式切换</strong>、<strong>域名匹配检测</strong>、<strong>快捷规则管理</strong>，告别繁琐的 Clash 配置文件手动编辑。
+      </p>
+      <div class="hero-cta">
+        <a href="#install" class="btn btn-primary" data-i18n="hero_cta_install">立即安装</a>
+        <a href="https://github.com/ciskonc/ClashOmega" target="_blank" rel="noopener" class="btn btn-secondary" data-i18n="hero_cta_source">查看源码</a>
+      </div>
+      <div class="hero-stats">
+        <div class="stat-item">
+          <div class="stat-number" data-target="9">0</div>
+          <div class="stat-label" data-i18n="stat_features">功能特性</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number" data-target="9">0</div>
+          <div class="stat-label" data-i18n="stat_browsers">浏览器</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number" data-target="3">0</div>
+          <div class="stat-label" data-i18n="stat_languages">语言</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number" data-target="0">0</div>
+          <div class="stat-label" data-i18n="stat_deps">依赖</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 功能 -->
+  <section class="section" id="features">
+    <div class="section-header reveal">
+      <span class="section-tag">FEATURES</span>
+      <h2 class="section-title" data-i18n="features_title">九大核心<span class="accent">功能亮点</span></h2>
+      <p class="section-desc" data-i18n="features_desc">从模式切换到规则管理，ClashOmega 让代理控制变得简单直观</p>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card reveal">
+        <div class="feature-icon">🔄</div>
+        <h3 class="feature-title" data-i18n="f1_title">三模式切换</h3>
+        <p class="feature-desc" data-i18n="f1_desc">系统代理 → 直连 → Clash 代理，一键切换，图标颜色实时变化</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon">🔍</div>
+        <h3 class="feature-title" data-i18n="f2_title">域名匹配检测</h3>
+        <p class="feature-desc" data-i18n="f2_desc">检测当前域名匹配的 Clash 规则，显示匹配的分组和策略</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon">⚡</div>
+        <h3 class="feature-title" data-i18n="f3_title">快捷添加规则</h3>
+        <p class="feature-desc" data-i18n="f3_desc">将当前域名一键添加到代理组，动态获取 Clash 代理组列表</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon">🧠</div>
+        <h3 class="feature-title" data-i18n="f4_title">智能域名分组</h3>
+        <p class="feature-desc" data-i18n="f4_desc">检测页面所有域名，自动分组建议（如 i1.art.com, i2.art.com → *.art.com）</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon">📊</div>
+        <h3 class="feature-title" data-i18n="f5_title">系统代理状态</h3>
+        <p class="feature-desc" data-i18n="f5_desc">实时显示 Windows 系统代理状态，通过 Native Host 读取注册表</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon">📝</div>
+        <h3 class="feature-title" data-i18n="f6_title">规则管理</h3>
+        <p class="feature-desc" data-i18n="f6_desc">查看、添加、删除 Clash YAML 配置文件中的规则，增删后自动热重载</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon">🔥</div>
+        <h3 class="feature-title" data-i18n="f7_title">重启 Clash</h3>
+        <p class="feature-desc" data-i18n="f7_desc">一键将 profile 规则同步到 Clash Verge Rev 快照文件并重启内核</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon">🌍</div>
+        <h3 class="feature-title" data-i18n="f8_title">多语言</h3>
+        <p class="feature-desc" data-i18n="f8_desc">简体中文 / English / 日本語，三语言无缝切换</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon">🎨</div>
+        <h3 class="feature-title" data-i18n="f9_title">Material Design 3</h3>
+        <p class="feature-desc" data-i18n="f9_desc">Google MD3 设计风格，支持亮色/暗色/玻璃拟态多主题</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 对比 -->
+  <section class="section" id="compare">
+    <div class="section-header reveal">
+      <span class="section-tag">COMPARISON</span>
+      <h2 class="section-title" data-i18n="compare_title">没有 Omega vs <span class="accent">有了 Omega</span></h2>
+      <p class="section-desc" data-i18n="compare_desc">同样是 Clash 用户，体验完全不同</p>
+    </div>
+    <div class="compare-grid">
+      <div class="compare-col before reveal">
+        <div class="compare-header">
+          <span class="compare-emoji">😫</span>
+          <h3 class="compare-title" data-i18n="compare_before_title">没有 ClashOmega</h3>
+        </div>
+        <div class="chat-bubble user">
+          <div class="chat-meta" data-i18n="compare_b1_meta">用户</div>
+          <span data-i18n="compare_b1_text">这个网站打不开，需要加规则</span>
+        </div>
+        <div class="chat-bubble bot-cold">
+          <div class="chat-meta" data-i18n="compare_b2_meta">操作</div>
+          <span data-i18n="compare_b2_text">打开 Clash 配置文件 → 找到 rules → 手动添加 → 保存 → 热重载</span>
+        </div>
+        <div class="chat-bubble user">
+          <div class="chat-meta" data-i18n="compare_b3_meta">用户</div>
+          <span data-i18n="compare_b3_text">不知道该加到哪个代理组...</span>
+        </div>
+        <div class="chat-bubble bot-cold">
+          <div class="chat-meta" data-i18n="compare_b4_meta">结果</div>
+          <span data-i18n="compare_b4_text">翻文档查规则格式 → 试错 → 可能配错 → 浪费 10 分钟</span>
+        </div>
+      </div>
+      <div class="compare-col after reveal">
+        <div class="compare-header">
+          <span class="compare-emoji">😎</span>
+          <h3 class="compare-title" data-i18n="compare_after_title">有了 ClashOmega</h3>
+        </div>
+        <div class="chat-bubble user">
+          <div class="chat-meta" data-i18n="compare_a1_meta">用户</div>
+          <span data-i18n="compare_a1_text">这个网站打不开，需要加规则</span>
+        </div>
+        <div class="chat-bubble bot-warm">
+          <div class="chat-meta" data-i18n="compare_a2_meta">ClashOmega</div>
+          <span data-i18n="compare_a2_text">[检测域名] → 匹配代理组 → 一键添加</span>
+        </div>
+        <div class="chat-bubble user">
+          <div class="chat-meta" data-i18n="compare_a3_meta">用户</div>
+          <span data-i18n="compare_a3_text">搞定了？</span>
+        </div>
+        <div class="chat-bubble bot-warm">
+          <div class="chat-meta" data-i18n="compare_a4_meta">ClashOmega</div>
+          <span data-i18n="compare_a4_text">[自动热重载] 规则已生效，3 秒搞定</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 流程 -->
+  <section class="section" id="flow">
+    <div class="section-header reveal">
+      <span class="section-tag">WORKFLOW</span>
+      <h2 class="section-title" data-i18n="flow_title">规则匹配<span class="accent">处理流程</span></h2>
+      <p class="section-desc" data-i18n="flow_desc">从打开网页到规则生效，全程自动化</p>
+    </div>
+    <div class="flow-container">
+      <div class="flow-step reveal">
+        <div class="flow-number">1</div>
+        <div class="flow-icon">🌐</div>
+        <h3 class="flow-title" data-i18n="flow_1_title">打开网页</h3>
+        <p class="flow-desc" data-i18n="flow_1_desc">浏览器加载页面，扩展自动检测当前域名</p>
+      </div>
+      <div class="flow-step reveal">
+        <div class="flow-number">2</div>
+        <div class="flow-icon">🔍</div>
+        <h3 class="flow-title" data-i18n="flow_2_title">域名匹配</h3>
+        <p class="flow-desc" data-i18n="flow_2_desc">本地规则匹配 + Clash API 回退查询</p>
+      </div>
+      <div class="flow-step reveal">
+        <div class="flow-number">3</div>
+        <div class="flow-icon">⚡</div>
+        <h3 class="flow-title" data-i18n="flow_3_title">一键添加</h3>
+        <p class="flow-desc" data-i18n="flow_3_desc">选择代理组，规则自动写入 YAML 或扩展脚本</p>
+      </div>
+      <div class="flow-step reveal">
+        <div class="flow-number">4</div>
+        <div class="flow-icon">✅</div>
+        <h3 class="flow-title" data-i18n="flow_4_title">热重载</h3>
+        <p class="flow-desc" data-i18n="flow_4_desc">自动通过 Clash API 热重载，500ms 防抖</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 模式 -->
+  <section class="section" id="modes">
+    <div class="section-header reveal">
+      <span class="section-tag">MODES</span>
+      <h2 class="section-title" data-i18n="modes_title">三种代理<span class="accent">模式切换</span></h2>
+      <p class="section-desc" data-i18n="modes_desc">一键切换，图标颜色实时变化，状态一目了然</p>
+    </div>
+    <div class="modes-grid">
+      <div class="mode-card reveal">
+        <div class="mode-icon system">🖥️</div>
+        <h3 class="mode-title" data-i18n="mode_1_title">系统代理</h3>
+        <p class="mode-desc" data-i18n="mode_1_desc">使用 Windows 系统代理设置，兼容所有应用</p>
+      </div>
+      <div class="mode-card reveal">
+        <div class="mode-icon direct">📡</div>
+        <h3 class="mode-title" data-i18n="mode_2_title">直连</h3>
+        <p class="mode-desc" data-i18n="mode_2_desc">不走任何代理，直接连接，适合内网或国内站点</p>
+      </div>
+      <div class="mode-card reveal">
+        <div class="mode-icon clash">⚡</div>
+        <h3 class="mode-title" data-i18n="mode_3_title">Clash 代理</h3>
+        <p class="mode-desc" data-i18n="mode_3_desc">通过 Clash 内核代理，规则匹配，灵活控制</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 安装 -->
+  <section class="section" id="install">
+    <div class="section-header reveal">
+      <span class="section-tag">INSTALL</span>
+      <h2 class="section-title" data-i18n="install_title">三步<span class="accent">快速安装</span></h2>
+      <p class="section-desc" data-i18n="install_desc">加载扩展 + 安装 Native Host + 配置 API，即可使用</p>
+    </div>
+    <div class="install-grid">
+      <div class="install-step reveal">
+        <div class="install-number">1</div>
+        <h3 class="install-title" data-i18n="install_1_title">加载扩展</h3>
+        <p class="install-desc" data-i18n="install_1_desc">打开 chrome://extensions/，开启开发者模式，加载 extension/ 目录</p>
+      </div>
+      <div class="install-step reveal">
+        <div class="install-number">2</div>
+        <h3 class="install-title" data-i18n="install_2_title">安装 Native Host</h3>
+        <p class="install-desc" data-i18n="install_2_desc">右键运行 install.ps1，粘贴扩展 ID，完成注册</p>
+      </div>
+      <div class="install-step reveal">
+        <div class="install-number">3</div>
+        <h3 class="install-title" data-i18n="install_3_title">配置 API</h3>
+        <p class="install-desc" data-i18n="install_3_desc">点击扩展图标 → 设置，填写 Clash API 地址和密钥</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 兼容性 -->
+  <section class="section" id="compat">
+    <div class="section-header reveal">
+      <span class="section-tag">COMPATIBILITY</span>
+      <h2 class="section-title" data-i18n="compat_title">广泛<span class="accent">兼容性</span></h2>
+      <p class="section-desc" data-i18n="compat_desc">支持主流 Chromium 浏览器，基于 Clash Verge Rev 开发</p>
+    </div>
+    <div class="compat-grid">
+      <div class="compat-card reveal">
+        <div class="compat-icon">🌐</div>
+        <h3 class="compat-title" data-i18n="compat_1_title">浏览器</h3>
+        <ul class="compat-list">
+          <li>Google Chrome</li>
+          <li>Microsoft Edge</li>
+          <li>Brave / Opera / Vivaldi</li>
+          <li>豆包 / 360 / QQ</li>
+        </ul>
+      </div>
+      <div class="compat-card reveal">
+        <div class="compat-icon">⚙️</div>
+        <h3 class="compat-title" data-i18n="compat_2_title">代理内核</h3>
+        <ul class="compat-list">
+          <li>Clash Verge Rev（推荐）</li>
+          <li>Mihomo 内核</li>
+          <li>其他 Clash 内核（未测试）</li>
+        </ul>
+      </div>
+      <div class="compat-card reveal">
+        <div class="compat-icon">💻</div>
+        <h3 class="compat-title" data-i18n="compat_3_title">操作系统</h3>
+        <ul class="compat-list">
+          <li>Windows 10/11</li>
+          <li>需 PowerShell 5.1+</li>
+          <li>macOS/Linux 暂不支持</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-container">
+      <div class="footer-brand">
+        <a href="#" class="nav-logo">
+          <div class="nav-logo-icon">Ω</div>
+          <span>ClashOmega</span>
+        </a>
+        <p class="footer-desc" data-i18n="footer_desc">Chrome 浏览器扩展，用于管理 Clash 代理规则。致敬 SwitchyOmega / ZeroOmega。</p>
+      </div>
+      <div class="footer-col">
+        <h4 data-i18n="footer_docs">文档</h4>
+        <ul>
+          <li><a href="https://github.com/ciskonc/ClashOmega#readme" target="_blank" rel="noopener" data-i18n="footer_readme">README</a></li>
+          <li><a href="https://github.com/ciskonc/ClashOmega/releases" target="_blank" rel="noopener" data-i18n="footer_changelog">版本历史</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4 data-i18n="footer_resources">资源</h4>
+        <ul>
+          <li><a href="https://github.com/ciskonc/ClashOmega" target="_blank" rel="noopener" data-i18n="footer_github">GitHub 仓库</a></li>
+          <li><a href="https://github.com/ciskonc/ClashOmega/issues" target="_blank" rel="noopener" data-i18n="footer_issues">问题反馈</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4 data-i18n="footer_related">相关</h4>
+        <ul>
+          <li><a href="https://github.com/FelisCatus/SwitchyOmega" target="_blank" rel="noopener">SwitchyOmega</a></li>
+          <li><a href="https://github.com/clash-verge-rev/clash-verge-rev" target="_blank" rel="noopener">Clash Verge Rev</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span data-i18n="footer_copy">© 2026 ClashOmega · ciskonc · MIT License</span>
+    </div>
+  </footer>
+
+  <script>
+    // ===== i18n 国际化系统 =====
+    const i18n = {
+      zh: {
+        doc_title: 'ClashOmega — Clash 代理规则管理扩展 | 致敬 SwitchyOmega',
+        nav_features: '功能', nav_compare: '对比', nav_flow: '流程',
+        nav_modes: '模式', nav_install: '安装', nav_compat: '兼容',
+        hero_badge: 'Chrome 扩展 · v1.3.0 · 致敬 SwitchyOmega',
+        hero_title_1: '掌控 Clash', hero_title_2: '一键切换 Ω',
+        hero_subtitle: 'ClashOmega 是一款 Chrome 浏览器扩展，让你<strong>三模式切换</strong>、<strong>域名匹配检测</strong>、<strong>快捷规则管理</strong>，告别繁琐的 Clash 配置文件手动编辑。',
+        stat_features: '功能特性', stat_browsers: '浏览器', stat_languages: '语言', stat_deps: '依赖',
+        hero_cta_install: '立即安装', hero_cta_source: '查看源码',
+        features_title: '九大核心<span class="accent">功能亮点</span>',
+        features_desc: '从模式切换到规则管理，ClashOmega 让代理控制变得简单直观',
+        f1_title: '三模式切换', f1_desc: '系统代理 → 直连 → Clash 代理，一键切换，图标颜色实时变化',
+        f2_title: '域名匹配检测', f2_desc: '检测当前域名匹配的 Clash 规则，显示匹配的分组和策略',
+        f3_title: '快捷添加规则', f3_desc: '将当前域名一键添加到代理组，动态获取 Clash 代理组列表',
+        f4_title: '智能域名分组', f4_desc: '检测页面所有域名，自动分组建议（如 i1.art.com, i2.art.com → *.art.com）',
+        f5_title: '系统代理状态', f5_desc: '实时显示 Windows 系统代理状态，通过 Native Host 读取注册表',
+        f6_title: '规则管理', f6_desc: '查看、添加、删除 Clash YAML 配置文件中的规则，增删后自动热重载',
+        f7_title: '重启 Clash', f7_desc: '一键将 profile 规则同步到 Clash Verge Rev 快照文件并重启内核',
+        f8_title: '多语言', f8_desc: '简体中文 / English / 日本語，三语言无缝切换',
+        f9_title: 'Material Design 3', f9_desc: 'Google MD3 设计风格，支持亮色/暗色/玻璃拟态多主题',
+        compare_title: '没有 Omega vs <span class="accent">有了 Omega</span>',
+        compare_desc: '同样是 Clash 用户，体验完全不同',
+        compare_before_title: '没有 ClashOmega', compare_after_title: '有了 ClashOmega',
+        compare_b1_meta: '用户', compare_b1_text: '这个网站打不开，需要加规则',
+        compare_b2_meta: '操作', compare_b2_text: '打开 Clash 配置文件 → 找到 rules → 手动添加 → 保存 → 热重载',
+        compare_b3_meta: '用户', compare_b3_text: '不知道该加到哪个代理组...',
+        compare_b4_meta: '结果', compare_b4_text: '翻文档查规则格式 → 试错 → 可能配错 → 浪费 10 分钟',
+        compare_a1_meta: '用户', compare_a1_text: '这个网站打不开，需要加规则',
+        compare_a2_meta: 'ClashOmega', compare_a2_text: '[检测域名] → 匹配代理组 → 一键添加',
+        compare_a3_meta: '用户', compare_a3_text: '搞定了？',
+        compare_a4_meta: 'ClashOmega', compare_a4_text: '[自动热重载] 规则已生效，3 秒搞定',
+        flow_title: '规则匹配<span class="accent">处理流程</span>',
+        flow_desc: '从打开网页到规则生效，全程自动化',
+        flow_1_title: '打开网页', flow_1_desc: '浏览器加载页面，扩展自动检测当前域名',
+        flow_2_title: '域名匹配', flow_2_desc: '本地规则匹配 + Clash API 回退查询',
+        flow_3_title: '一键添加', flow_3_desc: '选择代理组，规则自动写入 YAML 或扩展脚本',
+        flow_4_title: '热重载', flow_4_desc: '自动通过 Clash API 热重载，500ms 防抖',
+        modes_title: '三种代理<span class="accent">模式切换</span>',
+        modes_desc: '一键切换，图标颜色实时变化，状态一目了然',
+        mode_1_title: '系统代理', mode_1_desc: '使用 Windows 系统代理设置，兼容所有应用',
+        mode_2_title: '直连', mode_2_desc: '不走任何代理，直接连接，适合内网或国内站点',
+        mode_3_title: 'Clash 代理', mode_3_desc: '通过 Clash 内核代理，规则匹配，灵活控制',
+        install_title: '三步<span class="accent">快速安装</span>',
+        install_desc: '加载扩展 + 安装 Native Host + 配置 API，即可使用',
+        install_1_title: '加载扩展', install_1_desc: '打开 chrome://extensions/，开启开发者模式，加载 extension/ 目录',
+        install_2_title: '安装 Native Host', install_2_desc: '右键运行 install.ps1，粘贴扩展 ID，完成注册',
+        install_3_title: '配置 API', install_3_desc: '点击扩展图标 → 设置，填写 Clash API 地址和密钥',
+        compat_title: '广泛<span class="accent">兼容性</span>',
+        compat_desc: '支持主流 Chromium 浏览器，基于 Clash Verge Rev 开发',
+        compat_1_title: '浏览器', compat_2_title: '代理内核', compat_3_title: '操作系统',
+        footer_desc: 'Chrome 浏览器扩展，用于管理 Clash 代理规则。致敬 SwitchyOmega / ZeroOmega。',
+        footer_docs: '文档', footer_resources: '资源', footer_related: '相关',
+        footer_readme: 'README', footer_changelog: '版本历史',
+        footer_github: 'GitHub 仓库', footer_issues: '问题反馈',
+        footer_copy: '© 2026 ClashOmega · ciskonc · MIT License'
+      },
+      en: {
+        doc_title: 'ClashOmega — Clash Proxy Rule Manager | Tribute to SwitchyOmega',
+        nav_features: 'Features', nav_compare: 'Compare', nav_flow: 'Workflow',
+        nav_modes: 'Modes', nav_install: 'Install', nav_compat: 'Compat',
+        hero_badge: 'Chrome Extension · v1.3.0 · Tribute to SwitchyOmega',
+        hero_title_1: 'Master Clash', hero_title_2: 'One Switch Ω',
+        hero_subtitle: 'ClashOmega is a Chrome extension that lets you <strong>switch between three modes</strong>, <strong>detect domain matching</strong>, and <strong>manage rules instantly</strong> — say goodbye to manual Clash config editing.',
+        stat_features: 'Features', stat_browsers: 'Browsers', stat_languages: 'Languages', stat_deps: 'Dependencies',
+        hero_cta_install: 'Quick Install', hero_cta_source: 'View Source',
+        features_title: 'Nine Core<span class="accent"> Features</span>',
+        features_desc: 'From mode switching to rule management, ClashOmega makes proxy control simple and intuitive',
+        f1_title: 'Three-Mode Switch', f1_desc: 'System proxy → Direct → Clash proxy, one-click switch with real-time icon color',
+        f2_title: 'Domain Match Detection', f2_desc: 'Detect which Clash rule the current domain matches, show matched group and policy',
+        f3_title: 'Quick Rule Add', f3_desc: 'Add current domain to a proxy group with one click, dynamic group list',
+        f4_title: 'Smart Domain Grouping', f4_desc: 'Detect all page domains, auto-suggest groups (e.g., i1.art.com, i2.art.com → *.art.com)',
+        f5_title: 'System Proxy Status', f5_desc: 'Real-time Windows system proxy status via Native Host registry read',
+        f6_title: 'Rule Management', f6_desc: 'View, add, delete rules in Clash YAML config, auto hot-reload after changes',
+        f7_title: 'Restart Clash', f7_desc: 'One-click sync profile rules to Clash Verge Rev snapshot and restart kernel',
+        f8_title: 'Multi-Language', f8_desc: 'Simplified Chinese / English / 日本語, seamless switching',
+        f9_title: 'Material Design 3', f9_desc: 'Google MD3 design, supports light/dark/glassmorphism themes',
+        compare_title: 'Without Omega vs <span class="accent">With Omega</span>',
+        compare_desc: 'Same Clash users, completely different experience',
+        compare_before_title: 'Without ClashOmega', compare_after_title: 'With ClashOmega',
+        compare_b1_meta: 'User', compare_b1_text: 'This site won\'t load, need to add a rule',
+        compare_b2_meta: 'Action', compare_b2_text: 'Open Clash config → find rules → manually add → save → hot-reload',
+        compare_b3_meta: 'User', compare_b3_text: 'Don\'t know which proxy group to add to...',
+        compare_b4_meta: 'Result', compare_b4_text: 'Search docs for rule format → trial and error → might misconfigure → 10 min wasted',
+        compare_a1_meta: 'User', compare_a1_text: 'This site won\'t load, need to add a rule',
+        compare_a2_meta: 'ClashOmega', compare_a2_text: '[Detect domain] → Match proxy group → One-click add',
+        compare_a3_meta: 'User', compare_a3_text: 'Done?',
+        compare_a4_meta: 'ClashOmega', compare_a4_text: '[Auto hot-reload] Rule active, 3 seconds done',
+        flow_title: 'Rule Matching<span class="accent"> Workflow</span>',
+        flow_desc: 'From opening a page to rule activation, fully automated',
+        flow_1_title: 'Open Page', flow_1_desc: 'Browser loads page, extension auto-detects current domain',
+        flow_2_title: 'Domain Match', flow_2_desc: 'Local rule matching + Clash API fallback query',
+        flow_3_title: 'One-Click Add', flow_3_desc: 'Select proxy group, rule auto-written to YAML or extension script',
+        flow_4_title: 'Hot Reload', flow_4_desc: 'Auto hot-reload via Clash API, 500ms debounce',
+        modes_title: 'Three Proxy<span class="accent"> Mode Switch</span>',
+        modes_desc: 'One-click switch, real-time icon color, status at a glance',
+        mode_1_title: 'System Proxy', mode_1_desc: 'Use Windows system proxy settings, compatible with all apps',
+        mode_2_title: 'Direct', mode_2_desc: 'No proxy, direct connection, suitable for intranet or domestic sites',
+        mode_3_title: 'Clash Proxy', mode_3_desc: 'Proxy via Clash kernel, rule matching, flexible control',
+        install_title: 'Three-Step<span class="accent"> Quick Install</span>',
+        install_desc: 'Load extension + Install Native Host + Configure API, ready to use',
+        install_1_title: 'Load Extension', install_1_desc: 'Open chrome://extensions/, enable developer mode, load extension/ directory',
+        install_2_title: 'Install Native Host', install_2_desc: 'Right-click run install.ps1, paste extension ID, complete registration',
+        install_3_title: 'Configure API', install_3_desc: 'Click extension icon → Settings, fill in Clash API address and secret',
+        compat_title: 'Broad<span class="accent"> Compatibility</span>',
+        compat_desc: 'Supports mainstream Chromium browsers, built on Clash Verge Rev',
+        compat_1_title: 'Browsers', compat_2_title: 'Proxy Kernel', compat_3_title: 'OS',
+        footer_desc: 'Chrome extension for managing Clash proxy rules. Tribute to SwitchyOmega / ZeroOmega.',
+        footer_docs: 'Docs', footer_resources: 'Resources', footer_related: 'Related',
+        footer_readme: 'README', footer_changelog: 'Changelog',
+        footer_github: 'GitHub Repo', footer_issues: 'Report Issues',
+        footer_copy: '© 2026 ClashOmega · ciskonc · MIT License'
+      }
+    };
+
+    function detectLanguage() {
+      const saved = localStorage.getItem('co-lang');
+      if (saved) return saved;
+      const browserLang = navigator.language || navigator.userLanguage || 'en';
+      return browserLang.toLowerCase().startsWith('zh') ? 'zh' : 'en';
+    }
+
+    let currentLang = detectLanguage();
+
+    function applyLanguage(lang) {
+      currentLang = lang;
+      localStorage.setItem('co-lang', lang);
+      document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+      if (i18n[lang].doc_title) document.title = i18n[lang].doc_title;
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (i18n[lang][key] !== undefined) el.innerHTML = i18n[lang][key];
+      });
+      document.querySelectorAll('.lang-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.lang === lang);
+      });
+    }
+
+    document.querySelectorAll('.lang-btn').forEach(btn => {
+      btn.addEventListener('click', () => applyLanguage(btn.dataset.lang));
+    });
+
+    applyLanguage(currentLang);
+
+    // ===== 导航栏滚动效果 =====
+    const nav = document.querySelector('nav');
+    window.addEventListener('scroll', () => {
+      nav.classList.toggle('scrolled', window.scrollY > 50);
+    });
+
+    // ===== 移动端导航 =====
+    const navToggle = document.getElementById('navToggle');
+    const navLinks = document.getElementById('navLinks');
+    navToggle.addEventListener('click', () => {
+      navLinks.classList.toggle('open');
+    });
+
+    // ===== 滚动入场动画 =====
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+        } else {
+          entry.target.classList.remove('visible');
+        }
+      });
+    }, { threshold: 0.12, rootMargin: '0px 0px -60px 0px' });
+
+    document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+    // ===== 数字滚动 =====
+    const counters = document.querySelectorAll('.stat-number');
+    const counterObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const el = entry.target;
+          const target = parseInt(el.dataset.target);
+          const suffix = el.dataset.suffix || '';
+          let current = 0;
+          const step = Math.max(1, Math.ceil(target / 30));
+          const timer = setInterval(() => {
+            current += step;
+            if (current >= target) {
+              current = target;
+              clearInterval(timer);
+            }
+            el.textContent = current + suffix;
+          }, 30);
+          counterObserver.unobserve(el);
+        }
+      });
+    }, { threshold: 0.5 });
+
+    counters.forEach(c => counterObserver.observe(c));
+
+    // ===== 鼠标光晕 =====
+    const cursorGlow = document.querySelector('.cursor-glow');
+    document.addEventListener('mousemove', (e) => {
+      cursorGlow.style.left = e.clientX + 'px';
+      cursorGlow.style.top = e.clientY + 'px';
+    });
+  </script>
+</body>
+</html>
