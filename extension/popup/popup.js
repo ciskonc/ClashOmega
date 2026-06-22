@@ -138,7 +138,13 @@ function showNativeError(result, fallbackKey) {
  */
 async function initTheme() {
   const { settings } = await chrome.storage.local.get('settings');
-  const theme = settings?.theme || 'auto';
+  let theme = settings?.theme || 'auto';
+  // 玻璃拟态主题暂未启用，回退到 auto
+  if (theme === 'glass') {
+    theme = 'auto';
+    settings.theme = 'auto';
+    await chrome.storage.local.set({ settings });
+  }
   applyTheme(theme);
 }
 

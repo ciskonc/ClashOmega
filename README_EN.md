@@ -44,7 +44,7 @@
 | Feature | Description |
 |---------|-------------|
 | Four-tab Layout | Proxy / Rules / Domain / Settings tabs, supports drag-and-drop sorting and cross-tab module migration |
-| Multi-theme System | MD3 Light / MD3 Dark / Glassmorphism Light / Glassmorphism Dark / Auto Follow System |
+| Multi-theme System | MD3 Light / MD3 Dark / Auto Follow System |
 | Global Font Scale | 70%-130% font size adjustment, real-time preview |
 | Rule Pagination & Search | Configurable page size (10/20/50/100) + 200ms debounce search |
 | Multi-language | 简体中文 / English / 日本語 |
@@ -164,7 +164,7 @@ extension/          # Chrome extension
 ├── popup/          # Popup UI
 │   ├── popup.html   # Four-tab structure
 │   ├── popup.js     # Tab system + drag-sort + theme switch + domain match + rule add/delete
-│   └── popup.css    # MD3 + Glassmorphism multi-theme styles
+│   └── popup.css    # MD3 multi-theme styles
 ├── locales/        # i18n files (zh_CN / en / ja)
 └── icons/          # Mode icons
 

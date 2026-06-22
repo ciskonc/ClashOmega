@@ -30,15 +30,13 @@
 
 #### 1.2 多主题系统
 
-新增 4 套主题 + 自动跟随系统模式：
+新增 2 套主题 + 自动跟随系统模式：
 
 - **MD3 亮色**（Material Design 3 浅色）
 - **MD3 暗色**（Material Design 3 深色）
-- **玻璃拟态 亮色**（Glassmorphism Light）
-- **玻璃拟态 暗色**（Glassmorphism Dark）
 - **自动跟随系统**（`prefers-color-scheme` 媒体查询）
 
-实现方式：`data-theme` + `data-glass-variant` 属性切换 CSS 变量，不影响功能逻辑。
+实现方式：`data-theme` 属性切换 CSS 变量，不影响功能逻辑。
 
 #### 1.3 设置页子标签页系统
 
@@ -136,12 +134,9 @@
 
 ### 四、UI/UX 改进
 
-#### 4.1 玻璃拟态背景优化
+#### 4.1 主题对比度优化
 
-- 进一步降低玻璃拟态主题背景亮度，避免前景内容对比度不足
-- 亮色变体：`#b8bbc0 → #888c94`
-- 暗色变体：`#3a3d42 → #1c1e22`
-- auto 暗色变体同步更新
+- 优化主题背景与文字对比度，确保可读性
 
 #### 4.2 设置模块锁定
 
@@ -152,7 +147,7 @@
 #### 4.3 子标签页样式
 
 - 新增 `.settings-sub-tab-bar` / `.settings-sub-tab` / `.settings-sub-tab-content` 样式
-- 玻璃拟态主题适配（亮色 + 暗色变体）
+- 主题适配（亮色 + 暗色）
 - active 状态使用 primary 色下边框
 
 ---
@@ -200,7 +195,7 @@
 | `extension/lib/proxy-manager.js` | 代理模式切换封装 |
 | `extension/lib/domain-detector.js` | 域名检测逻辑 |
 | `extension/popup/popup.html` | 四标签页重构；设置页子标签页结构；域名检测当前域名布局修改 |
-| `extension/popup/popup.css` | 多主题系统；子标签页样式；玻璃拟态背景优化；锁定模块样式；域名显示修复（flex-wrap）；规则分页样式 |
+| `extension/popup/popup.css` | 多主题系统；子标签页样式；主题对比度优化；锁定模块样式；域名显示修复（flex-wrap）；规则分页样式 |
 | `extension/popup/popup.js` | XSS 修复（S-001）；标签页系统；拖拽排序；主题切换；缩放；子标签页切换逻辑；保存按钮绑定；设置模块锁定；搜索框失效修复；系统代理状态渲染更新（支持 `browserMode`） |
 | `extension/locales/zh_CN.json` | 新增 30+ i18n key |
 | `extension/locales/en.json` | 新增 30+ i18n key；修复尾逗号 |
