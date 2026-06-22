@@ -224,13 +224,28 @@ Sing-Box、Clash（Meta/Mihomo）、Xray/V2Ray、Surge
 
 </details>
 
+<details>
+<summary>🤖 相关推荐：AOS — Agent Operating System（点击展开）</summary>
+
+### [AOS](https://github.com/MagicalYuYu/agent-operating-system)
+
+> 自我拆任务 → 自我执行 → 自我验证 → 自我进化
+
+纯文件系统驱动的 Agent 协作框架，零代码依赖。通过结构化目录和规则文件，让 AI Agent 在多会话间保持状态一致、知识积累和任务协同。ClashOmega v1.3.0 的开发全程基于 AOS 框架协作完成。
+
+- **纯文件系统**：所有状态、记忆、知识存储在磁盘文件中，不依赖运行时内存
+- **多会话协同**：不同对话独立 Agent 实例，通过文件系统交互
+- **Skill/Loop/Agent 模块化**：可演化的工具体系，持续积累经验与坑点
+- **Maker/Checker 分离**：同一任务不在同一会话中执行+验证
+
+</details>
+
 ## 致谢
 
 - [MagicalYu](https://github.com/MagicalYuYu) — 首席小白鼠兼 AI 编码调教师。本项目开发期间，以独到的"调教"技巧让 AI 高效产出可用的代码。没有他的阴阳怪气，就没有现在的 ClashOmega。
+- 本项目基于 [AOS](https://aos.magicalyu.online/)（Agent Operating System）框架协作完成
 
 ---
-
-本项目基于 [AOS](https://aos.magicalyu.online/)（Agent Operating System）框架协作完成
 
 ## 版本历史
 

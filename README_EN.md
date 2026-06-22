@@ -224,13 +224,28 @@ Can be used with this extension: sublink-worker handles subscription conversion 
 
 </details>
 
+<details>
+<summary>🤖 Related: AOS — Agent Operating System (click to expand)</summary>
+
+### [AOS](https://github.com/MagicalYuYu/agent-operating-system)
+
+> Self-decompose → Self-execute → Self-verify → Self-evolve
+
+A pure file-system-driven Agent collaboration framework with zero code dependencies. Through structured directories and rule files, it enables AI Agents to maintain state consistency, knowledge accumulation, and task coordination across multiple sessions. ClashOmega v1.3.0 was developed entirely using the AOS framework.
+
+- **Pure File System**: All state, memory, and knowledge stored in disk files, no runtime memory dependency
+- **Multi-session Coordination**: Independent Agent instances in different conversations interact via the file system
+- **Skill/Loop/Agent Modularization**: Evolvable tool system with continuous experience and pitfall accumulation
+- **Maker/Checker Separation**: The same task is never both executed and verified in the same session
+
+</details>
+
 ## Acknowledgements
 
 - [MagicalYu](https://github.com/MagicalYuYu) — Chief guinea pig & AI coding whisperer. Throughout this project's development, he patiently tested every bug repeatedly and wielded unique "whispering" skills to make the AI produce usable code. Without his sacrifice (and countless "this doesn't work, try again"), ClashOmega wouldn't exist today.
+- This project is built with [AOS](https://aos.magicalyu.online/) (Agent Operating System) framework
 
 ---
-
-This project is built with [AOS](https://aos.magicalyu.online/) (Agent Operating System) framework
 
 ## Version History
 
