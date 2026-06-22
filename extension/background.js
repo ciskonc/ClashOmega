@@ -202,12 +202,12 @@ async function handleMessage(message) {
 
       // ──── Clash 服务管理 ────
       case 'setConfigPath': {
-        const result = await sendToNative({ action: 'setConfigPath', path: message.path });
+        const result = await sendToNativeSafe({ action: 'setConfigPath', path: message.path });
         return result;
       }
 
       case 'ping': {
-        const result = await sendToNative({ action: 'ping' });
+        const result = await sendToNativeSafe({ action: 'ping' });
         return result;
       }
 
