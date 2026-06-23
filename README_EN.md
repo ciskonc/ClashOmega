@@ -108,9 +108,10 @@ Option 2: PowerShell Command
 
 #### 3. Configure Clash API
 
-1. Click the extension icon → Settings (gear button)
-2. Fill in Clash API URL (default `http://127.0.0.1:9090`) and secret
-3. Leave config path empty for auto-detection (supports Clash Verge Rev `profiles.yaml`)
+1. In Clash Verge Rev, go to "Settings" → "Clash Settings" → Enable "External Controller", note the port (default `9090`) and Secret
+2. Click the extension icon → Settings (gear button)
+3. Fill in Clash API URL (default `http://127.0.0.1:9090`) and secret
+4. Leave config path empty for auto-detection (supports Clash Verge Rev `profiles.yaml`)
 
 ---
 
