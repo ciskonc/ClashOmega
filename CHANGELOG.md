@@ -1,7 +1,5 @@
 # 更新日志
 
-> 本文档记录 Fork 自上游 [ciskonc/ClashOmega](https://github.com/ciskonc/ClashOmega) 后的所有变更
-
 ---
 
 ## v1.3.1 (2026-06-23)
@@ -267,12 +265,6 @@
 
 ---
 
-### 七、致谢
-
-本次更新基于 [AOS](https://aos.magicalyu.online/)（Agent Operating System）框架协作完成，感谢原作者 [@ciskonc](https://github.com/ciskonc) 的开源贡献。
-
----
-
 ## v1.2.2 及更早版本
 
-请参考上游仓库 [ciskonc/ClashOmega](https://github.com/ciskonc/ClashOmega) 的版本历史。
+略。
