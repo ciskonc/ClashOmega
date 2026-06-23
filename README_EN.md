@@ -4,7 +4,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.3.2-blue?style=flat-square)](https://github.com/ciskonc/ClashOmega)
+[![Version](https://img.shields.io/badge/version-1.3.0-blue?style=flat-square)](https://github.com/ciskonc/ClashOmega)
 [![Platform](https://img.shields.io/badge/platform-Chromium%20Browsers-green?style=flat-square)](https://github.com/ciskonc/ClashOmega)
 [![License](https://img.shields.io/badge/license-MIT-orange?style=flat-square)](LICENSE)
 [![Manifest](https://img.shields.io/badge/Manifest-V3-purple?style=flat-square)](https://developer.chrome.com/docs/extensions/mv3/intro/)
@@ -39,7 +39,7 @@
 | Rule Management | View, add, delete rules in Clash YAML config file (auto hot-reload after changes) |
 | Restart Clash | One-click sync profile rules to Clash Verge Rev snapshot file and restart kernel (use when hot-reload fails) |
 
-### UI/UX Features (v1.3.0+ New)
+### UI/UX Features (v1.3.0 New)
 
 | Feature | Description |
 |---------|-------------|
@@ -47,18 +47,13 @@
 | Multi-theme System | MD3 Light / MD3 Dark / Auto Follow System |
 | Global Font Scale | 70%-130% font size adjustment, real-time preview |
 | Rule Pagination & Search | Configurable page size (10/20/50/100) + 200ms debounce search |
-| Script Rule Card Layout | Extra script rules displayed as two-line cards: metadata row (source+type+proxy group+policy) + domain row |
-| Native Host Status Detection | Auto-detect Native Host installation on settings page; shows "Not Installed" for system proxy when absent |
-| Auto-detect Config Path | Auto-detect Clash Verge Rev config path and fill into text box |
 | Multi-language | 简体中文 / English / 日本語 |
 
-### Installation & Security (v1.3.0+ New)
+### Installation & Security (v1.3.0 New)
 
 | Feature | Description |
 |---------|-------------|
 | Auto Install Script | `install.ps1` supports Chrome browser Native Host auto-registration |
-| Uninstall Script | `uninstall.ps1` one-click Native Host uninstall (compatible with Unicode UTF-8 locale) |
-| Domain Write Mode | Optional write to Script.js (default) or subscription YAML config file |
 | Clash API Auto-discovery | Reads port from Clash Verge Rev config file + port scanning + 401 auth detection |
 | Security Hardening | Fixed 13 security vulnerabilities (XSS, path traversal, process injection, missing CSP, etc.) |
 
@@ -108,10 +103,9 @@ Option 2: PowerShell Command
 
 #### 3. Configure Clash API
 
-1. In Clash Verge Rev, go to "Settings" → "Clash Settings" → Enable "External Controller", note the port (default `9090`) and Secret
-2. Click the extension icon → Settings (gear button)
-3. Fill in Clash API URL (default `http://127.0.0.1:9090`) and secret
-4. Leave config path empty for auto-detection (supports Clash Verge Rev `profiles.yaml`)
+1. Click the extension icon → Settings (gear button)
+2. Fill in Clash API URL (default `http://127.0.0.1:9090`) and secret
+3. Leave config path empty for auto-detection (supports Clash Verge Rev `profiles.yaml`)
 
 ---
 

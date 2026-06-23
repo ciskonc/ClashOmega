@@ -4,7 +4,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.3.2-blue?style=flat-square)](https://github.com/ciskonc/ClashOmega)
+[![Version](https://img.shields.io/badge/version-1.3.0-blue?style=flat-square)](https://github.com/ciskonc/ClashOmega)
 [![Platform](https://img.shields.io/badge/platform-Chromium%20Browsers-green?style=flat-square)](https://github.com/ciskonc/ClashOmega)
 [![License](https://img.shields.io/badge/license-MIT-orange?style=flat-square)](LICENSE)
 [![Manifest](https://img.shields.io/badge/Manifest-V3-purple?style=flat-square)](https://developer.chrome.com/docs/extensions/mv3/intro/)
@@ -39,7 +39,7 @@
 | 规则管理 | 查看、添加、删除 Clash YAML 配置文件中的规则（增删后自动热重载） |
 | 重启 Clash | 一键将 profile 规则同步到 Clash Verge Rev 快照文件并重启内核（热重载失效时使用） |
 
-### UI/UX 功能（v1.3.0+ 新增）
+### UI/UX 功能（v1.3.0 新增）
 
 | 功能 | 说明 |
 |------|------|
@@ -47,18 +47,13 @@
 | 多主题系统 | MD3 亮色 / MD3 暗色 / 自动跟随系统 |
 | 全局字号缩放 | 70%-130% 字号调节，实时预览 |
 | 规则分页与搜索 | 可配置每页规则数（10/20/50/100）+ 200ms 防抖搜索 |
-| 脚本规则卡片布局 | 额外脚本规则以卡片式两行显示：元数据行（来源+类型+代理组+策略）+ 域名行 |
-| Native Host 状态检测 | 设置页自动检测 Native Host 安装状态，未安装时系统代理显示 Null |
-| 自动检测配置路径 | 自动检测 Clash Verge Rev 配置路径并填入文本框 |
 | 多语言 | 简体中文 / English / 日本語 |
 
-### 安装与安全（v1.3.0+ 新增）
+### 安装与安全（v1.3.0 新增）
 
 | 功能 | 说明 |
 |------|------|
 | 自动化安装脚本 | `install.ps1` 支持 Chrome 浏览器 Native Host 自动注册 |
-| 卸载脚本 | `uninstall.ps1` 一键卸载 Native Host（兼容 Unicode UTF-8 区域设置） |
-| 域名写入模式 | 可选写入 Script.js（默认）或订阅 YAML 配置文件 |
 | Clash API 自动发现 | 从 Clash Verge Rev 配置文件读取端口 + 端口扫描 + 401 认证检测 |
 | 安全加固 | 修复 13 项安全漏洞（XSS、路径遍历、进程注入、CSP 缺失等） |
 
@@ -108,10 +103,9 @@ Native Host 用于读写 Clash 本地 YAML 配置文件（仅 Windows）。
 
 #### 3. 配置 Clash API
 
-1. 在 Clash Verge Rev 中打开「设置」→「Clash 设置」→ 开启「外部控制」（External Controller），记下端口号（默认 `9090`）和密钥（Secret）
-2. 点击扩展图标 → 设置（齿轮按钮）
-3. 填写 Clash API 地址（默认 `http://127.0.0.1:9090`）和密钥
-4. 配置文件路径留空则自动检测（支持 Clash Verge Rev 的 `profiles.yaml`）
+1. 点击扩展图标 → 设置（齿轮按钮）
+2. 填写 Clash API 地址（默认 `http://127.0.0.1:9090`）和密钥
+3. 配置文件路径留空则自动检测（支持 Clash Verge Rev 的 `profiles.yaml`）
 
 ---
 

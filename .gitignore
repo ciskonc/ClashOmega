@@ -1,0 +1,37 @@
+# Native Host 备份文件
+*.bak
+
+# 临时文件
+*.tmp
+*.log
+
+# IDE 配置
+.vscode/
+.idea/
+.trae/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node.js (如有)
+node_modules/
+
+# 打包文件
+*.zip
+
+# TRAE 工具产物（不应提交到仓库）
+agent-browser-*.exe
+
+# AOS 状态文件（不应提交到仓库）
+AGENT_STATUS.md
+STATUS.md
+AGENTS.md
+reference_links.md
+
+# 图标预览（开发用）
+icons_preview/
+
+# 版本快照（本地开发用，不提交）
+versions/
