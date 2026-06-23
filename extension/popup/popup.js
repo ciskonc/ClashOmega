@@ -209,11 +209,11 @@ const AVAILABLE_MODULES = [
  * 标签页布局版本号
  * 当默认布局结构发生重大变更时递增，旧版保存的布局将自动重置为新默认布局
  */
-const LAYOUT_VERSION = 2;
+const LAYOUT_VERSION = 3;
 
 /**
  * 获取默认标签页布局
- * 标签页 1：域名检测 + 代理模式（高频查看功能置首）
+ * 标签页 1：代理模式 + 域名检测（高频操作置首）
  * 标签页 2：规则管理（快捷添加 + 批量检测 + 脚本规则 + 内置规则）
  * 标签页 3：设置
  */
@@ -221,7 +221,7 @@ function getDefaultTabLayout() {
   return {
     layoutVersion: LAYOUT_VERSION,
     tabs: [
-      { id: 'tab-1', name: '', nameKey: 'default_tab_1', modules: ['domain-check', 'proxy-mode'] },
+      { id: 'tab-1', name: '', nameKey: 'default_tab_1', modules: ['proxy-mode', 'domain-check'] },
       { id: 'tab-2', name: '', nameKey: 'default_tab_2', modules: ['quick-add', 'batch-detect', 'script-rules', 'rule-list'] },
       { id: 'tab-3', name: '', nameKey: 'default_tab_3', modules: ['settings'] }
     ],
