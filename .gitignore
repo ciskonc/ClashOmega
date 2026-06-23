@@ -21,6 +21,9 @@ node_modules/
 # 打包文件
 *.zip
 
+# 文档
+.trae/
+
 # TRAE 工具产物（不应提交到仓库）
 agent-browser-*.exe
 
@@ -29,9 +32,3 @@ AGENT_STATUS.md
 STATUS.md
 AGENTS.md
 reference_links.md
-
-# 图标预览（开发用）
-icons_preview/
-
-# 版本快照（本地开发用，不提交）
-versions/
