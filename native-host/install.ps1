@@ -1,12 +1,25 @@
 ﻿# ClashOmega - Native Host Installer / 安装脚本
-# Usage: Right-click -> Run with PowerShell
-# 用法: 右键 -> 使用 PowerShell 运行
+# Usage: Double-click install.bat (recommended)
+#       或: powershell -ExecutionPolicy Bypass -File install.ps1 -ExtId <extension_id>
+# 用法: 双击 install.bat（推荐）
+# S-006 修复：移除多余的 UAC 自动提权（HKCU 注册表写入无需管理员权限）
+# S-014 修复：执行策略检测 + UTF-8 控制台编码兼容
 
-# ---- Auto UAC elevation / 自动管理员提权 ----
-if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    $arguments = "-ExecutionPolicy Bypass -File `"" + $MyInvocation.MyCommand.Path + "`""
-    Start-Process powershell.exe -Verb RunAs -ArgumentList $arguments
-    exit
+# ── UTF-8 控制台编码（兼容"使用 Unicode UTF-8"区域设置）──
+# 部分用户开启了 Windows 区域设置中的"使用 Unicode UTF-8 提供全球语言支持"
+# 导致系统代码页变为 65001，PowerShell 可能无法正确显示中文
+# 强制设置控制台编码为 UTF-8，确保中英文混合输出正常
+try {
+    [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+    [Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+    $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+    # 设置 chcp 65001（如果当前不是）
+    $currentCP = [Console]::InputEncoding.CodePage
+    if ($currentCP -ne 65001) {
+        chcp 65001 > $null 2>&1
+    }
+} catch {
+    # 编码设置失败不中断流程，仅影响显示
 }
 
 $ErrorActionPreference = 'Stop'
@@ -19,6 +32,20 @@ Write-Host '  ClashOmega - Native Host Installer' -ForegroundColor Cyan
 Write-Host '  ClashOmega - Native Host 安装程序' -ForegroundColor Cyan
 Write-Host '========================================' -ForegroundColor Cyan
 Write-Host ''
+
+# ── 执行策略检测 ──
+# 如果用户直接运行 ps1（非通过 install.bat），执行策略可能阻止脚本
+$execPolicy = Get-ExecutionPolicy -Scope CurrentUser
+if ($execPolicy -eq 'Restricted' -or $execPolicy -eq 'AllSigned') {
+    Write-Host '[WARNING] Execution Policy is Restricted/AllSigned' -ForegroundColor Yellow
+    Write-Host '[警告] 当前执行策略为 Restricted/AllSigned，可能导致脚本无法运行' -ForegroundColor Yellow
+    Write-Host ''
+    Write-Host 'Solutions / 解决方案:' -ForegroundColor Cyan
+    Write-Host '  1. Use install.bat (recommended) / 使用 install.bat（推荐）'
+    Write-Host '  2. Or run: Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned'
+    Write-Host '     或运行: Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned'
+    Write-Host ''
+}
 
 if (-not (Test-Path $BatFile)) {
     Write-Host '[ERROR] clash_rules_manager.bat not found' -ForegroundColor Red
@@ -50,7 +77,16 @@ Write-Host '  4. Copy the ID string'
 Write-Host '     复制 ID 字符串'
 Write-Host ''
 
-$ExtId = Read-Host 'Extension ID / 扩展 ID'
+$ExtId = ''
+$ExtIdParam = $false
+# 支持命令行参数 -ExtId
+if ($args -and $args.Count -ge 2 -and $args[0] -eq '-ExtId') {
+    $ExtId = $args[1]
+    $ExtIdParam = $true
+}
+if (-not $ExtId) {
+    $ExtId = Read-Host 'Extension ID / 扩展 ID'
+}
 if ([string]::IsNullOrWhiteSpace($ExtId)) {
     Write-Host '[ERROR] Extension ID cannot be empty / 扩展 ID 不能为空' -ForegroundColor Red
     Read-Host 'Press Enter to exit / 按 Enter 退出'
@@ -98,4 +134,7 @@ catch {
 }
 
 Write-Host ''
-Read-Host 'Press Enter to exit / 按 Enter 退出'
+# 交互模式才等待 Enter
+if (-not $ExtIdParam) {
+    Read-Host 'Press Enter to exit / 按 Enter 退出'
+}

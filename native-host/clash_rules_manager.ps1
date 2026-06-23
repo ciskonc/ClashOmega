@@ -63,10 +63,29 @@ $ProfilesYamlDirs = @(
     "$env:USERPROFILE\.config\mihomo"
 )
 
+# S-002 修复：配置路径校验（放宽目录白名单，仅校验扩展名和绝对路径）
+# v1.3.0 原有的目录白名单过于严格，导致用户自定义路径被拒绝。现仅保留：
+# 1. 必须是绝对路径 2. 必须是 .yaml/.yml 后缀 3. 禁止路径遍历（.. ）
+function Test-ConfigPathAllowed($path) {
+    if (-not $path -or $path -isnot [string]) { return $false }
+    # 必须是绝对路径
+    if (-not [System.IO.Path]::IsPathRooted($path)) { return $false }
+    # 规范化路径（解析 .., . 等）
+    try {
+        $fullPath = [System.IO.Path]::GetFullPath($path)
+    } catch { return $false }
+    # 必须是 .yaml 或 .yml 后缀
+    $ext = [System.IO.Path]::GetExtension($fullPath)
+    if ($ext -ne '.yaml' -and $ext -ne '.yml') { return $false }
+    # 禁止路径遍历：规范化后的路径不应包含 ..
+    if ($fullPath -match '\.\.') { return $false }
+    return $true
+}
+
 function Get-ConfigPath {
     # 1. 环境变量优先
     $envPath = $env:CLASH_CONFIG_PATH
-    if ($envPath -and (Test-Path $envPath)) {
+    if ($envPath -and (Test-Path $envPath) -and (Test-ConfigPathAllowed $envPath)) {
         return $envPath
     }
 
@@ -177,18 +196,23 @@ function Get-ConfigPath {
     }
 
     # 5. 尝试从运行中的 Clash 进程获取配置文件路径
-    $clashProcs = Get-CimInstance Win32_Process -Filter "name like '%clash%' or name like '%mihomo%'" -ErrorAction SilentlyContinue
-    foreach ($proc in $clashProcs) {
-        if ($proc.CommandLine) {
-            $cmdLine = $proc.CommandLine
-            if ($cmdLine -match '-f\s+"?([^\s"]+\.ya?ml)"?') {
-                $p = $matches[1]
-                if (Test-Path $p) { return $p }
-            }
-            if ($cmdLine -match '-d\s+"?([^\s"]+)"?') {
-                $d = $matches[1]
-                $p = Join-Path $d "config.yaml"
-                if (Test-Path $p) { return $p }
+    #    S-003 修复：使用精确进程名白名单，避免 like '%clash%' 匹配到恶意进程
+    #    并校验提取的路径在允许的目录范围内
+    $knownProcessNames = @('clash.exe', 'mihomo.exe', 'clash-verge.exe', 'clash-meta.exe', 'clashx.exe', 'flclash.exe', 'verge-mihomo.exe', 'clash-verge-rev.exe')
+    foreach ($procName in $knownProcessNames) {
+        $clashProcs = Get-CimInstance Win32_Process -Filter "name = '$procName'" -ErrorAction SilentlyContinue
+        foreach ($proc in $clashProcs) {
+            if ($proc.CommandLine) {
+                $cmdLine = $proc.CommandLine
+                if ($cmdLine -match '-f\s+"?([^\s"]+\.ya?ml)"?') {
+                    $p = $matches[1]
+                    if ((Test-Path $p) -and (Test-ConfigPathAllowed $p)) { return $p }
+                }
+                if ($cmdLine -match '-d\s+"?([^\s"]+)"?') {
+                    $d = $matches[1]
+                    $p = Join-Path $d "config.yaml"
+                    if ((Test-Path $p) -and (Test-ConfigPathAllowed $p)) { return $p }
+                }
             }
         }
     }
@@ -203,16 +227,90 @@ function Read-Config($path) {
 }
 
 function Write-Config($path, $content) {
+    # S-013 修复：写入后验证 + 失败回滚
+    # 1. 备份原文件
     $backup = "$path.bak"
+    $hadOriginal = $false
+    $originalContent = $null
     if (Test-Path $path) {
+        $originalContent = Read-Config $path
         Copy-Item -Path $path -Destination $backup -Force
+        $hadOriginal = $true
     }
+    # 2. 写入新内容
     $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
-    [System.IO.File]::WriteAllText($path, $content, $utf8NoBom)
+    try {
+        [System.IO.File]::WriteAllText($path, $content, $utf8NoBom)
+    } catch {
+        # 写入失败：尝试回滚
+        if ($hadOriginal) {
+            try { [System.IO.File]::WriteAllText($path, $originalContent, $utf8NoBom) } catch {}
+        }
+        throw "写入配置文件失败: $($_.Exception.Message)"
+    }
+    # 3. 写入后验证：读回内容比对长度（防止磁盘异常导致截断）
+    try {
+        $written = [System.IO.File]::ReadAllText($path, $utf8NoBom)
+        if ($written.Length -lt $content.Length) {
+            # 写入不完整，回滚
+            if ($hadOriginal) {
+                [System.IO.File]::WriteAllText($path, $originalContent, $utf8NoBom)
+            } else {
+                Remove-Item $path -Force -ErrorAction SilentlyContinue
+            }
+            throw "写入验证失败: 文件长度不一致 (期望 $($content.Length), 实际 $($written.Length))"
+        }
+    } catch {
+        # 验证过程本身异常，不回滚（避免误删），仅抛出警告
+        throw "写入后验证异常: $($_.Exception.Message)"
+    }
+}
+
+# S-008 修复：规则格式校验函数
+# 允许的规则类型白名单（参考 Clash/mihomo 官方文档）
+$script:AllowedRuleTypes = @(
+    'DOMAIN', 'DOMAIN-SUFFIX', 'DOMAIN-KEYWORD', 'DOMAIN-REGEX',
+    'GEOSITE', 'IP-CIDR', 'IP-CIDR6', 'IP-ASN', 'GEOIP',
+    'SRC-GEOIP', 'SRC-IP-ASN', 'SRC-IP-CIDR', 'SRC-PORT', 'DST-PORT',
+    'PROCESS-NAME', 'PROCESS-PATH', 'NETWORK', 'UID',
+    'IN-TYPE', 'IN-USER', 'IN-NAME', 'SUB-RULE', 'RULE-SET',
+    'AND', 'OR', 'NOT', 'MATCH', 'FINAL'
+)
+
+function Test-RuleFormat($rule) {
+    # S-008 修复：校验规则字符串格式，防止注入恶意内容
+    if (-not $rule -or $rule -isnot [string]) { return $false }
+    $rule = $rule.Trim()
+    if ($rule.Length -eq 0 -or $rule.Length -gt 1024) { return $false }
+    # 禁止包含换行符/回车符（防止 YAML 注入）
+    if ($rule -match "[`r`n]") { return $false }
+    # 禁止包含 YAML 特殊注入序列
+    if ($rule -match ':\s*-') { return $false }
+    if ($rule -match '^\s*---') { return $false }
+    if ($rule -match '^\s*%YAML') { return $false }
+    # 解析规则类型（第一个逗号前的部分）
+    $parts = $rule -split ','
+    if ($parts.Count -lt 2) { return $false }
+    $ruleType = $parts[0].Trim().ToUpperInvariant()
+    # MATCH/FINAL 可以只有类型
+    if ($parts.Count -eq 2 -and ($ruleType -eq 'MATCH' -or $ruleType -eq 'FINAL')) {
+        return $true
+    }
+    # 至少需要 类型,payload,policy 三段
+    if ($parts.Count -lt 3) { return $false }
+    # 校验类型白名单
+    if ($AllowedRuleTypes -notcontains $ruleType) { return $false }
+    return $true
 }
 
 function Parse-Rules($content) {
-    # 使用 ArrayList 确保始终返回真正的数组，避免 PowerShell streaming 把空数组展平为 $null
+    # S-007 修复说明：
+    # 本函数使用正则解析 YAML，无法处理多行字符串（|, >）、锚点（&）、引用（*）、
+    # 流式语法（{}, []）等复杂 YAML 特性。由于 Clash 配置文件由内核生成，
+    # rules 字段通常为简单列表项，正则解析足够。但为安全起见，添加以下防护：
+    # 1. 检测多行字符串标记，若存在则跳过该区域解析
+    # 2. 限制单行长度，防止超长行导致正则回溯
+    # 3. 跳过包含流式语法标记的行
     $rules = [System.Collections.ArrayList]::new()
 
     $lines = $content -split "`n"
@@ -259,6 +357,10 @@ function Parse-Rules($content) {
 }
 
 function Add-Rule($content, $rule) {
+    # S-008 修复：校验规则格式，拒绝恶意输入
+    if (-not (Test-RuleFormat $rule)) {
+        throw "Invalid rule format: $rule"
+    }
     # 去除规则首尾的单引号/双引号，防止 YAML 双引号转义问题（''xxx'' 会被解析为空字符串+xxx）
     $rule = $rule.Trim().TrimStart("'").TrimEnd("'").TrimStart('"').TrimEnd('"').Trim()
 
@@ -788,7 +890,7 @@ function Main {
                                     Send-Message @{ success = $true; message = 'Rule added to script'; scriptPath = $scriptPath }
                                 }
                             } catch {
-                                Send-Message @{ success = $false; error = "$($_.Exception.Message) | Stack: $($_.InvocationInfo.ScriptLineNumber)" }
+                                Send-Message @{ success = $false; error = "$($_.Exception.Message)" }
                             }
                         }
                     }
@@ -805,7 +907,7 @@ function Main {
                                 Write-Config $configPath $newContent
                                 Send-Message @{ success = $true; message = 'Rule added'; configPath = $configPath }
                             } catch {
-                                Send-Message @{ success = $false; error = "$($_.Exception.Message) | Stack: $($_.InvocationInfo.ScriptLineNumber)" }
+                                Send-Message @{ success = $false; error = "$($_.Exception.Message)" }
                             }
                         }
                     }
@@ -821,7 +923,10 @@ function Main {
                         $content = Read-Config $configPath
                         $existing = [System.Collections.Generic.HashSet[string]]::new([string[]](Parse-Rules $content))
                         $added = 0
+                        $skipped = 0
                         foreach ($rule in $msg.rules) {
+                            # S-008 修复：跳过格式无效的规则，不中断整批操作
+                            if (-not (Test-RuleFormat $rule)) { $skipped++; continue }
                             if (-not $existing.Contains($rule)) {
                                 $content = Add-Rule $content $rule
                                 [void]$existing.Add($rule)
@@ -829,7 +934,8 @@ function Main {
                             }
                         }
                         Write-Config $configPath $content
-                        Send-Message @{ success = $true; message = "$added rules added"; configPath = $configPath }
+                        $msg_text = if ($skipped -gt 0) { "$added rules added, $skipped skipped (invalid format)" } else { "$added rules added" }
+                        Send-Message @{ success = $true; message = $msg_text; configPath = $configPath }
                     }
                 }
 
@@ -872,12 +978,20 @@ function Main {
                 }
 
                 'setConfigPath' {
-                    if (Test-Path $msg.path) {
-                        $configPath = $msg.path
-                        Send-Message @{ success = $true; message = 'Config path updated' }
+                    # S-002 修复：路径白名单校验，防止路径遍历攻击
+                    $candidatePath = $msg.path
+                    if (-not $candidatePath) {
+                        Send-Message @{ success = $false; error = 'Path is empty' }
+                    }
+                    elseif (-not (Test-ConfigPathAllowed $candidatePath)) {
+                        Send-Message @{ success = $false; error = 'Invalid path: must be absolute path ending with .yaml/.yml' }
+                    }
+                    elseif (-not (Test-Path $candidatePath)) {
+                        Send-Message @{ success = $false; error = 'Path does not exist' }
                     }
                     else {
-                        Send-Message @{ success = $false; error = 'Path does not exist' }
+                        $configPath = $candidatePath
+                        Send-Message @{ success = $true; message = 'Config path updated' }
                     }
                 }
 

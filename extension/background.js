@@ -50,12 +50,14 @@ async function handleMessage(message) {
         const proxyPort = clashRunning
           ? extractProxyPort(config, settings.clashProxyHost).port
           : settings.clashProxyPort;
+        // 始终返回完整 sysProxy 对象（包含 nativeHostAvailable 字段）
+        // popup 根据 nativeHostAvailable 决定显示 Null 还是实际状态
         return {
           mode: settings.currentMode,
           clashRunning,
           config,
           proxyPort,
-          sysProxy: sysProxy.success ? sysProxy : null,
+          sysProxy: sysProxy,
           nativeHostInstalled,
           clashProxyHost: settings.clashProxyHost,
           clashProxyPort: settings.clashProxyPort
@@ -130,14 +132,16 @@ async function handleMessage(message) {
       // 写入成功后返回，用户需手动重启 Clash 生效
       case 'addRule': {
         const settings = await getSettings();
-        const useScript = settings.useScriptRule === true;
+        // useScriptRule=true 表示"写入 YAML"，此时 useScript=false（不写入 Script.js）
+        // useScriptRule=false 表示"写入 Script.js"（默认），此时 useScript=true
+        const useScript = settings.useScriptRule !== true;
         const result = await addClashRule(message.rule, settings.clashConfigPath, useScript);
         return result;
       }
 
       case 'batchAddRules': {
         const settings = await getSettings();
-        const useScript = settings.useScriptRule === true;
+        const useScript = settings.useScriptRule !== true;
         // useScript=true 时逐条写入 Script.js（Native Host 已支持）
         if (useScript) {
           let added = 0;
@@ -154,8 +158,8 @@ async function handleMessage(message) {
       case 'removeRule': {
         const settings = await getSettings();
         // 优先使用消息中的 useScript（来自扩展脚本规则列表的删除按钮），
-        // 否则使用设置中的 useScriptRule
-        const useScript = message.useScript === true || (message.useScript === undefined && settings.useScriptRule === true);
+        // 否则使用设置中的 useScriptRule（true=写YAML → useScript=false, false=写Script.js → useScript=true）
+        const useScript = message.useScript === true || (message.useScript === undefined && settings.useScriptRule !== true);
         const result = await removeClashRule(message.rule, settings.clashConfigPath, useScript);
         return result;
       }
@@ -202,12 +206,12 @@ async function handleMessage(message) {
 
       // ──── Clash 服务管理 ────
       case 'setConfigPath': {
-        const result = await sendToNative({ action: 'setConfigPath', path: message.path });
+        const result = await sendToNativeSafe({ action: 'setConfigPath', path: message.path });
         return result;
       }
 
       case 'ping': {
-        const result = await sendToNative({ action: 'ping' });
+        const result = await sendToNativeSafe({ action: 'ping' });
         return result;
       }
 

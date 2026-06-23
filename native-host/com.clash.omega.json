@@ -1,9 +1,9 @@
 {
-    "name":  "com.clash.omega",
+    "path":  "D:\\libraries\\Desktop\\trae\\agent-operating-system\\01_PROJECTS\\clash_omega\\versions\\dev\\native-host\\clash_rules_manager.bat",
     "description":  "ClashOmega Native Messaging Host",
-    "path":  "D:\\libraries\\Desktop\\trae\\agent-operating-system\\01_PROJECTS\\clash_omega\\native-host\\clash_rules_manager.bat",
-    "type":  "stdio",
+    "name":  "com.clash.omega",
     "allowed_origins":  [
-                            "chrome-extension://fdgknljcdboepogmoodenocogmianfho/"
-                        ]
+                            "chrome-extension://aplkgjodcbjifkkdokagbdlcgkokpaml/"
+                        ],
+    "type":  "stdio"
 }

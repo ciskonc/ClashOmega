@@ -1,2 +1,3 @@
 @echo off
-powershell.exe -ExecutionPolicy Bypass -File "%~dp0clash_rules_manager.ps1"
+chcp 65001 >nul 2>&1
+powershell.exe -ExecutionPolicy Bypass -NoProfile -File "%~dp0clash_rules_manager.ps1"
