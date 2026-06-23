@@ -1,11 +1,5 @@
 // Clash REST API 封装（只读 GET + 配置重载 PUT）
 // 规则修改由 Native Messaging Host 完成
-//
-// S-005 安全说明：
-// Clash API 密钥存储在 chrome.storage.local 中（明文）。
-// 这是 Chrome 扩展 MV3 的标准做法，扩展存储本身是隔离的。
-// 密钥仅用于本地 127.0.0.1 API 认证，即使泄露也只能控制本地 Clash 内核。
-// 如需更高安全性，可考虑通过 Native Messaging Host 中转 API 请求（未来增强）。
 
 // Clash 常见 API 端口（自动探测）
 const CLASH_API_PORTS = [9090, 9097, 9098, 9091, 8080];
