@@ -70,7 +70,7 @@ Native Host 用于读写 Clash 本地 YAML 配置文件（仅 Windows）。
 
 </details>
 
-1. 右键 `native-host/install.ps1` → **使用 PowerShell 运行**（需先开启脚本执行权限，见下方说明）
+1. 右键 `native-host/install.ps1` → **使用 PowerShell 运行**（需先开启脚本执行权限，见上方说明）
 2. 扩展 ID 已固定为 `llfbhodadhnfobbbkipelhknkjdflggm`，直接回车即可
 3. 刷新扩展
 
