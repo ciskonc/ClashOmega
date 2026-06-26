@@ -76,6 +76,7 @@
 
 ## 安装
 
+> ⚠ **从 v1.3.6 及以下升级到 v1.3.7+**：扩展 ID 已固定，**必须重新运行 `native-host/install.ps1`**（回车使用默认 ID 即可），否则 Native Host 因 ID 不匹配而无法启动。详见 [v1.3.7 Release Notes](https://github.com/ciskonc/ClashOmega/releases/tag/v1.3.7)。
 
 #### 1. 加载扩展
 

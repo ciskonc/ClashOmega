@@ -20,7 +20,6 @@
 - 通过 `manifest.json` 的 `key` 字段固定扩展 ID 为 `llfbhodadhnfobbbkipelhknkjdflggm`
 - `native-host/com.clash.omega.json` 的 `allowed_origins` 写死固定 ID
 - `install.ps1` 默认 ExtId 设为固定 ID，用户直接回车即可安装，无需手动查找扩展 ID
-- 私钥保存于 `credentials/clashomega_private_key.pem`（不入 git），泄露后他人可冒充发布扩展更新
 
 ---
 
