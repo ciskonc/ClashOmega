@@ -249,6 +249,9 @@ Sing-Box、Clash（Meta/Mihomo）、Xray/V2Ray、Surge
 
 ## 致谢
 
+- [Clash](https://github.com/Dreamacro/clash) — 由 Dreamacro 创建的 Clash 内核，本项目所控制的核心代理引擎
+- [Clash Verge Rev](https://github.com/clash-verge-rev/clash-verge-rev) — 基于 Tauri 的 Clash GUI 客户端，本项目开发与测试的主要运行环境，其配置文件格式与扩展脚本机制为本项目提供了规则管理的基础
+- [SwitchyOmega](https://github.com/FelisCatus/SwitchyOmega) / [ZeroOmega](https://github.com/zero-peak/ZeroOmega) — 本项目灵感来源，致敬其在浏览器代理管理领域的开创性工作
 - [MagicalYu](https://github.com/MagicalYuYu) — 首席小白鼠兼 AI 编码调教师。本项目开发期间，以独到的"调教"技巧让 AI 高效产出可用的代码。没有他的阴阳怪气，就没有现在的 ClashOmega。
 - 本项目基于 [AOS](https://aos.magicalyu.online/)（Agent Operating System）框架协作完成
 
