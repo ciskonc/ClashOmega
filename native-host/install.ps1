@@ -1,4 +1,4 @@
-# ClashOmega - Native Host Installer / 安装脚本
+﻿# ClashOmega - Native Host Installer / 安装脚本
 # Usage: Double-click install.bat (recommended)
 #       或: powershell -ExecutionPolicy Bypass -File install.ps1 -ExtId <extension_id>
 # 用法: 双击 install.bat（推荐）
