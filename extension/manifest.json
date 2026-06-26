@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "ClashOmega",
-    "version": "1.3.3",
+    "version": "1.3.6",
     "description": "控制 Clash 代理模式，直接管理 YAML 规则（致敬 SwitchyOmega / ZeroOmega）",
     "permissions": [
         "proxy",
