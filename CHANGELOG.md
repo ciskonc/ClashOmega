@@ -2,6 +2,48 @@
 
 ---
 
+## v1.3.5 (2026-06-26)
+
+**弹窗加载性能优化 + 关键 bug 修复。**
+
+---
+
+### 一、Bug 修复
+
+- **修复 `ReferenceError: statusPromise is not defined`**：`DOMContentLoaded` 中引用了 `initPopup()` 内部定义的 `statusPromise` 变量，跨作用域访问导致弹窗初始化崩溃（保存配置后弹窗消失）。修复方式：将 `statusPromise` 提升到 `DOMContentLoaded` 作用域，通过参数传递给 `initPopup`
+
+### 二、弹窗并行渐进式渲染
+
+**优化前**（串行等待 7 步）：
+```
+theme → i18n → zoom → layout → getStatus(网络) → [initPopup内部] tabs.query → getTabLayout(重复!) → storage.get → renderModeSwitch
+```
+
+**优化后**（并行竞速 + 先到先渲染）：
+```
+theme → i18n → zoom → layout → ┬─ settingsPromise(.then → renderModeSwitch)     ← 本地存储，几乎瞬时
+                               └─ statusPromise(.then → renderClashStatus + renderSystemProxyStatus)  ← 网络，稍慢
+                               ↓
+                               await statusPromise → loadSettingsForm
+                               → initPopup(layout, settingsPromise)  ← 不再重复 getTabLayout/storage.get
+```
+
+| 改动点 | 说明 |
+|--------|------|
+| `settings` 与 `getStatus` 并行发起 | `chrome.storage.local.get('settings')`（本地，毫秒级）和 `sendToBackground({action:'getStatus'})`（网络，百毫秒~秒级）同时启动 |
+| 各自 `.then()` 独立渲染 | `settings` 先到 → 模式按钮立即高亮；`getStatus` 随后到 → Clash 状态点 + 系统代理状态点亮起 |
+| `initPopup` 参数化 | `layout` 和 `settingsPromise` 由外部传入，避免内部重复 `getTabLayout()` 和 `chrome.storage.local.get('settings')` |
+| 移除 `initPopup` 内重复状态渲染 | Clash 状态和系统代理状态已在 `DOMContentLoaded` 的 `.then()` 中处理，`initPopup` 内不再重复 |
+| 代码注释 | 5 个关键位置补充详细中文注释（思路、为何并行、渐进式渲染效果说明） |
+
+### 三、文件变更清单
+
+| 文件 | 变更类型 |
+|------|----------|
+| `extension/popup/popup.js` | 修复 `statusPromise` 作用域 bug + 并行渐进式渲染重构 + 详细注释 |
+
+---
+
 ## v1.3.4 (2026-06-26)
 
 **本次版本聚焦代码质量与用户体验：命名语义重构、端口探测优化、保存反馈改进。**

@@ -4,7 +4,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.3.4-blue?style=flat-square)](https://github.com/ciskonc/ClashOmega)
+[![Version](https://img.shields.io/badge/version-1.3.5-blue?style=flat-square)](https://github.com/ciskonc/ClashOmega)
 [![Platform](https://img.shields.io/badge/platform-Chromium%20Browsers-green?style=flat-square)](https://github.com/ciskonc/ClashOmega)
 [![License](https://img.shields.io/badge/license-MIT-orange?style=flat-square)](LICENSE)
 [![Manifest](https://img.shields.io/badge/Manifest-V3-purple?style=flat-square)](https://developer.chrome.com/docs/extensions/mv3/intro/)
@@ -57,7 +57,7 @@
 | Clash API 自动发现 | 从 Clash Verge Rev 配置文件读取端口 + 端口扫描 + 401 认证检测 |
 | 安全加固 | 修复 13 项安全漏洞（XSS、路径遍历、进程注入、CSP 缺失等） |
 
-### 性能与体验优化（v1.3.4 新增）
+### 性能与体验优化（v1.3.4 - v1.3.5）
 
 | 功能 | 说明 |
 |------|------|
@@ -69,18 +69,10 @@
 | 数据迁移兼容 | 自动检测旧字段名并迁移，老用户升级无损 |
 | 死代码清理 | 移除 `hotReloadConfig`、`clashPut`、`reloadClashConfig`、`checkClashStatus` 等无调用函数 |
 | 域名内存上限 | 每 tab 域名收集上限 500 条，防止长时间浏览内存泄漏 |
+| 弹窗并行渐进式渲染 | `settings` 读取（本地）与 `getStatus` 请求（网络）并行发起，各自 `.then()` 独立渲染，先到先刷新 |
 
 ## 安装
 
-### 方式一：自动化安装（推荐）
-
-1. 右键 `native-host/install.ps1` → **使用 PowerShell 运行**
-2. 脚本会自动注册 Native Host、生成配置文件
-3. 完成后即可使用
-
-> 前置条件：需开启 PowerShell 脚本执行权限（见下方说明）
-
-### 方式二：手动安装
 
 #### 1. 加载扩展
 
