@@ -245,6 +245,7 @@ A pure file-system-driven Agent collaboration framework with zero code dependenc
 ## Acknowledgements
 
 - [Clash](https://github.com/Dreamacro/clash) — The Clash kernel created by Dreamacro, the core proxy engine controlled by this project
+- [mihomo](https://github.com/MetaCubeX/mihomo) — Formerly Clash.Meta, the proxy kernel used by default in Clash Verge Rev, which this project actually depends on at runtime
 - [Clash Verge Rev](https://github.com/clash-verge-rev/clash-verge-rev) — Tauri-based Clash GUI client, the primary runtime environment for development and testing. Its config file format and extension script mechanism provide the foundation for rule management
 - [SwitchyOmega](https://github.com/FelisCatus/SwitchyOmega) / [ZeroOmega](https://github.com/zero-peak/ZeroOmega) — The inspiration for this project, honoring their pioneering work in browser proxy management
 - [MagicalYu](https://github.com/MagicalYuYu) — Chief guinea pig & AI coding whisperer. Throughout this project's development, he patiently tested every bug repeatedly and wielded unique "whispering" skills to make the AI produce usable code. Without his sacrifice (and countless "this doesn't work, try again"), ClashOmega wouldn't exist today.
