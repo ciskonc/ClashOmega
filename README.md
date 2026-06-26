@@ -4,7 +4,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.3.5-blue?style=flat-square)](https://github.com/ciskonc/ClashOmega)
+[![Version](https://img.shields.io/badge/version-1.3.6-blue?style=flat-square)](https://github.com/ciskonc/ClashOmega)
 [![Platform](https://img.shields.io/badge/platform-Chromium%20Browsers-green?style=flat-square)](https://github.com/ciskonc/ClashOmega)
 [![License](https://img.shields.io/badge/license-MIT-orange?style=flat-square)](LICENSE)
 [![Manifest](https://img.shields.io/badge/Manifest-V3-purple?style=flat-square)](https://developer.chrome.com/docs/extensions/mv3/intro/)
@@ -57,7 +57,7 @@
 | Clash API 自动发现 | 从 Clash Verge Rev 配置文件读取端口 + 端口扫描 + 401 认证检测 |
 | 安全加固 | 修复 13 项安全漏洞（XSS、路径遍历、进程注入、CSP 缺失等） |
 
-### 性能与体验优化（v1.3.4 - v1.3.5）
+### 性能与体验优化（v1.3.4 - v1.3.6）
 
 | 功能 | 说明 |
 |------|------|
@@ -70,6 +70,7 @@
 | 死代码清理 | 移除 `hotReloadConfig`、`clashPut`、`reloadClashConfig`、`checkClashStatus` 等无调用函数 |
 | 域名内存上限 | 每 tab 域名收集上限 500 条，防止长时间浏览内存泄漏 |
 | 弹窗并行渐进式渲染 | `settings` 读取（本地）与 `getStatus` 请求（网络）并行发起，各自 `.then()` 独立渲染，先到先刷新 |
+| 端口不匹配橙色警告 | 配置端口不通但回退找到 Clash 时显示橙色状态框，附带「更正」「忽略」双按钮；忽略后到下次保存设置前不再提示 |
 
 ## 安装
 

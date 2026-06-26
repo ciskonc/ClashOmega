@@ -2,6 +2,51 @@
 
 ---
 
+## v1.3.6 (2026-06-26)
+
+**端口不匹配状态指示器优化：橙色警告 + 更正/忽略双按钮。**
+
+---
+
+### 一、视觉优化
+
+- 端口不匹配状态从**红色**改为**橙色**（`--warn` 样式），区分「配置有误但 Clash 可用」与「Clash 完全不可达」两种情况
+- 新增 `.native-host-status--warn` CSS 类（橙色 15% 背景 + 50% 边框 + 橙色状态点）
+
+### 二、双按钮交互
+
+| 按钮 | 行为 |
+|------|------|
+| **更正为 XXX 端口** | 将 API 地址更新为回退探测到的实际端口，清除忽略标志，重新检测状态 |
+| **忽略** | 本次会话内不再提示端口不匹配警告，状态指示器变为绿色「已连接」 |
+
+### 三、忽略逻辑（`chrome.storage.session` 持久化）
+
+| 事件 | 行为 |
+|------|------|
+| 点击「忽略」 | `session.set({ clashApiMismatchIgnored: true })`，状态变绿色 |
+| 后续打开弹窗 | 检测到忽略标志 → 显示绿色，不显示橙色警告 |
+| 点击「更正」 | 更正配置 + 清除忽略标志 + 重新检测 |
+| **保存设置** | 清除忽略标志（`session.remove`），下次重新检测端口匹配 |
+| 浏览器关闭 | session 自动清除，下次启动重新检测 |
+
+### 四、i18n 更新
+
+- 「修正」→「更正」（zh）/ Correct（en）/ 訂正（ja）
+- 新增 `settings_ignore_mismatch`：忽略 / Ignore / 無視
+
+### 五、文件变更清单
+
+| 文件 | 变更类型 |
+|------|----------|
+| `extension/popup/popup.css` | 新增 `--warn` 橙色样式 + `.clash-api-ignore-btn` 忽略按钮样式 + `.clash-api-actions` 按钮容器 |
+| `extension/popup/popup.js` | `renderClashApiStatus` 重写：橙色状态 + 双按钮 + 忽略逻辑 + 保存时清除忽略标志 |
+| `extension/locales/zh_CN.json` | 更正/忽略 i18n key |
+| `extension/locales/en.json` | Correct/Ignore i18n key |
+| `extension/locales/ja.json` | 訂正/無視 i18n key |
+
+---
+
 ## v1.3.5 (2026-06-26)
 
 **弹窗加载性能优化 + 关键 bug 修复。**
