@@ -144,12 +144,12 @@
 
   "native_host_installed": "Native Host Installed",
   "native_host_not_installed": "Native Host not installed, run install.ps1",
-  "native_host_not_installed_hint": "Native Host not installed. System proxy status, config file read/write, and auto-detect are unavailable. Run native-host\\install.bat to install",
+  "native_host_not_installed_hint": "Native Host not installed. System proxy status, config file read/write, and auto-detect are unavailable. Run native-host\\install.ps1 as Administrator to install",
   "native_host_checking": "Checking Native Host status...",
   "native_host_install_hint": "When not installed, system proxy shows Null. Run the installer:",
-  "native_host_install_link": "native-host\\install.bat",
-  "native_host_install_link_title": "Double-click install.bat (recommended) or run install.ps1 as Administrator",
-  "native_host_install_toast": "Open the native-host directory and double-click install.bat to install Native Host",
+  "native_host_install_link": "native-host\\install.ps1",
+  "native_host_install_link_title": "Right-click install.ps1 → Run with PowerShell (requires Administrator)",
+  "native_host_install_toast": "Open the native-host directory and run install.ps1 as Administrator to install Native Host",
 
   "error_clash_not_running": "Clash is not running, cannot switch to Clash proxy mode",
   "error_clash_unreachable": "Cannot reach Clash",

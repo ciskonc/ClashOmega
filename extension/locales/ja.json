@@ -144,12 +144,12 @@
 
   "native_host_installed": "Native Host インストール済み",
   "native_host_not_installed": "Native Host 未インストール、install.ps1 を実行",
-  "native_host_not_installed_hint": "Native Host が未インストールです。システムプロキシ状態、設定ファイルの読み書き、自動検出機能は利用できません。native-host\\install.bat を実行してください",
+  "native_host_not_installed_hint": "Native Host が未インストールです。システムプロキシ状態、設定ファイルの読み書き、自動検出機能は利用できません。native-host\\install.ps1 を管理者として実行してください",
   "native_host_checking": "Native Host の状態を確認中...",
   "native_host_install_hint": "未インストール時、システムプロキシは Null と表示されます。インストールスクリプトを実行:",
-  "native_host_install_link": "native-host\\install.bat",
-  "native_host_install_link_title": "install.bat をダブルクリック（推奨）または install.ps1 を管理者として実行",
-  "native_host_install_toast": "native-host ディレクトリを開き、install.bat をダブルクリックして Native Host をインストールしてください",
+  "native_host_install_link": "native-host\\install.ps1",
+  "native_host_install_link_title": "install.ps1 を右クリック → PowerShell で実行（管理者権限が必要）",
+  "native_host_install_toast": "native-host ディレクトリを開き、install.ps1 を管理者として実行して Native Host をインストールしてください",
 
   "error_clash_not_running": "Clash が未実行です、Clash プロキシモードに切り替えられません",
   "error_clash_unreachable": "Clash に接続できません",

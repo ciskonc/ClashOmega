@@ -140,12 +140,12 @@
 
   "native_host_installed": "Native Host 已安装",
   "native_host_not_installed": "Native Host 未安装，请运行 install.ps1",
-  "native_host_not_installed_hint": "Native Host 未安装，系统代理状态、配置文件读写、自动检测等功能不可用。请运行 native-host\\install.bat 安装",
+  "native_host_not_installed_hint": "Native Host 未安装，系统代理状态、配置文件读写、自动检测等功能不可用。请以管理员身份运行 native-host\\install.ps1 安装",
   "native_host_checking": "正在检测 Native Host 状态...",
   "native_host_install_hint": "未安装时系统代理显示为 Null，请运行安装脚本：",
-  "native_host_install_link": "native-host\\install.bat",
-  "native_host_install_link_title": "双击运行 install.bat（推荐）或以管理员身份运行 install.ps1",
-  "native_host_install_toast": "请打开 native-host 目录，双击运行 install.bat 安装 Native Host",
+  "native_host_install_link": "native-host\\install.ps1",
+  "native_host_install_link_title": "右键 install.ps1 → 使用 PowerShell 运行（需管理员权限）",
+  "native_host_install_toast": "请打开 native-host 目录，以管理员身份运行 install.ps1 安装 Native Host",
 
   "error_clash_not_running": "Clash 未运行，无法切换到 Clash 代理模式",
   "error_clash_unreachable": "无法连接 Clash",
