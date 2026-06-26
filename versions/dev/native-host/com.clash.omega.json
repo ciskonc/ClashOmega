@@ -3,7 +3,7 @@
     "description":  "ClashOmega Native Messaging Host",
     "name":  "com.clash.omega",
     "allowed_origins":  [
-                            "chrome-extension://aplkgjodcbjifkkdokagbdlcgkokpaml/"
+                            "chrome-extension://llfbhodadhnfobbbkipelhknkjdflggm/"
                         ],
     "type":  "stdio"
 }

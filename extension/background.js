@@ -55,11 +55,18 @@ async function handleMessage(message) {
         let fallbackConfig = null;
         let fallbackApiUrl = null;
         if (!clashConfiguredUrlReachable && settings.disableFallback !== true) {
-          const { baseUrl, headers } = await getApiConfig();
+          // ★ 修复：只用 getApiConfig 获取 headers，排除项用 settings.clashApiUrl
+          // 原因：getApiConfig 的 baseUrl 可能是 session 缓存的 clashActualApiUrl（上次回退探测到的端口），
+          //       如果用缓存作为排除项，会把这个可用端口排除在候选之外，导致回退探测失败
+          //       （第一次保存设置时探测到 9097 并写入缓存，第二次调用 getStatus 时 9097 被排除 → 探测失败）
+          const { headers } = await getApiConfig();
           const apiHost = settings.clashApiHost || '127.0.0.1';
+          // 只排除用户配置的 URL（已通过 noFallback=true 检测过，确定不通）
+          // 从 settings.clashApiUrl 提取端口，只比较端口号避免 URL 格式差异
+          const userPort = settings.clashApiUrl?.match(/:(\d+)(?:\/|$)/)?.[1];
           const candidateUrls = CLASH_API_PORTS
-            .map(port => `http://${apiHost}:${port}`)
-            .filter(testUrl => testUrl !== baseUrl);
+            .filter(port => String(port) !== userPort)
+            .map(port => `http://${apiHost}:${port}`);
           const found = await tryFetchParallel(
             candidateUrls.map(url => `${url}/configs`),
             headers
@@ -68,7 +75,8 @@ async function handleMessage(message) {
             fallbackConfig = found.data;
             // 从 found.url 提取基础 URL（去掉 /configs 后缀）
             fallbackApiUrl = found.url.replace(/\/configs$/, '');
-            // 缓存到 session，后续操作直接用这个 URL，不重复尝试错误端口
+            // 缓存到 session，后续业务操作（clashGet/rules 等）直接用这个 URL，不重复尝试错误端口
+            // 注意：缓存只用于业务操作，不用于回退探测的排除项（见上面的注释）
             await cacheActualApiUrl(fallbackApiUrl);
           }
         }
@@ -128,11 +136,18 @@ async function handleMessage(message) {
           // 用户配置的 URL 不通时，并行回退探测（竞速，最快响应的端口立即返回）
           // 用户可在设置中关闭"端口错误自动探测"以禁用回退
           if (!config && settings.disableFallback !== true) {
-            const { baseUrl, headers } = await getApiConfig();
+            // ★ 修复：只用 getApiConfig 获取 headers，排除项用 settings.clashApiUrl
+            // 原因：getApiConfig 的 baseUrl 可能是 session 缓存的 clashActualApiUrl（上次回退探测到的端口），
+            //       如果用缓存作为排除项，会把这个可用端口排除在候选之外，导致回退探测失败
+            //       （保存设置时探测到 9097 并写入缓存，setMode 时 9097 被排除 → 探测失败 → "clash 未运行"）
+            const { headers } = await getApiConfig();
             const apiHost = settings.clashApiHost || '127.0.0.1';
+            // 只排除用户配置的 URL（已通过 noFallback=true 检测过，确定不通）
+            // 从 settings.clashApiUrl 提取端口，只比较端口号避免 URL 格式差异
+            const userPort = settings.clashApiUrl?.match(/:(\d+)(?:\/|$)/)?.[1];
             const candidateUrls = CLASH_API_PORTS
-              .map(port => `http://${apiHost}:${port}`)
-              .filter(testUrl => testUrl !== baseUrl);
+              .filter(port => String(port) !== userPort)
+              .map(port => `http://${apiHost}:${port}`);
             const found = await tryFetchParallel(
               candidateUrls.map(url => `${url}/configs`),
               headers
@@ -140,7 +155,8 @@ async function handleMessage(message) {
             if (found) {
               config = found.data;
               usedFallback = true;
-              // 缓存到 session，后续操作直接用这个 URL
+              // 缓存到 session，后续业务操作（clashGet/rules 等）直接用这个 URL
+              // 注意：缓存只用于业务操作，不用于回退探测的排除项
               await cacheActualApiUrl(found.url.replace(/\/configs$/, ''));
             }
           }

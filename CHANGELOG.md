@@ -2,6 +2,28 @@
 
 ---
 
+## v1.3.7 (2026-06-27)
+
+**修复保存设置后状态指示器不刷新 + 固定扩展 ID。**
+
+---
+
+### 一、Bug 修复
+
+- **保存设置后 UI 不刷新**：新增 `refreshPopupStatus()` 函数，保存设置后显式刷新模式切换按钮、Clash 状态点、系统代理状态、clash 按钮 disabled 状态、设置页 Clash API 状态指示器
+- **`initPopup()` 无参数调用崩溃**：支持无参数调用，内部默认获取 layout 和 settings
+- **回退探测被会话缓存污染**：`getStatus` 和 `setMode` 的回退探测排除项从 `getApiConfig().baseUrl`（可能被缓存污染）改为 `settings.clashApiUrl`（用户配置端口），避免可用端口被错误排除
+- **保存设置后重复调用 getStatus 导致状态错乱**：用 `latestStatus` 变量贯穿整个保存流程，回退分支复用 `statusResult`，不再重复调用 getStatus（回退探测写入缓存后再次调用会失败）
+
+### 二、扩展 ID 固定
+
+- 通过 `manifest.json` 的 `key` 字段固定扩展 ID 为 `llfbhodadhnfobbbkipelhknkjdflggm`
+- `native-host/com.clash.omega.json` 的 `allowed_origins` 写死固定 ID
+- `install.ps1` 默认 ExtId 设为固定 ID，用户直接回车即可安装，无需手动查找扩展 ID
+- 私钥保存于 `credentials/clashomega_private_key.pem`（不入 git），泄露后他人可冒充发布扩展更新
+
+---
+
 ## v1.3.6 (2026-06-26)
 
 **端口不匹配状态指示器优化：橙色警告 + 更正/忽略双按钮。**

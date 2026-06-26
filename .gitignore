@@ -32,3 +32,8 @@ AGENT_STATUS.md
 STATUS.md
 AGENTS.md
 reference_links.md
+
+# 扩展签名私钥（用于固定扩展 ID，泄露后他人可冒充发布更新）
+credentials/
+*.pem
+*.key

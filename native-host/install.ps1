@@ -1,4 +1,4 @@
-﻿# ClashOmega - Native Host Installer / 安装脚本
+# ClashOmega - Native Host Installer / 安装脚本
 # Usage: Double-click install.bat (recommended)
 #       或: powershell -ExecutionPolicy Bypass -File install.ps1 -ExtId <extension_id>
 # 用法: 双击 install.bat（推荐）
@@ -85,7 +85,15 @@ if ($args -and $args.Count -ge 2 -and $args[0] -eq '-ExtId') {
     $ExtIdParam = $true
 }
 if (-not $ExtId) {
+    # 扩展 ID 已通过 manifest.json 的 key 字段固定，无需用户手动查找
+    # 直接回车使用默认 ID，或输入其他 ID 覆盖
+    $defaultExtId = 'llfbhodadhnfobbbkipelhknkjdflggm'
+    Write-Host "Default Extension ID / 默认扩展 ID: $defaultExtId (press Enter to use default / 直接回车使用默认值)" -ForegroundColor Green
     $ExtId = Read-Host 'Extension ID / 扩展 ID'
+    if ([string]::IsNullOrWhiteSpace($ExtId)) {
+        $ExtId = $defaultExtId
+        Write-Host "Using default Extension ID / 使用默认扩展 ID: $ExtId" -ForegroundColor Cyan
+    }
 }
 if ([string]::IsNullOrWhiteSpace($ExtId)) {
     Write-Host '[ERROR] Extension ID cannot be empty / 扩展 ID 不能为空' -ForegroundColor Red

@@ -2029,19 +2029,35 @@ function bindSettingsEvents() {
       }
 
       // 保存后检测 Clash API 连接状态
+      //
+      // ★ 关键设计：用 latestStatus 变量贯穿整个流程，避免重复调用 getStatus
+      //   原因：回退探测成功后 background 会 cacheActualApiUrl(9097) 写入 session 缓存，
+      //         如果再次调用 getStatus，getApiConfig 读到缓存的 9097 作为 baseUrl，
+      //         回退探测会排除 9097，导致探测失败 → clashReachableViaFallback=false → 显示红色"无法连接"
+      //   解决：回退分支复用阶段2的 statusResult；其他分支（无缓存副作用）才调用 getStatus
+      let latestStatus = null;
+
       // 阶段1：快速检测用户配置的 URL（半秒内反馈）
       const quick = await sendToBackground({ action: 'checkClashConfiguredUrl' });
       if (quick && quick.reachable) {
         // 用户配置的 URL 通，立即弹"已连接"
         showToast(I18N.t('settings_clash_connected'), 'success', { duration: 3000 });
+        // 快速检测通过：getStatus 不会走回退探测（clashConfiguredUrlReachable=true），无缓存副作用，安全调用
+        latestStatus = await sendToBackground({ action: 'getStatus' });
       } else if (settings.disableFallback === true) {
         // 勾选了"关闭端口错误自动探测"：不尝试其他端口，直接提示无法连接
         showToast(I18N.t('settings_clash_unreachable'), 'warn', { duration: 4000 });
+        // disableFallback：getStatus 不会走回退探测（条件不满足），无缓存副作用，安全调用
+        latestStatus = await sendToBackground({ action: 'getStatus' });
       } else {
         // 未勾选：用户配置的 URL 不通，立即弹"连接失败，开始尝试其他端口"
         showToast(I18N.t('settings_clash_connecting_fallback'), 'warn', { duration: 3000 });
         // 阶段2：回退探测其他端口
         const statusResult = await sendToBackground({ action: 'getStatus' });
+        // ★ 复用 statusResult，不要再次调用 getStatus
+        // 回退探测成功时 background 已 cacheActualApiUrl 写入 session 缓存，
+        // 再次调用 getStatus 会被缓存污染（baseUrl 变为回退端口，排除后探测失败）
+        latestStatus = statusResult;
         if (statusResult && statusResult.clashReachableViaFallback) {
           // 回退找到 Clash，弹"已通过 xxx 端口替代" + 附带"修正"按钮
           const fallbackPort = statusResult.fallbackApiUrl?.match(/:(\d+)/)?.[1] || '?';
@@ -2072,7 +2088,15 @@ function bindSettingsEvents() {
         }
       }
 
-      await initPopup();
+      // ★ 保存设置后刷新所有状态指示器（使用 latestStatus，避免重复调用 getStatus）
+      // DOMContentLoaded 中的并行渲染只在弹窗打开时执行一次，保存设置后必须显式刷新：
+      //   1. 刷新模式切换按钮高亮 + clash 按钮 disabled 状态（Clash 可用后需启用 clash 按钮）
+      //   2. 刷新主页 Clash 状态点 + 系统代理状态
+      //   3. 刷新设置页 Clash API 状态指示器（绿色"已连接" / 橙色端口不匹配 / 红色无法连接）
+      //   4. 调用 initPopup 刷新域名检测、规则列表等
+      refreshPopupStatus(latestStatus);
+      await renderClashApiStatus(latestStatus);
+      await initPopup(window._currentTabLayout, Promise.resolve({ settings: await sendToBackground({ action: 'getSettings' }) }));
     });
   });
 
@@ -2381,14 +2405,38 @@ async function renderClashApiStatus(cachedStatus) {
 // ──── 初始化（渐进式渲染） ────
 
 /**
+ * 刷新弹窗所有状态指示器（模式切换按钮高亮、Clash 状态、系统代理状态、clash 按钮 disabled、Clash API 状态指示器）
+ *
+ * 使用场景：保存设置后、模式切换后等需要同步刷新状态显示的场合。
+ * DOMContentLoaded 中的并行渲染只在弹窗打开时执行一次，后续状态变更必须显式调用本函数刷新。
+ *
+ * @param {object} freshStatus - 已获取的最新 getStatus 结果（避免重复请求）
+ */
+function refreshPopupStatus(freshStatus) {
+  if (!freshStatus) return;
+  // 模式切换按钮高亮（系统代理/直连/clash代理）
+  renderModeSwitch(freshStatus.mode);
+  // 主页 Clash 状态点 + 状态文本（使用当前缓存的 layout，避免重复 getTabLayout）
+  renderClashStatus(freshStatus.clashRunning, freshStatus.config, freshStatus.proxyPort, window._currentTabLayout);
+  // 系统代理状态点 + 状态文本
+  renderSystemProxyStatus(freshStatus.sysProxy);
+  // clash 按钮 disabled 状态：Clash 不可用时禁用，避免点击后失败
+  const clashBtn = document.querySelector('#mode-switch button[data-mode="clash"]');
+  if (clashBtn) clashBtn.disabled = !freshStatus.clashRunning;
+}
+
+/**
  * 初始化弹窗 UI（域名检测、规则列表、事件绑定）
  *
  * 优化说明：layout 和 settingsPromise 由外部 DOMContentLoaded 并行发起后传入，
  * 避免本函数内部重复 getTabLayout() 和 chrome.storage.local.get('settings')。
  * Clash/系统代理状态渲染已在 DOMContentLoaded 中通过 .then() 处理，此处不重复。
  *
- * @param {object} layout - 已获取的标签页布局（避免重复请求）
- * @param {Promise} settingsPromise - 已发起的 settings 读取 Promise（外部并行发起）
+ * 向后兼容：支持无参数调用（保存设置/模式切换后刷新场景），此时内部默认获取 layout 和 settings。
+ * 注意：无参数调用时不会刷新 Clash 状态/系统代理状态，需调用方显式调用 refreshPopupStatus。
+ *
+ * @param {object} [layout] - 已获取的标签页布局（可选，未传入时内部 getTabLayout）
+ * @param {Promise} [settingsPromise] - 已发起的 settings 读取 Promise（可选，未传入时内部发起）
  */
 async function initPopup(layout, settingsPromise) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -2405,14 +2453,19 @@ async function initPopup(layout, settingsPromise) {
     return;
   }
 
-  window._currentTabLayout = layout;
+  // 向后兼容：无参数调用时内部获取 layout 和 settings（保存设置/模式切换后的刷新场景）
+  const effectiveLayout = layout || window._currentTabLayout || await getTabLayout();
+  const effectiveSettingsPromise = settingsPromise || chrome.storage.local.get('settings');
+
+  window._currentTabLayout = effectiveLayout;
 
   // settings 通过外部并行发起，这里 await 复用（用于域名检测模式判断）
   // 此时 settings 大概率已到达（本地读取比网络快），await 几乎无等待
-  const { settings } = await settingsPromise;
+  const { settings } = await effectiveSettingsPromise;
 
   // 注意：Clash 状态和系统代理状态的渲染已在 DOMContentLoaded 中通过 .then() 处理，
-  // 这里不再重复，避免双重渲染
+  // 这里不再重复，避免双重渲染。
+  // 但保存设置/模式切换后需要显式刷新状态，请调用方使用 refreshPopupStatus(freshStatus)。
 
   populateProxyGroupSelects();
 

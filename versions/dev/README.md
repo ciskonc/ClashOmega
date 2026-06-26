@@ -4,7 +4,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.3.6-blue?style=flat-square)](https://github.com/ciskonc/ClashOmega)
+[![Version](https://img.shields.io/badge/version-1.3.7-blue?style=flat-square)](https://github.com/ciskonc/ClashOmega)
 [![Platform](https://img.shields.io/badge/platform-Chromium%20Browsers-green?style=flat-square)](https://github.com/ciskonc/ClashOmega)
 [![License](https://img.shields.io/badge/license-MIT-orange?style=flat-square)](LICENSE)
 [![Manifest](https://img.shields.io/badge/Manifest-V3-purple?style=flat-square)](https://developer.chrome.com/docs/extensions/mv3/intro/)
@@ -57,7 +57,7 @@
 | Clash API 自动发现 | 从 Clash Verge Rev 配置文件读取端口 + 端口扫描 + 401 认证检测 |
 | 安全加固 | 修复 13 项安全漏洞（XSS、路径遍历、进程注入、CSP 缺失等） |
 
-### 性能与体验优化（v1.3.4 - v1.3.6）
+### 性能与体验优化（v1.3.4 - v1.3.7）
 
 | 功能 | 说明 |
 |------|------|
@@ -71,6 +71,8 @@
 | 域名内存上限 | 每 tab 域名收集上限 500 条，防止长时间浏览内存泄漏 |
 | 弹窗并行渐进式渲染 | `settings` 读取（本地）与 `getStatus` 请求（网络）并行发起，各自 `.then()` 独立渲染，先到先刷新 |
 | 端口不匹配橙色警告 | 配置端口不通但回退找到 Clash 时显示橙色状态框，附带「更正」「忽略」双按钮；忽略后到下次保存设置前不再提示 |
+| 保存后状态同步刷新 | 保存设置后显式刷新所有状态指示器（模式按钮/Clash 状态点/系统代理/clash 按钮/Clash API 指示器），避免 toast 与 UI 不同步 |
+| 固定扩展 ID | 通过 `manifest.json` 的 `key` 字段固定扩展 ID，native-host 配置写死，install.ps1 默认回车即可安装 |
 
 ## 安装
 
@@ -102,10 +104,9 @@ Native Host 用于读写 Clash 本地 YAML 配置文件（仅 Windows）。
 
 </details>
 
-1. 在 `chrome://extensions/` 中找到 ClashOmega 扩展，复制其 ID
-2. 右键 `native-host/install.ps1` → **使用 PowerShell 运行**
-3. 粘贴扩展 ID，回车完成安装
-4. 刷新扩展
+1. 右键 `native-host/install.ps1` → **使用 PowerShell 运行**
+2. 扩展 ID 已固定为 `llfbhodadhnfobbbkipelhknkjdflggm`，直接回车即可
+3. 刷新扩展
 
 #### 3. 配置 Clash API
 
