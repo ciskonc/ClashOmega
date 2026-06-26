@@ -2330,7 +2330,11 @@ async function renderClashApiStatus(cachedStatus) {
 
 // ──── 初始化（渐进式渲染） ────
 
-async function initPopup() {
+/**
+ * 初始化弹窗 UI
+ * @param {Promise} [cachedStatusPromise] - 可选的已缓存的 getStatus Promise，避免重复请求
+ */
+async function initPopup(cachedStatusPromise) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab || !tab.url) {
     document.getElementById('current-domain').textContent = 'N/A';
@@ -2356,7 +2360,8 @@ async function initPopup() {
   }
 
   // 第 1 步：并行发起所有异步请求
-  const statusPromise = sendToBackground({ action: 'getStatus' });
+  // 优先使用外部传入的缓存 Promise（避免重复 getStatus），没有则自己发起
+  const statusPromise = cachedStatusPromise || sendToBackground({ action: 'getStatus' });
   statusPromise.then(status => {
     renderClashStatus(status.clashRunning, status.config, status.proxyPort, layout);
     renderSystemProxyStatus(status.sysProxy);
@@ -2478,7 +2483,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   bindSettingsSubTabEvents();
   renderLanguageSetting();
   renderThemeSetting();
-  // 传入 initPopup 中 getStatus 的结果，避免 renderClashApiStatus 重复请求
+  // 发起 getStatus 请求，结果同时用于 loadSettingsForm 和 initPopup，避免重复请求
+  const statusPromise = sendToBackground({ action: 'getStatus' });
   const status = await statusPromise;
   loadSettingsForm(status);
 
@@ -2489,5 +2495,5 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 底部「重启 Clash 内核」按钮
   document.getElementById('restart-clash-btn').addEventListener('click', triggerRestartClash);
 
-  await initPopup();
+  await initPopup(statusPromise);
 });
