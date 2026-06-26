@@ -76,9 +76,10 @@ Native Host 用于读写 Clash 本地 YAML 配置文件（仅 Windows）。
 
 #### 3. 配置 Clash API
 
-1. 点击扩展图标 → 设置（齿轮按钮）
-2. 填写 Clash API 地址（默认 `http://127.0.0.1:9090`）和密钥
-3. 配置文件路径留空则自动检测（支持 Clash Verge Rev 的 `profiles.yaml`）
+1. 启动 Clash Verge → 设置 → 外部控制 → 启用外部控制器
+2. 点击扩展图标 → 设置（齿轮按钮）
+3. 填写 Clash API 地址（默认 `http://127.0.0.1:9090`）和密钥
+4. 配置文件路径留空则自动检测（支持 Clash Verge Rev 的 `profiles.yaml`）
 
 ---
 
