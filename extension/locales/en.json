@@ -157,7 +157,7 @@
   "settings_clash_unreachable": "Clash API unreachable",
   "settings_clash_connecting_fallback": "Connection failed, trying other ports...",
   "clash_api_checking": "Checking Clash API connection...",
-  "settings_clash_port_mismatch": "Configured port {configured} unreachable, connected via default port {actual}, please check settings",
+  "settings_clash_port_mismatch": "Configured port unreachable, connected via default port {actual}, please check settings",
   "settings_fix_port": "Correct to port {port}",
   "settings_fixed_port": "API URL corrected to port {port}",
   "settings_ignore_mismatch": "Ignore",

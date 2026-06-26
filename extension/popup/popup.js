@@ -2061,9 +2061,7 @@ function bindSettingsEvents() {
         if (statusResult && statusResult.clashReachableViaFallback) {
           // 回退找到 Clash，弹"已通过 xxx 端口替代" + 附带"修正"按钮
           const fallbackPort = statusResult.fallbackApiUrl?.match(/:(\d+)/)?.[1] || '?';
-          const configuredPort = statusResult.clashApiPort || (settings?.clashApiUrl?.match(/:(\d+)/)?.[1]) || '?';
           const msg = I18N.t('settings_clash_port_mismatch')
-            .replace('{configured}', configuredPort)
             .replace('{actual}', fallbackPort);
           showToast(msg, 'warn', {
             duration: 8000,
@@ -2158,7 +2156,7 @@ function bindSettingsEvents() {
 
   // 分页阈值变更（实时预览）
   document.getElementById('rule-page-size').addEventListener('change', async (e) => {
-    const threshold = Math.max(10, Math.min(500, parseInt(e.target.value) || 50));
+    const threshold = Math.max(10, Math.min(3000, parseInt(e.target.value) || 50));
     e.target.value = threshold;
     const { settings } = await chrome.storage.local.get('settings');
     settings.rulePageSize = threshold;
@@ -2333,9 +2331,7 @@ async function renderClashApiStatus(cachedStatus) {
     statusEl.className = 'native-host-status native-host-status--warn';
     statusEl.appendChild(el('span', { className: 'native-host-status-dot' }));
     const fallbackPort = result.fallbackApiUrl?.match(/:(\d+)/)?.[1] || '?';
-    const configuredPort = result.clashApiPort || (result.clashApiUrl?.match(/:(\d+)/)?.[1]) || '?';
     const msg = I18N.t('settings_clash_port_mismatch')
-      .replace('{configured}', configuredPort)
       .replace('{actual}', fallbackPort);
     statusEl.appendChild(el('span', { className: 'native-host-status-text' }, msg));
 

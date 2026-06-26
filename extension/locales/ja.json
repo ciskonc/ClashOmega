@@ -157,7 +157,7 @@
   "settings_clash_unreachable": "Clash API に接続できません",
   "settings_clash_connecting_fallback": "接続失敗、他のポートを試行中...",
   "clash_api_checking": "Clash API 接続を確認中...",
-  "settings_clash_port_mismatch": "設定ポート {configured} に接続できず、デフォルトポート {actual} で接続しました。設定を確認してください",
+  "settings_clash_port_mismatch": "設定ポートに接続できず、デフォルトポート {actual} で接続しました。設定を確認してください",
   "settings_fix_port": "ポート {port} に訂正",
   "settings_fixed_port": "API URLをポート {port} に訂正しました",
   "settings_ignore_mismatch": "無視",
