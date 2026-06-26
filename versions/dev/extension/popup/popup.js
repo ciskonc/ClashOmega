@@ -2332,9 +2332,10 @@ async function renderClashApiStatus(cachedStatus) {
 
 /**
  * 初始化弹窗 UI
- * @param {Promise} [cachedStatusPromise] - 可选的已缓存的 getStatus Promise，避免重复请求
+ * @param {object} layout - 已获取的标签页布局（避免重复请求）
+ * @param {Promise} settingsPromise - 已发起的 settings 读取 Promise
  */
-async function initPopup(cachedStatusPromise) {
+async function initPopup(layout, settingsPromise) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab || !tab.url) {
     document.getElementById('current-domain').textContent = 'N/A';
@@ -2349,35 +2350,13 @@ async function initPopup(cachedStatusPromise) {
     return;
   }
 
-  // 获取当前标签页布局（用于 switchToModuleTab）
-  const layout = await getTabLayout();
   window._currentTabLayout = layout;
 
-  // 第 0 步：立即渲染模式切换
-  const { settings } = await chrome.storage.local.get('settings');
-  if (settings && settings.currentMode) {
-    renderModeSwitch(settings.currentMode);
-  }
+  // settings 通过外部并行发起，这里 await 复用（用于域名检测模式判断）
+  const { settings } = await settingsPromise;
 
-  // 第 1 步：并行发起所有异步请求
-  // 优先使用外部传入的缓存 Promise（避免重复 getStatus），没有则自己发起
-  const statusPromise = cachedStatusPromise || sendToBackground({ action: 'getStatus' });
-  statusPromise.then(status => {
-    renderClashStatus(status.clashRunning, status.config, status.proxyPort, layout);
-    renderSystemProxyStatus(status.sysProxy);
-
-    // 根据 Clash 是否在线，禁用/启用 Clash 代理按钮
-    const clashBtn = document.querySelector('#mode-switch button[data-mode="clash"]');
-    if (clashBtn) {
-      clashBtn.disabled = !status.clashRunning;
-    }
-
-    // 首次加载时如果 Clash 未连接，提示用户
-    if (!status.clashRunning && !window._clashStatusNotified) {
-      window._clashStatusNotified = true;
-      showToast(I18N.t('error_clash_not_running'), 'warn', { duration: 4000 });
-    }
-  });
+  // 注意：Clash 状态和系统代理状态的渲染已在 DOMContentLoaded 中通过 .then() 处理，
+  // 这里不再重复，避免双重渲染
 
   populateProxyGroupSelects();
 
@@ -2483,8 +2462,36 @@ document.addEventListener('DOMContentLoaded', async () => {
   bindSettingsSubTabEvents();
   renderLanguageSetting();
   renderThemeSetting();
-  // 发起 getStatus 请求，结果同时用于 loadSettingsForm 和 initPopup，避免重复请求
+
+  // ★ 并行发起 settings 读取（本地，快）和 getStatus 请求（网络，慢）
+  // 两者各自 .then() 独立渲染，哪个先到先刷新哪个
+  const settingsPromise = chrome.storage.local.get('settings');
   const statusPromise = sendToBackground({ action: 'getStatus' });
+
+  // settings 先到 → 立即渲染模式切换按钮（系统代理/直连/clash代理 高亮）
+  settingsPromise.then(({ settings }) => {
+    if (settings && settings.currentMode) {
+      renderModeSwitch(settings.currentMode);
+    }
+  });
+
+  // status 先到 → 立即渲染 Clash 连接状态 + 系统代理状态
+  statusPromise.then(status => {
+    renderClashStatus(status.clashRunning, status.config, status.proxyPort, layout);
+    renderSystemProxyStatus(status.sysProxy);
+
+    const clashBtn = document.querySelector('#mode-switch button[data-mode="clash"]');
+    if (clashBtn) {
+      clashBtn.disabled = !status.clashRunning;
+    }
+
+    if (!status.clashRunning && !window._clashStatusNotified) {
+      window._clashStatusNotified = true;
+      showToast(I18N.t('error_clash_not_running'), 'warn', { duration: 4000 });
+    }
+  });
+
+  // loadSettingsForm 需要 status 数据，await 即可（不阻塞上面的 .then 渲染）
   const status = await statusPromise;
   loadSettingsForm(status);
 
@@ -2495,5 +2502,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 底部「重启 Clash 内核」按钮
   document.getElementById('restart-clash-btn').addEventListener('click', triggerRestartClash);
 
-  await initPopup(statusPromise);
+  // initPopup 接收已发起的 Promise，避免重复请求
+  await initPopup(layout, settingsPromise);
 });
