@@ -1994,6 +1994,8 @@ function bindSettingsEvents() {
         rulePageSize: rulePageSize
       };
       await sendToBackground({ action: 'saveSettings', settings });
+      // 清除端口不匹配忽略标志：保存设置意味着配置已变更，需要重新检测端口匹配状态
+      await chrome.storage.session.remove('clashApiMismatchIgnored');
       // 应用主题
       applyTheme(theme);
       // 应用缩放
@@ -2254,6 +2256,14 @@ async function renderNativeHostStatus() {
 /**
  * 检测并渲染 Clash API 连接状态（设置页连接配置子标签页，Native Host 下方）
  * 与 Native Host 检测完全独立，每次打开设置页时自动调用
+ *
+ * 三种状态：
+ *   - 绿色（--ok）：用户配置的 URL 可达
+ *   - 橙色（--warn）：用户配置的 URL 不通，但回退探测找到了 Clash（附带「更正」「忽略」按钮）
+ *   - 红色（--error）：Clash API 完全不可达
+ *
+ * 忽略逻辑：用户点击「忽略」后，通过 chrome.storage.session 记录忽略标志，
+ *   到下次保存设置前不再显示橙色警告（仍显示绿色「已连接」状态）。
  */
 async function renderClashApiStatus(cachedStatus) {
   const statusEl = document.getElementById('clash-api-status');
@@ -2282,7 +2292,21 @@ async function renderClashApiStatus(cachedStatus) {
     statusEl.appendChild(textEl);
   } else if (result && result.clashReachableViaFallback) {
     // 用户配置的 URL 不通，但回退探测找到了 Clash
-    statusEl.className = 'native-host-status native-host-status--error';
+
+    // 检查用户是否已点击「忽略」本次端口不匹配警告
+    // 忽略标志存储在 chrome.storage.session，浏览器关闭后自动清除
+    // 保存设置时会清除忽略标志，确保下次配置变更后重新检测
+    const { clashApiMismatchIgnored } = await chrome.storage.session.get('clashApiMismatchIgnored');
+    if (clashApiMismatchIgnored) {
+      // 用户已忽略：显示绿色「已连接」状态，不显示橙色警告和按钮
+      statusEl.className = 'native-host-status native-host-status--ok';
+      statusEl.appendChild(el('span', { className: 'native-host-status-dot' }));
+      statusEl.appendChild(el('span', { className: 'native-host-status-text' }, I18N.t('settings_clash_connected')));
+      return;
+    }
+
+    // 显示橙色警告状态
+    statusEl.className = 'native-host-status native-host-status--warn';
     statusEl.appendChild(el('span', { className: 'native-host-status-dot' }));
     const fallbackPort = result.fallbackApiUrl?.match(/:(\d+)/)?.[1] || '?';
     const configuredPort = result.clashApiPort || (result.clashApiUrl?.match(/:(\d+)/)?.[1]) || '?';
@@ -2291,7 +2315,10 @@ async function renderClashApiStatus(cachedStatus) {
       .replace('{actual}', fallbackPort);
     statusEl.appendChild(el('span', { className: 'native-host-status-text' }, msg));
 
-    // 动态创建"修正为 XXX 端口"按钮（避免被 innerHTML 清空）
+    // 按钮容器：更正 + 忽略
+    const actionsEl = el('span', { className: 'clash-api-actions' });
+
+    // 「更正为 XXX 端口」按钮
     if (result.fallbackApiUrl) {
       const fixBtn = el('button', {
         type: 'button',
@@ -2306,6 +2333,8 @@ async function renderClashApiStatus(cachedStatus) {
           const settings = await sendToBackground({ action: 'getSettings' });
           settings.clashApiUrl = result.fallbackApiUrl;
           await sendToBackground({ action: 'saveSettings', settings });
+          // 更正后清除忽略标志（配置已变更，警告已解决）
+          await chrome.storage.session.remove('clashApiMismatchIgnored');
           showToast(I18N.t('settings_fixed_port').replace('{port}', fallbackPort), 'success', { duration: 3000 });
           // 重新检测状态
           await renderClashApiStatus();
@@ -2319,8 +2348,29 @@ async function renderClashApiStatus(cachedStatus) {
           fixBtn.textContent = originalText;
         }
       };
-      statusEl.appendChild(fixBtn);
+      actionsEl.appendChild(fixBtn);
     }
+
+    // 「忽略」按钮：本次会话内不再提示端口不匹配警告
+    const ignoreBtn = el('button', {
+      type: 'button',
+      className: 'clash-api-ignore-btn'
+    }, I18N.t('settings_ignore_mismatch'));
+    ignoreBtn.onclick = async () => {
+      ignoreBtn.disabled = true;
+      try {
+        // 记录忽略标志到 session 存储（浏览器关闭后自动清除）
+        // 保存设置时会清除忽略标志，确保下次配置变更后重新检测
+        await chrome.storage.session.set({ clashApiMismatchIgnored: true });
+        // 重新渲染为绿色「已连接」状态
+        await renderClashApiStatus();
+      } catch (e) {
+        ignoreBtn.disabled = false;
+      }
+    };
+    actionsEl.appendChild(ignoreBtn);
+
+    statusEl.appendChild(actionsEl);
   } else {
     statusEl.className = 'native-host-status native-host-status--error';
     statusEl.appendChild(el('span', { className: 'native-host-status-dot' }));

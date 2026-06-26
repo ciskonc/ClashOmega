@@ -663,6 +663,11 @@ input, button, select, textarea {
   border-color: color-mix(in srgb, var(--md-status-off) 40%, transparent);
   color: var(--md-sys-color-on-surface);
 }
+.native-host-status--warn {
+  background: color-mix(in srgb, var(--md-status-warn) 15%, transparent);
+  border-color: color-mix(in srgb, var(--md-status-warn) 50%, transparent);
+  color: var(--md-sys-color-on-surface);
+}
 .native-host-status-dot {
   display: inline-block;
   width: 8px;
@@ -673,11 +678,17 @@ input, button, select, textarea {
 .native-host-status--checking .native-host-status-dot { background: var(--md-status-warn); }
 .native-host-status--ok .native-host-status-dot { background: var(--md-status-on); }
 .native-host-status--error .native-host-status-dot { background: var(--md-status-off); }
+.native-host-status--warn .native-host-status-dot { background: var(--md-status-warn); }
 .native-host-status-text { flex-shrink: 0; }
 
-/* Clash API 端口不匹配时的"修正"按钮 */
+/* Clash API 端口不匹配时的操作按钮容器 */
+.clash-api-actions {
+  display: inline-flex;
+  gap: var(--md-spacing-1);
+  margin-left: auto;
+  flex-shrink: 0;
+}
 .clash-api-fix-btn {
-  margin-left: var(--md-spacing-2);
   padding: 2px 8px;
   border: 1px solid var(--md-sys-color-outline);
   border-radius: var(--md-shape-corner-extra-small, 4px);
@@ -697,6 +708,29 @@ input, button, select, textarea {
   color: var(--md-sys-color-on-primary);
 }
 .clash-api-fix-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+/* "忽略"按钮 — 次要样式 */
+.clash-api-ignore-btn {
+  padding: 2px 8px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-shape-corner-extra-small, 4px);
+  background: transparent;
+  color: var(--md-sys-color-on-surface-variant);
+  font: var(--md-typescale-label-small);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s;
+}
+.clash-api-ignore-btn:hover:not(:disabled) {
+  background: var(--md-sys-color-surface-container-high);
+  border-color: var(--md-sys-color-outline);
+}
+.clash-api-ignore-btn:active:not(:disabled) {
+  background: var(--md-sys-color-outline-variant);
+}
+.clash-api-ignore-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
