@@ -109,10 +109,17 @@ async function tryFetchParallel(urls, headers) {
  * 发送 GET 请求到 Clash API（自动端口探测，不覆盖用户设置）
  * @param {string} endpoint - API 端点
  * @param {{noFallback?: boolean}} [options] - noFallback=true 时只尝试用户配置的 URL，不走端口回退
+ *   注意：noFallback 模式下绕过会话级缓存（clashActualApiUrl），直接用用户配置的 URL 检测，
+ *   确保准确反映"用户配置是否正确"而非"Clash 是否可用"。
  */
 async function clashGet(endpoint, options) {
   const { baseUrl, headers } = await getApiConfig();
-  const result = await tryFetch(`${baseUrl}${endpoint}`, headers);
+  // noFallback 模式：绕过会话缓存，直接用用户配置的 URL 检测
+  // 缓存（clashActualApiUrl）可能包含回退探测到的端口，不能用于判断用户配置是否正确
+  const effectiveBaseUrl = (options && options.noFallback)
+    ? (await getSettings()).clashApiUrl
+    : baseUrl;
+  const result = await tryFetch(`${effectiveBaseUrl}${endpoint}`, headers);
   if (result !== null) return result;
 
   // noFallback 模式：只用用户配置的 URL，不探测其他端口
