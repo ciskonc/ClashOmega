@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 chcp 65001 >nul 2>&1
 set "SCRIPT_DIR=%~dp0"
 set "PS1_FILE=%SCRIPT_DIR%uninstall.ps1"

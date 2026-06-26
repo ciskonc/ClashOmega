@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 chcp 65001 >nul 2>&1
 REM ClashOmega Native Host Installer - BAT wrapper
 REM 双击此文件运行安装，自动绕过 PowerShell 执行策略限制
