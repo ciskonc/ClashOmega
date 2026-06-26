@@ -2331,9 +2331,14 @@ async function renderClashApiStatus(cachedStatus) {
 // ──── 初始化（渐进式渲染） ────
 
 /**
- * 初始化弹窗 UI
+ * 初始化弹窗 UI（域名检测、规则列表、事件绑定）
+ *
+ * 优化说明：layout 和 settingsPromise 由外部 DOMContentLoaded 并行发起后传入，
+ * 避免本函数内部重复 getTabLayout() 和 chrome.storage.local.get('settings')。
+ * Clash/系统代理状态渲染已在 DOMContentLoaded 中通过 .then() 处理，此处不重复。
+ *
  * @param {object} layout - 已获取的标签页布局（避免重复请求）
- * @param {Promise} settingsPromise - 已发起的 settings 读取 Promise
+ * @param {Promise} settingsPromise - 已发起的 settings 读取 Promise（外部并行发起）
  */
 async function initPopup(layout, settingsPromise) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -2353,6 +2358,7 @@ async function initPopup(layout, settingsPromise) {
   window._currentTabLayout = layout;
 
   // settings 通过外部并行发起，这里 await 复用（用于域名检测模式判断）
+  // 此时 settings 大概率已到达（本地读取比网络快），await 几乎无等待
   const { settings } = await settingsPromise;
 
   // 注意：Clash 状态和系统代理状态的渲染已在 DOMContentLoaded 中通过 .then() 处理，
@@ -2463,10 +2469,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderLanguageSetting();
   renderThemeSetting();
 
-  // ★ 并行发起 settings 读取（本地，快）和 getStatus 请求（网络，慢）
-  // 两者各自 .then() 独立渲染，哪个先到先刷新哪个
-  const settingsPromise = chrome.storage.local.get('settings');
-  const statusPromise = sendToBackground({ action: 'getStatus' });
+  // ★ 性能优化：并行渐进式渲染（先到先渲染）
+  //
+  // 思路：弹窗打开时「模式切换按钮高亮」和「Clash/系统代理状态」是最先映入眼帘的内容，
+  //       前者依赖 settings（chrome.storage.local 本地读取，毫秒级），
+  //       后者依赖 getStatus（需要通过 Service Worker 调 Clash API 探测，百毫秒~秒级）。
+  //       两者无数据依赖，若串行等待则用户看到的是「空白 → 全部渲染完成」；
+  //       改为并行发起 + 各自 .then() 独立渲染后，用户看到的是渐进式出现：
+  //         ① settings 先到 → 模式按钮立即高亮（几乎瞬时）
+  //         ② getStatus 随后到 → Clash 状态点 + 系统代理状态点亮起
+  //       即使 getStatus 慢到 1s，用户也能立即看到当前模式，而非空白。
+  //
+  //       后续 loadSettingsForm 和 initPopup 复用同一个 Promise，不重复请求。
+  const settingsPromise = chrome.storage.local.get('settings');  // 本地，快
+  const statusPromise = sendToBackground({ action: 'getStatus' }); // 网络，慢
 
   // settings 先到 → 立即渲染模式切换按钮（系统代理/直连/clash代理 高亮）
   settingsPromise.then(({ settings }) => {
@@ -2491,7 +2507,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // loadSettingsForm 需要 status 数据，await 即可（不阻塞上面的 .then 渲染）
+  // 以下是必须 await 的串行步骤（有数据依赖）：
+  // loadSettingsForm 需要完整 status 数据（Clash API URL、端口、配置路径等），await 即可
+  // 注意：上面的 .then() 已在 status 到达时立即渲染了状态指示器，这里 await 只为填充表单
   const status = await statusPromise;
   loadSettingsForm(status);
 
@@ -2502,6 +2520,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 底部「重启 Clash 内核」按钮
   document.getElementById('restart-clash-btn').addEventListener('click', triggerRestartClash);
 
-  // initPopup 接收已发起的 Promise，避免重复请求
+  // initPopup 复用已发起的 settingsPromise（避免重复 chrome.storage.local.get）
+  // layout 也通过参数传入，避免 initPopup 内部重复 getTabLayout()
   await initPopup(layout, settingsPromise);
 });
