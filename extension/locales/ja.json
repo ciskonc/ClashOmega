@@ -144,7 +144,7 @@
 
   "native_host_installed": "Native Host インストール済み",
   "native_host_not_installed": "Native Host 未インストール、install.ps1 を実行",
-  "native_host_not_installed_hint": "Native Host が未インストールです。システムプロキシ状態、設定ファイルの読み書き、自動検出機能は利用できません。native-host\\install.ps1 を実行してください",
+  "native_host_not_installed_hint": "Native Host が未インストールです。システムプロキシ状態、設定ファイルの読み書き、自動検出機能は利用できません。native-host\\install.ps1 を右クリック → PowerShell で実行してください",
   "native_host_checking": "Native Host の状態を確認中...",
   "native_host_install_hint": "未インストール時、システムプロキシは Null と表示されます。インストールスクリプトを実行:",
   "native_host_install_link": "native-host\\install.ps1",
