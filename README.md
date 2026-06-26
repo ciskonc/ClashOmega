@@ -4,6 +4,8 @@
 
 <div align="center">
 
+<img src="extension/icons/logo128.png" width="128" height="128" alt="ClashOmega Logo">
+
 [![Version](https://img.shields.io/badge/version-1.3.7-blue?style=flat-square)](https://github.com/ciskonc/ClashOmega)
 [![Platform](https://img.shields.io/badge/platform-Chromium%20Browsers-green?style=flat-square)](https://github.com/ciskonc/ClashOmega)
 [![License](https://img.shields.io/badge/license-MIT-orange?style=flat-square)](LICENSE)
