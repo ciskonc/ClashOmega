@@ -1,9 +1,0 @@
-{
-    "path":  "D:\\libraries\\Desktop\\trae\\Chrome_Clash_manager\\native-host\\clash_rules_manager.bat",
-    "description":  "Clash Manager Native Messaging Host",
-    "name":  "com.clash.manager",
-    "allowed_origins":  [
-                            "chrome-extension://eokjkgelpibaagifcokdoenlcmjlifdn/"
-                        ],
-    "type":  "stdio"
-}

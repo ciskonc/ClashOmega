@@ -37,3 +37,7 @@ reference_links.md
 credentials/
 *.pem
 *.key
+
+# 开发副本（本地备份，不入 git，发行版 source code 不包含）
+# 开发时直接改 extension/，versions/ 仅作本地历史备份
+versions/
