@@ -1,5 +1,5 @@
 {
-    "path":  "D:\\libraries\\Desktop\\trae\\agent-operating-system\\01_PROJECTS\\clash_omega\\native-host\\clash_rules_manager.bat",
+    "path":  "REPLACED_BY_INSTALL_PS1/clash_rules_manager.bat",
     "description":  "ClashOmega Native Messaging Host",
     "name":  "com.clash.omega",
     "allowed_origins":  [

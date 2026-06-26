@@ -79,7 +79,7 @@ Native Host 用于读写 Clash 本地 YAML 配置文件（仅 Windows）。
 #### 3. 配置 Clash API
 
 1. 启动 Clash Verge → 设置 → 外部控制 → 启用外部控制器 → 配置 Clash API 地址和密钥
-2. 启动 Chrome 打开 ClashOmega → 设置 → 填写 Clash API 地址（默认 `http://127.0.0.1:9097`）和密钥
+2. 启动 Chrome 打开 ClashOmega → 设置 → 填写 Clash API 地址（默认 `http://127.0.0.1:9090`）和密钥
 3. 配置文件路径留空则自动检测
 
 ---

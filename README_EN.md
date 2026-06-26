@@ -4,7 +4,9 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.3.0-blue?style=flat-square)](https://github.com/ciskonc/ClashOmega)
+<img src="extension/icons/logo128_white.png" width="128" height="128" alt="ClashOmega Logo">
+
+[![Version](https://img.shields.io/badge/version-1.3.7-blue?style=flat-square)](https://github.com/ciskonc/ClashOmega)
 [![Platform](https://img.shields.io/badge/platform-Chromium%20Browsers-green?style=flat-square)](https://github.com/ciskonc/ClashOmega)
 [![License](https://img.shields.io/badge/license-MIT-orange?style=flat-square)](LICENSE)
 [![Manifest](https://img.shields.io/badge/Manifest-V3-purple?style=flat-square)](https://developer.chrome.com/docs/extensions/mv3/intro/)
@@ -242,6 +244,9 @@ A pure file-system-driven Agent collaboration framework with zero code dependenc
 
 ## Acknowledgements
 
+- [Clash](https://github.com/Dreamacro/clash) — The Clash kernel created by Dreamacro, the core proxy engine controlled by this project
+- [Clash Verge Rev](https://github.com/clash-verge-rev/clash-verge-rev) — Tauri-based Clash GUI client, the primary runtime environment for development and testing. Its config file format and extension script mechanism provide the foundation for rule management
+- [SwitchyOmega](https://github.com/FelisCatus/SwitchyOmega) / [ZeroOmega](https://github.com/zero-peak/ZeroOmega) — The inspiration for this project, honoring their pioneering work in browser proxy management
 - [MagicalYu](https://github.com/MagicalYuYu) — Chief guinea pig & AI coding whisperer. Throughout this project's development, he patiently tested every bug repeatedly and wielded unique "whispering" skills to make the AI produce usable code. Without his sacrifice (and countless "this doesn't work, try again"), ClashOmega wouldn't exist today.
 - This project is built with [AOS](https://aos.magicalyu.online/) (Agent Operating System) framework
 
