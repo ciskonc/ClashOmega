@@ -4,7 +4,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.3.0-blue?style=flat-square)](https://github.com/ciskonc/ClashOmega)
+[![Version](https://img.shields.io/badge/version-1.3.4-blue?style=flat-square)](https://github.com/ciskonc/ClashOmega)
 [![Platform](https://img.shields.io/badge/platform-Chromium%20Browsers-green?style=flat-square)](https://github.com/ciskonc/ClashOmega)
 [![License](https://img.shields.io/badge/license-MIT-orange?style=flat-square)](LICENSE)
 [![Manifest](https://img.shields.io/badge/Manifest-V3-purple?style=flat-square)](https://developer.chrome.com/docs/extensions/mv3/intro/)
@@ -56,6 +56,19 @@
 | 自动化安装脚本 | `install.ps1` 支持 Chrome 浏览器 Native Host 自动注册 |
 | Clash API 自动发现 | 从 Clash Verge Rev 配置文件读取端口 + 端口扫描 + 401 认证检测 |
 | 安全加固 | 修复 13 项安全漏洞（XSS、路径遍历、进程注入、CSP 缺失等） |
+
+### 性能与体验优化（v1.3.4 新增）
+
+| 功能 | 说明 |
+|------|------|
+| 端口回退并行探测 | `Promise.any` 竞速机制，5 个候选端口并行探测，最快响应立即返回（1s 超时） |
+| 会话级 API URL 缓存 | `chrome.storage.session` 缓存实际可用 URL，避免重复尝试错误端口 |
+| 两阶段保存反馈 | 保存配置半秒内即时反馈连接状态，失败时自动回退探测并提示修正端口 |
+| 关闭端口探测开关 | `disableFallback` 设置项，勾选后仅用用户配置端口，加速弹窗加载 |
+| 命名语义重构 | 14 项变量/字段重命名（`clashProxyHost` → `clashApiHost` 等），消除 API 地址与代理地址混淆 |
+| 数据迁移兼容 | 自动检测旧字段名并迁移，老用户升级无损 |
+| 死代码清理 | 移除 `hotReloadConfig`、`clashPut`、`reloadClashConfig`、`checkClashStatus` 等无调用函数 |
+| 域名内存上限 | 每 tab 域名收集上限 500 条，防止长时间浏览内存泄漏 |
 
 ## 安装
 

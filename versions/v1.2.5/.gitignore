@@ -1,0 +1,25 @@
+# Native Host 备份文件
+*.bak
+
+# 临时文件
+*.tmp
+*.log
+
+# IDE 配置
+.vscode/
+.idea/
+.trae/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node.js (如有)
+node_modules/
+
+# 打包文件
+*.zip
+
+# 文档
+.trae/
