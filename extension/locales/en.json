@@ -133,6 +133,9 @@
   "settings_save": "Save",
   "settings_close": "Close",
   "settings_about": "About ClashOmega",
+  "version_loading": "Checking version...",
+  "version_update_available": "New version available",
+  "version_latest": "Up to date",
 
   "restart_clash": "Restart Clash",
   "restart_clash_hint": "Sync rules from profile file to Clash kernel and restart",

@@ -2534,6 +2534,111 @@ async function initPopup(layout, settingsPromise) {
   }
 }
 
+// ──── 版本更新检测 ────
+
+/**
+ * 检测 GitHub 是否有新版本，并在设置页"关于 ClashOmega"旁显示版本号与更新提示
+ *
+ * 策略：
+ * 1. 从 chrome.runtime.getManifest() 读取当前版本（无网络请求）
+ * 2. 立即显示当前版本号
+ * 3. 异步请求 GitHub Releases API（24 小时缓存，避免每次打开 popup 都请求）
+ * 4. 比较语义化版本号，有更新则显示提示链接
+ *
+ * 容错：网络失败/API 限速/JSON 解析失败时静默降级为"仅显示当前版本"，不阻塞主流程
+ */
+async function checkVersionUpdate() {
+  const versionEl = document.getElementById('about-version');
+  const updateHintEl = document.getElementById('about-update-hint');
+  if (!versionEl || !updateHintEl) return;
+
+  // 读取当前版本（manifest.json 的 version 字段，无 v 前缀）
+  const currentVersion = chrome.runtime.getManifest().version;
+  const currentTag = `v${currentVersion}`;
+
+  // 立即显示当前版本号（loading 状态保留，等待 GitHub 比较结果决定颜色）
+  versionEl.textContent = currentTag;
+  versionEl.classList.remove('version-info--loading');
+
+  // GitHub API：获取最新 release 的 tag_name
+  // 限速：未授权 60 次/小时/IP，单用户绰绰有余；24 小时缓存进一步降低请求频率
+  const CACHE_KEY = '_versionCheckCache';
+  const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 小时（毫秒）
+
+  try {
+    // 1. 先读缓存
+    const { [CACHE_KEY]: cache } = await chrome.storage.local.get(CACHE_KEY);
+    const now = Date.now();
+    let latestTag = null;
+
+    if (cache && cache.tag && (now - cache.checkedAt) < CACHE_TTL) {
+      // 缓存有效，直接用
+      latestTag = cache.tag;
+    } else {
+      // 缓存过期或不存在，请求 GitHub API
+      const apiUrl = 'https://api.github.com/repos/ciskonc/ClashOmega/releases/latest';
+      const response = await fetch(apiUrl, {
+        headers: { 'Accept': 'application/vnd.github+json' },
+        cache: 'no-store'
+      });
+      if (!response.ok) {
+        // 限速或网络错误：静默降级，不显示更新提示
+        // 但如果有旧缓存（已过期），仍尝试用旧缓存比较（避免限速期间丢失提示）
+        if (cache && cache.tag) {
+          latestTag = cache.tag;
+        } else {
+          return;
+        }
+      } else {
+        const data = await response.json();
+        latestTag = data?.tag_name || null;
+        if (latestTag) {
+          // 写入缓存（即使本次失败也保留旧值，下次打开 popup 再重试）
+          await chrome.storage.local.set({
+            [CACHE_KEY]: { tag: latestTag, checkedAt: now }
+          });
+        }
+      }
+    }
+
+    if (!latestTag) return;
+
+    // 比较语义化版本号：剥离 v 前缀，按 . 分割，数字比较
+    const hasUpdate = compareSemver(latestTag, currentTag) > 0;
+
+    if (hasUpdate) {
+      // 显示更新提示（链接到 releases/latest，浏览器自动跳转最新版本）
+      updateHintEl.textContent = I18N.t('version_update_available') + ' ' + latestTag;
+      updateHintEl.style.display = 'inline-flex';
+      // 版本号用 error 色，引起注意
+      versionEl.classList.add('version-info--latest');
+      versionEl.style.color = 'var(--md-sys-color-error)';
+    } else {
+      // 已是最新版本
+      versionEl.classList.add('version-info--latest');
+      versionEl.title = I18N.t('version_latest');
+    }
+  } catch (e) {
+    // 任何异常：静默失败，保留已显示的当前版本号
+    console.warn('Version check failed:', e.message);
+  }
+}
+
+/**
+ * 语义化版本号比较
+ * @param {string} a - 形如 "v1.3.7" 或 "1.3.7"
+ * @param {string} b - 形如 "v1.3.7" 或 "1.3.7"
+ * @returns {number} a > b → 1, a < b → -1, a === b → 0
+ */
+function compareSemver(a, b) {
+  const parse = (v) => v.replace(/^v/i, '').split('.').map(n => parseInt(n, 10) || 0);
+  const [aMajor, aMinor, aPatch] = parse(a);
+  const [bMajor, bMinor, bPatch] = parse(b);
+  if (aMajor !== bMajor) return aMajor - bMajor;
+  if (aMinor !== bMinor) return aMinor - bMinor;
+  return aPatch - bPatch;
+}
+
 // ──── 入口 ────
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -2622,4 +2727,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // initPopup 复用已发起的 settingsPromise（避免重复 chrome.storage.local.get）
   // layout 也通过参数传入，避免 initPopup 内部重复 getTabLayout()
   await initPopup(layout, settingsPromise);
+
+  // 版本更新检测（非阻塞，不影响主流程；网络失败时静默降级为仅显示当前版本号）
+  checkVersionUpdate();
 });

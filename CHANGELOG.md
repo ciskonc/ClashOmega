@@ -2,6 +2,43 @@
 
 ---
 
+## v1.3.8 (2026-06-28)
+
+**设置页新增版本号显示与 GitHub 更新检测。**
+
+---
+
+### 一、新功能
+
+- **设置页"关于 ClashOmega"旁显示当前版本号**：从 `chrome.runtime.getManifest().version` 读取，无需网络请求即可立即显示
+- **GitHub 更新检测**：异步请求 `https://api.github.com/repos/ciskonc/ClashOmega/releases/latest`，与当前版本比较
+  - 有新版本：版本号变红色，显示「有新版本可用 vX.X.X」提示链接（点击跳转 releases/latest）
+  - 已是最新：版本号变绿色，鼠标悬停提示「已是最新版本」
+  - 网络失败/限速：静默降级为仅显示当前版本号，不影响主流程
+- **语义化版本比较**：剥离 `v` 前缀，按 `major.minor.patch` 数字比较
+- **24 小时缓存**：`chrome.storage.local._versionCheckCache`，避免每次打开 popup 都请求 GitHub API（未授权限速 60 次/小时/IP）
+- **非阻塞调用**：`checkVersionUpdate()` 在 DOMContentLoaded 末尾调用，不 `await`，版本检测失败不影响 popup 主功能渲染
+
+### 二、文件变更清单
+
+| 文件 | 变更 |
+|------|------|
+| `extension/popup/popup.html` | `.settings-about` 扩展为两行结构：上行「关于链接 + 版本号」，下行「更新提示」（默认隐藏） |
+| `extension/popup/popup.css` | 新增 `.settings-about-row` / `.version-info`（三态色：loading/latest/error）/ `.update-hint`（MD3 primary-container 背景 + hover 反色）样式，玻璃拟态主题适配 |
+| `extension/popup/popup.js` | 新增 `checkVersionUpdate()` + `compareSemver()` 函数；DOMContentLoaded 末尾非阻塞调用 |
+| `extension/locales/zh_CN.json` | 新增 `version_loading` / `version_update_available` / `version_latest` |
+| `extension/locales/en.json` | 同上 |
+| `extension/locales/ja.json` | 同上 |
+
+### 三、关键决策
+
+- **选择 GitHub Releases API 而非 tags API**：Releases API 返回最新发布版本（过滤预发布），tags API 返回最新标签（可能含开发标签）
+- **24 小时缓存而非不缓存**：GitHub 未授权 API 限速 60 次/小时/IP，缓存避免频繁打开 popup 触发限速
+- **降级策略**：网络失败时若有旧缓存（已过期）仍尝试比较，无旧缓存则仅显示当前版本号
+- **CSP 检查**：manifest.json CSP 不限制 `connect-src`，`host_permissions: *://*/*` 已覆盖 GitHub API，无需修改 CSP
+
+---
+
 ## v1.3.7 (2026-06-27)
 
 **修复保存设置后状态指示器不刷新 + 固定扩展 ID。**

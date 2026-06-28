@@ -129,6 +129,9 @@
   "settings_save": "保存设置",
   "settings_close": "关闭",
   "settings_about": "关于 ClashOmega",
+  "version_loading": "版本检测中...",
+  "version_update_available": "有新版本可用",
+  "version_latest": "已是最新版本",
 
   "restart_clash": "重启 Clash",
   "restart_clash_hint": "将 profile 文件中的规则同步到 Clash 内核并重启",

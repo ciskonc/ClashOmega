@@ -133,6 +133,9 @@
   "settings_save": "保存",
   "settings_close": "閉じる",
   "settings_about": "ClashOmega について",
+  "version_loading": "バージョン確認中...",
+  "version_update_available": "新バージョンがあります",
+  "version_latest": "最新です",
 
   "restart_clash": "Clash 再起動",
   "restart_clash_hint": "プロファイルからClashカーネルにルールを同期して再起動",
