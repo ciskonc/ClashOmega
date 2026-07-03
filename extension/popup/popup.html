@@ -34,15 +34,26 @@
   <!-- ──── 模块池：所有功能模块存放于此（隐藏），由 JS 分配到标签页 ──── -->
   <div id="modules-pool" style="display: none;">
 
-    <!-- ════ 模块：代理模式切换 ════ -->
+    <!-- ════ 模块：浏览器代理模式切换 ════ -->
     <div class="md3-card module" data-module="proxy-mode" id="module-proxy-mode">
-      <h3 class="md3-section-title" data-i18n="mode_title">代理模式切换</h3>
+      <h3 class="md3-section-title" data-i18n="mode_title">浏览器代理模式切换</h3>
       <div class="md3-segmented-button" id="mode-switch">
         <button data-mode="system" data-i18n="mode_system">系统代理</button>
         <button data-mode="direct" data-i18n="mode_direct">直连</button>
         <button data-mode="clash" data-i18n="mode_clash">Clash 代理</button>
       </div>
       <div class="mode-hint" id="mode-hint" data-i18n="mode_hint">选择代理工作模式，切换后自动刷新当前页面</div>
+    </div>
+
+    <!-- ════ 模块：Clash 远程管理（仅在设置中启用后显示）════ -->
+    <div class="md3-card module" data-module="clash-remote" id="module-clash-remote" style="display: none;">
+      <h3 class="md3-section-title" data-i18n="clash_remote_title">Clash 远程管理</h3>
+      <div class="md3-segmented-button" id="clash-mode-switch">
+        <button data-clash-mode="rule" data-i18n="clash_mode_rule">规则</button>
+        <button data-clash-mode="global" data-i18n="clash_mode_global">全局</button>
+        <button data-clash-mode="direct" data-i18n="clash_mode_direct">直连</button>
+      </div>
+      <div class="mode-hint" data-i18n="clash_remote_hint">切换 Clash 内核代理模式（rule/global/direct），仅影响 Clash 内核，不影响浏览器代理</div>
     </div>
 
     <!-- ════ 模块：域名检测 ════ -->
@@ -185,6 +196,13 @@
             <span data-i18n="settings_disable_fallback">关闭端口错误自动探测</span>
           </label>
           <div class="settings-hint" data-i18n="settings_disable_fallback_hint">勾选后只用配置的端口，不尝试其他端口</div>
+
+          <!-- Clash 远程管理：启用后在主页显示 Clash 内核模式切换按钮组 -->
+          <label class="settings-checkbox-row">
+            <input type="checkbox" id="settings-clash-remote-enabled">
+            <span data-i18n="settings_clash_remote_enabled">启用 Clash 远程管理</span>
+          </label>
+          <div class="settings-hint" data-i18n="settings_clash_remote_hint">启用后主页显示 Clash 内核代理模式切换按钮（规则/全局/直连），通过 Clash API PATCH /configs 切换。既适用于本地 Clash Verge Rev，也适用于远程 OpenWrt OpenClash，仅影响 Clash 内核，不影响浏览器代理</div>
         </div>
         <div class="settings-actions">
           <button class="md3-button md3-button--filled settings-sub-tab-save" data-sub-tab="connection" data-i18n="settings_save">保存设置</button>

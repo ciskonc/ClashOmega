@@ -197,6 +197,7 @@ function bindSystemThemeListener() {
  */
 const AVAILABLE_MODULES = [
   { id: 'proxy-mode',   nameKey: 'module_proxy_mode' },
+  { id: 'clash-remote', nameKey: 'clash_remote_title' },
   { id: 'domain-check', nameKey: 'module_domain_check' },
   { id: 'quick-add',    nameKey: 'module_quick_add' },
   { id: 'batch-detect', nameKey: 'module_batch_detect' },
@@ -209,11 +210,11 @@ const AVAILABLE_MODULES = [
  * 标签页布局版本号
  * 当默认布局结构发生重大变更时递增，旧版保存的布局将自动重置为新默认布局
  */
-const LAYOUT_VERSION = 3;
+const LAYOUT_VERSION = 4;
 
 /**
  * 获取默认标签页布局
- * 标签页 1：代理模式 + 域名检测（高频操作置首）
+ * 标签页 1：浏览器代理模式 + Clash 远程管理 + 域名检测（高频操作置首）
  * 标签页 2：规则管理（快捷添加 + 批量检测 + 脚本规则 + 内置规则）
  * 标签页 3：设置
  */
@@ -221,7 +222,7 @@ function getDefaultTabLayout() {
   return {
     layoutVersion: LAYOUT_VERSION,
     tabs: [
-      { id: 'tab-1', name: '', nameKey: 'default_tab_1', modules: ['proxy-mode', 'domain-check'] },
+      { id: 'tab-1', name: '', nameKey: 'default_tab_1', modules: ['proxy-mode', 'clash-remote', 'domain-check'] },
       { id: 'tab-2', name: '', nameKey: 'default_tab_2', modules: ['quick-add', 'batch-detect', 'script-rules', 'rule-list'] },
       { id: 'tab-3', name: '', nameKey: 'default_tab_3', modules: ['settings'] }
     ],
@@ -961,6 +962,29 @@ function renderModeSwitch(currentMode) {
   buttons.forEach(btn => {
     btn.classList.toggle('active', btn.dataset.mode === currentMode);
   });
+}
+
+/**
+ * 渲染 Clash 远程管理按钮组的选中状态
+ * @param {string} clashMode - 'rule' | 'global' | 'direct'
+ */
+function renderClashRemoteMode(clashMode) {
+  const buttons = document.querySelectorAll('#clash-mode-switch button');
+  buttons.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.clashMode === clashMode);
+  });
+}
+
+/**
+ * 控制 Clash 远程管理模块的显示/隐藏
+ * 仅当用户在设置中启用 clashRemoteEnabled 时显示
+ * @param {boolean} enabled - 是否启用
+ */
+function setClashRemoteModuleVisible(enabled) {
+  const module = document.getElementById('module-clash-remote');
+  if (module) {
+    module.style.display = enabled ? '' : 'none';
+  }
 }
 
 function renderClashStatus(running, config, proxyPort, layout) {
@@ -1724,6 +1748,25 @@ function bindModeSwitchEvents() {
       showToast(I18N.t(errKey), 'error');
     }
   });
+
+  // Clash 远程管理：切换 Clash 内核代理模式（rule/global/direct）
+// 通过 Clash API PATCH /configs 切换，仅影响 Clash 内核，不影响浏览器代理
+// 切换成功后 background 自动 closeAllConnections + 刷新当前标签页
+// 让浏览器放弃与 Clash 的 keep-alive 连接，新连接按新 mode 走
+// 注意：不能提供「重启 Clash」按钮，因为 PUT /configs reload 会重置 mode 到配置文件默认值
+document.getElementById('clash-mode-switch').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button');
+  if (!btn || btn.disabled) return;
+  const mode = btn.dataset.clashMode;
+  const result = await sendToBackground({ action: 'switchClashMode', mode });
+  if (result.success) {
+    renderClashRemoteMode(mode);
+    // 页面会被自动刷新，toast 仅作提示（刷新后 popup 会关闭）
+    showToast(I18N.t('clash_remote_switch_success') + ': ' + mode, 'success');
+  } else {
+    showToast(I18N.t('clash_remote_switch_failed'), 'error');
+  }
+});
 }
 
 /**
@@ -2039,6 +2082,9 @@ function bindSettingsEvents() {
         clashConfigPath: configPath,
         writeToYaml: document.getElementById('settings-write-to-yaml').checked,
         disableFallback: document.getElementById('settings-disable-fallback').checked,
+        clashRemoteEnabled: document.getElementById('settings-clash-remote-enabled').checked,
+        // clashRemoteMode 不从表单读取（保存设置不切换模式），保留原值
+        clashRemoteMode: currentSettings.clashRemoteMode || 'rule',
         dashboardType: dashboardType,
         dashboardCustomUrl: dashboardCustomUrl,
         language: document.getElementById('language-select').value,
@@ -2057,6 +2103,10 @@ function bindSettingsEvents() {
       applyZoom(zoomScale);
       // 重建标签页布局
       buildTabLayout(tabLayout);
+      // 重建布局后立即同步 Clash 远程管理模块的显示状态
+      // 原因：buildTabLayout 会将模块从 #modules-pool 移到 tab-panel，需重新设置 display
+      setClashRemoteModuleVisible(settings.clashRemoteEnabled === true);
+      renderClashRemoteMode(settings.clashRemoteMode || 'rule');
       // 切换到设置所在的标签页（保存后保持在设置页）
       const settingsTab = tabLayout.tabs.find(t => t.modules.includes('settings'));
       if (settingsTab) {
@@ -2248,6 +2298,7 @@ async function loadSettingsForm(cachedStatus) {
   document.getElementById('settings-config-path').value = settings.clashConfigPath || '';
   document.getElementById('settings-write-to-yaml').checked = settings.writeToYaml === true;
   document.getElementById('settings-disable-fallback').checked = settings.disableFallback === true;
+  document.getElementById('settings-clash-remote-enabled').checked = settings.clashRemoteEnabled === true;
 
   // 控制台面板选择：选中对应的 radio，custom 时启用自定义 URL 输入框
   const dashboardType = settings.dashboardType || 'metacubexd';
@@ -2544,6 +2595,12 @@ async function initPopup(layout, settingsPromise) {
   // 此时 settings 大概率已到达（本地读取比网络快），await 几乎无等待
   const { settings } = await effectiveSettingsPromise;
 
+  // Clash 远程管理：刷新模块显示状态和按钮选中状态
+  // 场景：保存设置后 / 重启 Clash 后调用 initPopup，需重新读取 settings 并更新 UI
+  // （DOMContentLoaded 的 settingsPromise.then 只在 popup 首次打开时执行一次，不会自动刷新）
+  setClashRemoteModuleVisible(settings?.clashRemoteEnabled === true);
+  renderClashRemoteMode(settings?.clashRemoteMode || 'rule');
+
   // 注意：Clash 状态和系统代理状态的渲染已在 DOMContentLoaded 中通过 .then() 处理，
   // 这里不再重复，避免双重渲染。
   // 但保存设置/模式切换后需要显式刷新状态，请调用方使用 refreshPopupStatus(freshStatus)。
@@ -2777,6 +2834,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   settingsPromise.then(({ settings }) => {
     if (settings && settings.currentMode) {
       renderModeSwitch(settings.currentMode);
+    }
+    // Clash 远程管理：根据启用状态显示/隐藏模块
+    if (settings) {
+      setClashRemoteModuleVisible(settings.clashRemoteEnabled === true);
+      // 渲染 Clash 内核模式按钮选中状态（保留上次切换的模式，或默认 rule）
+      renderClashRemoteMode(settings.clashRemoteMode || 'rule');
     }
   });
 

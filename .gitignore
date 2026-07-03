@@ -47,3 +47,9 @@ icons_preview/
 
 # 本地开发工具脚本（仅本地使用，不提交到 GitHub）
 tools/
+
+# AOS 内部研讨文档（仅 AOS 工作区使用，不提交到公开仓库）
+docs/20260704_*.md
+
+# 上游项目源码克隆（GPL 等许可证，避免污染本仓库）
+research/

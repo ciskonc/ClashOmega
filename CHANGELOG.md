@@ -2,6 +2,64 @@
 
 ---
 
+## v1.4.1 (2026-07-04)
+
+**新增「Clash 远程管理」模块，可在主页直接切换 Clash 内核代理模式（规则/全局/直连）。**
+
+---
+
+### 一、新功能
+
+- **新增「Clash 远程管理」模块**：主页新增独立模块（默认隐藏），与「浏览器代理模式切换」并列分层显示
+  - 三按钮组：`[规则] [全局] [直连]`（rule / global / direct）
+  - 通过 Clash API `PATCH /configs {mode}` 实时切换 Clash 内核代理模式
+  - 默认 `clashRemoteEnabled=false`，需在「设置 → 连接配置」中手动启用
+- **「代理模式切换」改名**：`代理模式切换` → `浏览器代理模式切换`
+  - 原模块（系统代理/直连/Clash 代理）仅控制浏览器代理，不影响 Clash 内核模式
+  - 新模块（规则/全局/直连）仅影响 Clash 内核，不影响浏览器代理
+  - 两个模块职责清晰分层，避免概念混淆
+- **标签页布局升级（LAYOUT_VERSION 3→4）**：默认布局 tab-1 新增 `clash-remote` 模块，位于 `proxy-mode` 之后、`domain-check` 之前
+- **可用模块注册**：`AVAILABLE_MODULES` 列表新增 `clash-remote`，可在「设置 → 标签页布局」编辑器中拖拽调整位置
+
+### 二、关键决策
+
+| 决策 | 理由 |
+|---|---|
+| 模块命名「Clash 远程管理」而非「OpenWrt 远程管理」 | 既适用于本地 Clash Verge Rev，也适用于远程 OpenWrt OpenClash，统一命名避免误导 |
+| 启用开关放在设置页→连接配置 | 与 Clash API 配置同区，逻辑相关 |
+| 默认 `clashRemoteEnabled=false` | 避免与现有「浏览器代理模式切换」混淆，需要用户显式启用 |
+| 通过 `PATCH /configs` 而非 LuCI 切换 | ClashOmega 已支持远程 Clash API，本地/远程场景统一接口；OpenClash uci 持久化留待阶段三实现 |
+| 模式仅持久化到 chrome.storage.local | 不写入 OpenClash uci 配置；OpenClash 重启后回到 uci 默认值，需走阶段三 LuCI 才能持久化 |
+| 升级 LAYOUT_VERSION 至 4 | 新增模块需要加入默认布局，老用户保存的布局自动重置为新默认布局 |
+
+### 三、国际化
+
+- `mode_title` / `module_proxy_mode` 改名为「浏览器代理模式切换」三语言同步
+- 新增 9 个翻译键（zh_CN / en / ja）：
+  - `clash_remote_title` / `clash_mode_rule` / `clash_mode_global` / `clash_mode_direct`
+  - `clash_remote_hint` / `settings_clash_remote_enabled` / `settings_clash_remote_hint`
+  - `clash_remote_switch_success` / `clash_remote_switch_failed`
+
+### 四、关键修复（实测发现并解决）
+
+- **切换 mode 后旧连接仍走旧代理**：`switchClashMode` 成功后调用 `DELETE /connections` 关闭所有活跃连接，强制新连接重新匹配新 mode（Clash keep-alive 复用旧连接导致 mode 切换看似无效）
+- **重启 Clash 后远程管理按钮不跳回「规则」**：`initPopup` 在 await settings 后主动调用 `setClashRemoteModuleVisible` + `renderClashRemoteMode`，修复保存设置 / 重启 Clash 后 popup UI 不刷新的问题
+- **保存设置后主页不显示模块**：`buildTabLayout` 重建布局后立即调用 `setClashRemoteModuleVisible`，避免 inline style 被重置导致模块隐藏
+- **「全局」按钮切了不生效（走伪节点）**：订阅开头插入"剩余流量：xxx GB"伪节点（server 字段为空），mihomo 隐式 GLOBAL 组选中伪节点导致所有流量走伪节点
+  - `pickFirstRealProxyNode` 新增伪节点过滤（跳过 `server` 为空的节点）
+  - 新增 `pickPreferredGlobalNode`：切 global 时优先指向 Selector 类型代理组（通常是「节点选择」组），跟随用户在节点选择组中切换的节点
+  - `isGlobalNowValidRealNode`：GLOBAL.now 指向代理组时也视为有效（mihomo 会递归解析到最终节点）
+- **重启 Clash 导致 mihomo fatal 退出**：规则引用不存在的代理组时 mihomo 启动失败
+  - `restartClash` 新增 Step 0：mihomo 健康检查（`isMihomoAlive`），已死时返回明确提示让用户去 Clash Verge Rev GUI 重启，不再进入必然失败的死循环
+  - `restartClash` 新增 Step 2.5：`validateRulesAgainstGroups` 校验规则 TARGET 是否在当前 proxy-groups 中，无效规则丢弃，保证写入快照可被 mihomo 正常加载
+
+### 五、后续阶段（未实现，已规划）
+
+- **阶段二**：规则文件管理（读取/编辑 OpenClash `.list` 文件）
+- **阶段三**：LuCI 集成（持久化模式切换到 OpenClash uci 配置，需 OpenWrt 环境）
+
+---
+
 ## v1.4.0 (2026-07-04)
 
 **设置页「高级」标签新增控制台面板选择，支持 metacubexd / Yacd Meta / Zashboard / 自定义。**

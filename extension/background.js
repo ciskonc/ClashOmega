@@ -31,6 +31,11 @@ chrome.runtime.onInstalled.addListener(async () => {
         // 自定义控制台 URL 模板（仅当 dashboardType='custom' 时使用）
         // 必须含占位符 %host / %port / %secret，运行时会被实际值替换
         dashboardCustomUrl: '',
+        // Clash 远程管理：启用后主页显示 Clash 内核模式切换按钮（规则/全局/直连）
+        clashRemoteEnabled: false,
+        // Clash 内核代理模式（运行时切换，不持久化到 OpenClash uci 配置）
+        // 仅当 clashRemoteEnabled=true 时有意义；可选值：'rule' | 'global' | 'direct'
+        clashRemoteMode: 'rule',
         language: 'zh_CN'
       }
     });
@@ -215,6 +220,45 @@ async function handleMessage(message) {
         return { success: config !== null, config };
       }
 
+      // ──── Clash 内核模式切换（PATCH /configs {mode}）────
+      // 阶段一仅运行时切换，不持久化到 OpenClash uci；走 Clash API 直接生效
+      // 注意：不能调用 restartClash，因为 PUT /configs reload 会从配置文件重新加载 mode，重置本次切换
+      case 'switchClashMode': {
+        const validModes = ['rule', 'global', 'direct'];
+        if (!validModes.includes(message.mode)) {
+          return { success: false, error: 'invalid mode: ' + message.mode };
+        }
+        const ok = await switchClashMode(message.mode);
+        if (ok) {
+          // 持久化到 chrome.storage.local（仅记录用户选择，不写入 OpenClash uci）
+          const settings = await getSettings();
+          const oldMode = settings.clashRemoteMode || 'rule';
+          settings.clashRemoteMode = message.mode;
+          await chrome.storage.local.set({ settings });
+          // 刷新当前标签页：让浏览器放弃与 Clash 的 keep-alive 连接
+          // 原因：Clash 切换 mode 后对新连接立即生效，但浏览器复用 keep-alive 连接会走旧路径
+          // 刷新标签页强制浏览器建立新连接，按新 mode 走
+          if (oldMode !== message.mode) {
+            try {
+              const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+              if (tab && tab.id) {
+                chrome.tabs.reload(tab.id);
+              }
+            } catch (e) {
+              console.log('ClashOmega: tab reload after switchClashMode failed:', e.message);
+            }
+          }
+        }
+        return { success: ok };
+      }
+
+      // ──── 获取 Clash 内核当前模式（GET /configs 返回 mode 字段）────
+      case 'getClashMode': {
+        const config = await getClashConfig();
+        if (!config) return { success: false, error: 'Clash API unavailable' };
+        return { success: true, mode: config.mode || 'rule' };
+      }
+
       // ──── 规则管理（Native Host 写入 + Clash API 热重载）────
       // 写入成功后返回，用户需手动重启 Clash 生效
       case 'addRule': {
@@ -306,6 +350,22 @@ async function handleMessage(message) {
 
       case 'restartClash': {
         const settings = await getSettings();
+
+        // Step 0: 检测 mihomo 内核是否存活
+        // 根因：mihomo 已死时，PUT /configs 和 POST /restart 都必然失败（端口不监听），
+        //       ClashOmega 无法通过 HTTP API 救活，必须让用户去 Clash Verge Rev GUI 重启
+        console.log('[restartClash] Step 0: Checking mihomo kernel health...');
+        const alive = await isMihomoAlive();
+        if (!alive) {
+          console.error('[restartClash] FAILED at step 0: mihomo kernel not reachable (crashed or not started)');
+          return {
+            success: false,
+            error: 'mihomo-crashed',
+            hint: '请打开 Clash Verge Rev GUI，点击"重启内核"或"重载配置"按钮恢复 mihomo，然后再用插件重启。'
+          };
+        }
+        console.log('[restartClash] Step 0 OK: mihomo alive');
+
         console.log('[restartClash] Step 1: Reading rules from profile file...');
         const yamlResult = await getClashYamlRules(settings.clashConfigPath);
         // 使用 Array.isArray 严格检查，防止 rules 为 {} 等非数组 truthy 值通过检查
@@ -327,6 +387,20 @@ async function handleMessage(message) {
           mergedRules = [...scriptResult.rules, ...yamlResult.rules];
         } else {
           console.log('[restartClash] Step 2 SKIPPED: no script rules or script not initialized');
+        }
+
+        // Step 2.5: 校验规则引用的代理组都存在
+        // 根因：规则引用不存在的代理组（如 GFWList 组被删除），mihomo 启动时 fatal 退出
+        //       需要在写入快照前丢弃无效规则，保证写入的快照可被 mihomo 正常加载
+        console.log('[restartClash] Step 2.5: Validating rules against current proxy-groups...');
+        const proxies = await getClashProxies();
+        const availableGroupNames = Object.keys(proxies);
+        const { valid: validRules, invalid: invalidRules } = validateRulesAgainstGroups(mergedRules, availableGroupNames);
+        if (invalidRules.length > 0) {
+          console.warn(`[restartClash] Step 2.5 WARN: ${invalidRules.length} invalid rule(s) reference non-existent proxy-group, will be dropped:`, invalidRules);
+          mergedRules = validRules;
+        } else {
+          console.log(`[restartClash] Step 2.5 OK: all ${mergedRules.length} rules reference existing proxy-groups`);
         }
 
         // Step 3: 同步合并后的规则到快照（包含扩展脚本规则）
@@ -360,6 +434,10 @@ async function handleMessage(message) {
             } else {
               console.warn('[restartClash] Step 4.5 WARN: failed to close connections (rules will take effect on new connections only)');
             }
+            // 重启后 Clash 内核 mode 会从配置文件重新加载，回到默认值（rule）
+            // 同步重置扩展 storage 中的 clashRemoteMode，让 popup UI 按钮回到「规则」
+            settings.clashRemoteMode = 'rule';
+            await chrome.storage.local.set({ settings });
             return { success: true, method: 'reload' };
           }
           console.warn('[restartClash] Step 4 FAILED: PUT /configs failed, falling back to POST /restart');
@@ -375,6 +453,10 @@ async function handleMessage(message) {
           return { success: false, error: 'Clash API unreachable — check API URL & secret in settings' };
         }
         console.log('[restartClash] Step 5 OK: kernel restarted successfully');
+        // 重启后 Clash 内核 mode 会从配置文件重新加载，回到默认值（rule）
+        // 同步重置扩展 storage 中的 clashRemoteMode，让 popup UI 按钮回到「规则」
+        settings.clashRemoteMode = 'rule';
+        await chrome.storage.local.set({ settings });
         return { success: true, method: 'restart' };
       }
 

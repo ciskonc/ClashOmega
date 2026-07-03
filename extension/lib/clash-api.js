@@ -240,6 +240,61 @@ async function getClashConfig(options) {
 }
 
 /**
+ * 检测 mihomo 内核是否存活且 API 可达
+ * 用于「重启 Clash」前预检，避免 mihomo 已死时进入必然失败的流程
+ * @returns {Promise<boolean>} true 表示存活
+ */
+async function isMihomoAlive() {
+  try {
+    const cfg = await clashGet('/configs');
+    return cfg && typeof cfg === 'object' && 'mode' in cfg;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 校验规则列表中引用的代理组是否存在于 proxy-groups
+ * 防止写入引用不存在代理组的规则，导致 mihomo 启动时 fatal 退出
+ * @param {string[]} rules - 规则字符串数组，如 ["RULE-SET,xxx,GFWList", "MATCH,🐟 漏网之鱼"]
+ * @param {string[]} availableGroupNames - 可用的代理组名列表（含 DIRECT/REJECT）
+ * @returns {{valid: string[], invalid: string[]}} 校验结果
+ */
+function validateRulesAgainstGroups(rules, availableGroupNames) {
+  if (!Array.isArray(rules) || !Array.isArray(availableGroupNames)) {
+    return { valid: [], invalid: [] };
+  }
+  const valid = [];
+  const invalid = [];
+  const groupSet = new Set(availableGroupNames);
+  // DIRECT / REJECT / PASS 是 Clash 内置出站，永远可用
+  groupSet.add('DIRECT');
+  groupSet.add('REJECT');
+  groupSet.add('PASS');
+
+  for (const rule of rules) {
+    if (typeof rule !== 'string' || !rule.trim()) {
+      invalid.push(rule);
+      continue;
+    }
+    // 规则格式：TYPE,VALUE,TARGET（部分规则只有 TYPE,VALUE 如 GEOIP）
+    // 最后一个逗号后的字段是 TARGET（代理组名）
+    const parts = rule.split(',');
+    if (parts.length < 2) {
+      invalid.push(rule);
+      continue;
+    }
+    const target = parts[parts.length - 1].trim();
+    if (groupSet.has(target)) {
+      valid.push(rule);
+    } else {
+      invalid.push(rule);
+    }
+  }
+  return { valid, invalid };
+}
+
+/**
  * 通过 PUT /configs {path} 让 mihomo 重新加载指定配置文件
  * 不重启内核，代理不中断，用于「重启 Clash」按钮的优先路径
  * 注意：mihomo 要求路径使用正斜杠（/），Windows 反斜杠（\）会返回 400 Bad Request
@@ -282,4 +337,163 @@ async function getClashProxies() {
   const data = await clashGet('/proxies');
   if (!data || !data.proxies) return {};
   return data.proxies;
+}
+
+/**
+ * 切换代理组的当前选中节点（PUT /proxies/{name} {name: selectedNode}）
+ * 用于切换到 global 模式时自动把 GLOBAL 组指向有效代理节点
+ * @param {string} groupName - 代理组名（如 'GLOBAL'）
+ * @param {string} nodeName - 要选中的节点名
+ * @returns {Promise<boolean>} 是否切换成功
+ */
+async function selectProxyNode(groupName, nodeName) {
+  const { baseUrl, headers } = await getApiConfig();
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5000);
+    const url = `${baseUrl}/proxies/${encodeURIComponent(groupName)}`;
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ name: nodeName }),
+      signal: ctrl.signal
+    });
+    clearTimeout(timer);
+    return response.ok;
+  } catch (e) {
+    console.error('ClashOmega: selectProxyNode failed:', e);
+    return false;
+  }
+}
+
+/**
+ * 查询 GLOBAL 组的候选节点列表，返回第一个有效代理节点
+ * 跳过 DIRECT / REJECT / 代理组 / 伪节点（server 字段为空）
+ * 伪节点说明：机场常在订阅开头插入"剩余流量：xxx GB"等显示信息的伪节点，
+ * 这类节点 type 是 Vmess/AnyTLS 等真实类型，但 server 字段为空，无法连接
+ * @returns {Promise<string|null>} 节点名，无可用节点时返回 null
+ */
+async function pickFirstRealProxyNode() {
+  const proxies = await getClashProxies();
+  const globalGroup = proxies['GLOBAL'];
+  if (!globalGroup || !Array.isArray(globalGroup.all)) return null;
+  for (const name of globalGroup.all) {
+    // 跳过内置 DIRECT/REJECT
+    if (name === 'DIRECT' || name === 'REJECT') continue;
+    const node = proxies[name];
+    if (!node) continue;
+    // 跳过代理组（Selector/URLTest/Fallback/LoadBalance），只选真实节点
+    const groupTypes = ['Selector', 'URLTest', 'Fallback', 'LoadBalance', 'Relay'];
+    if (node.type && groupTypes.includes(node.type)) continue;
+    // 跳过伪节点：机场用来显示流量信息的 hack 节点，server 字段为空
+    if (!node.server) continue;
+    return name;
+  }
+  return null;
+}
+
+/**
+ * 优先返回 GLOBAL 组候选列表中第一个 Selector 类型代理组（通常是「节点选择」组）
+ * 让 GLOBAL 指向代理组而非真实节点，用户在「节点选择」组切换节点时 GLOBAL 自动跟随
+ * 若无代理组，fallback 到 pickFirstRealProxyNode 返回第一个真实节点
+ * @returns {Promise<string|null>} 节点/组名，无可用时返回 null
+ */
+async function pickPreferredGlobalNode() {
+  const proxies = await getClashProxies();
+  const globalGroup = proxies['GLOBAL'];
+  if (!globalGroup || !Array.isArray(globalGroup.all)) return null;
+
+  // 优先找 Selector 类型代理组（手动选择型，符合"节点选择"语义）
+  // 跳过 URLTest/Fallback/LoadBalance（自动测速组，不应被 GLOBAL 直接指向）
+  for (const name of globalGroup.all) {
+    if (name === 'DIRECT' || name === 'REJECT') continue;
+    const node = proxies[name];
+    if (!node) continue;
+    if (node.type === 'Selector') return name;
+  }
+
+  // Fallback: 无代理组时，返回第一个真实节点
+  return await pickFirstRealProxyNode();
+}
+
+/**
+ * 判断 GLOBAL 组当前选中的节点是否是有效节点
+ * 有效定义：真实节点（有 server）/ 代理组（Selector/URLTest 等）
+ * 无效定义：未定义 / DIRECT / REJECT / 伪节点（server 为空且非代理组）
+ * @param {object} proxies - getClashProxies() 返回的完整 proxies 对象
+ * @returns {boolean} true 表示当前是有效节点，false 表示需要重新选
+ */
+function isGlobalNowValidRealNode(proxies) {
+  const globalGroup = proxies['GLOBAL'];
+  if (!globalGroup || !globalGroup.now) return false;
+  const now = globalGroup.now;
+  if (now === 'DIRECT' || now === 'REJECT') return false;
+  const node = proxies[now];
+  if (!node) return false;
+  // 代理组（Selector/URLTest/Fallback/LoadBalance/Relay）：有效
+  // mihomo 会递归解析到最终真实节点
+  const groupTypes = ['Selector', 'URLTest', 'Fallback', 'LoadBalance', 'Relay'];
+  if (node.type && groupTypes.includes(node.type)) return true;
+  // 真实节点：必须有 server 字段（跳过伪节点）
+  if (!node.server) return false;
+  return true;
+}
+
+/**
+ * 切换 Clash 内核代理模式（PATCH /configs {mode}）
+ * 阶段一仅做运行时切换，不持久化到 OpenClash uci 配置；
+ * OpenClash 重启后会回到 uci 默认模式，需走阶段三 LuCI switch_rule_mode 才能持久化
+ *
+ * 关键行为：
+ * 1. PATCH /configs {mode} 切换内核 mode
+ * 2. 切换到 global 时，若 GLOBAL 组当前指向 DIRECT/REJECT，自动指向第一个有效代理节点
+ *    原因：global 模式下所有流量走 GLOBAL 组，若 GLOBAL 指向 DIRECT 则表现同 direct
+ * 3. closeAllConnections 关闭所有活跃连接，让新连接按新 mode 匹配
+ *
+ * @param {'rule'|'global'|'direct'} mode - Clash 内核代理模式
+ * @returns {Promise<boolean>} 是否切换成功
+ */
+async function switchClashMode(mode) {
+  const { baseUrl, headers } = await getApiConfig();
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5000);
+    const response = await fetch(`${baseUrl}/configs`, {
+      method: 'PATCH',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ mode }),
+      signal: ctrl.signal
+    });
+    clearTimeout(timer);
+    if (!response.ok) return false;
+
+    // global 模式特殊处理：若 GLOBAL 组当前指向无效节点，自动指向优先节点
+    // 无效节点定义：DIRECT/REJECT/未定义/伪节点（server 字段为空且非代理组）
+    // 优先节点策略：第一个 Selector 类型代理组（通常是「节点选择」组），
+    //   让 GLOBAL 跟随「节点选择」组当前选中节点；无代理组时 fallback 到第一个真实节点
+    if (mode === 'global') {
+      const proxies = await getClashProxies();
+      if (!isGlobalNowValidRealNode(proxies)) {
+        const pick = await pickPreferredGlobalNode();
+        if (pick) {
+          const picked = await selectProxyNode('GLOBAL', pick);
+          console.log(`ClashOmega: global mode auto-picked GLOBAL -> ${pick} (success=${picked})`);
+        }
+      }
+    }
+
+    // 切换成功后关闭所有活跃连接，强制新连接按新 mode 匹配
+    // 不阻塞主流程：失败也不影响 mode 切换的成功状态（连接关闭是辅助操作）
+    closeAllConnections().catch(() => {});
+    return true;
+  } catch (e) {
+    console.error('ClashOmega: switchClashMode failed:', e);
+    return false;
+  }
 }
