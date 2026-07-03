@@ -2,6 +2,69 @@
 
 ---
 
+## v1.4.0 (2026-07-04)
+
+**设置页「高级」标签新增控制台面板选择，支持 metacubexd / Yacd Meta / Zashboard / 自定义。**
+
+---
+
+### 一、新功能
+
+- **「高级」子标签页新增「控制台面板」选择器**：4 选 1 单选按钮
+  - `metacubexd`：`https://metacubex.github.io/metacubexd/`（默认）
+  - `Yacd Meta`：`https://yacd.metacubex.one/`
+  - `Zashboard`：`https://board.zash.run.place/`
+  - `自定义`：用户填入 URL 模板，含占位符 `%host` / `%port` / `%secret`
+- **占位符替换机制**：所有面板（预设和自定义）统一使用 `%host` / `%port` / `%secret` 占位符，运行时被 Clash API 实际值替换（encodeURIComponent 编码，避免特殊字符破坏 URL）
+- **自定义 URL 输入框**：仅当选择「自定义」radio 时启用，否则 disabled；切换到 custom 时自动聚焦输入框
+- **placeholder 示例**：`https://example.com/#/setup?hostname=%host&port=%port&secret=%secret`，用户照着填即可
+- **多语言适配**：zh_CN / en / ja 三语言完整翻译面板名、自定义标签、placeholder、提示语
+
+### 二、关键决策
+
+| 决策 | 理由 |
+|---|---|
+| 用 `%host` 等占位符而非 `${host}` 模板字符串 | URL 中 `$` 可能与某些面板自带的模板语法冲突，`%` 更安全且无歧义 |
+| 预设 URL 写在代码常量 `DASHBOARD_PRESETS` 而非 settings | 预设固定不需要持久化，settings 只存类型枚举 + 自定义 URL |
+| 自定义为空时回退到 metacubexd | 避免用户选了 custom 但忘了填 URL 导致打开 `about:blank` |
+| radio 而非 select | 4 个选项用 radio 一目了然，配合 URL 副标题更直观 |
+| 自定义 URL 输入框默认 disabled | 视觉上明确"只有选 custom 才能用"，避免误填了 URL 但实际选的是预设 |
+| minor 版本号 bump（1.3.9→1.4.0） | 新增功能而非纯 bug 修复，按 semver 应 minor bump |
+
+### 三、URL 拼接逻辑
+
+三个面板的实际 URL 模板（运行时被实际值替换）：
+
+```
+metacubexd: https://metacubex.github.io/metacubexd/#/setup?http=true&hostname=%host&port=%port&secret=%secret
+yacd:       https://yacd.metacubex.one/?hostname=%host&port=%port&secret=%secret
+zashboard:  https://board.zash.run.place/#/setup?http=true&hostname=%host&port=%port&secret=%secret
+```
+
+注意 yacd 使用查询参数（`?`），metacubexd 和 zashboard 使用 hash 路由（`#/setup?`），yacd 不需要 `http=true` 参数。
+
+### 四、文件变更清单
+
+| 文件 | 变更 |
+|------|------|
+| `extension/popup/popup.html` | 「高级」子标签页新增 4 个 radio + 自定义 URL 输入框 + 提示语 |
+| `extension/popup/popup.css` | 新增 `.settings-dashboard-options` / `.settings-radio-row` / `.dashboard-name` / `.dashboard-url` 样式，玻璃拟态主题自动适配 |
+| `extension/popup/popup.js` | 新增 `DASHBOARD_PRESETS` 常量；重写 `openWebDashboard()` 走占位符替换；settings 保存/加载添加 `dashboardType` / `dashboardCustomUrl`；radio change 事件动态启用/禁用自定义 URL 输入框 |
+| `extension/background.js` | 默认 settings 新增 `dashboardType: 'metacubexd'` / `dashboardCustomUrl: ''` |
+| `extension/locales/zh_CN.json` | 新增 4 个翻译键：`settings_dashboard_panel` / `settings_dashboard_custom` / `settings_dashboard_custom_placeholder` / `settings_dashboard_hint` |
+| `extension/locales/en.json` | 同上（英文翻译） |
+| `extension/locales/ja.json` | 同上（日文翻译） |
+| `extension/manifest.json` | 版本号 1.3.9 → 1.4.0 |
+| `README.md` / `README_EN.md` | 版本徽章 1.3.9 → 1.4.0 |
+| `docs/index.html` | hero_badge 版本号 1.3.9 → 1.4.0（中/英） |
+
+### 五、向后兼容
+
+- 旧版 settings（无 `dashboardType` 字段）打开 popup 时自动默认 `metacubexd`，且保存设置后会自动补全字段
+- 自定义 URL 输入框为空时打开控制台不报错，回退到 metacubexd
+
+---
+
 ## v1.3.9 (2026-07-04)
 
 **顶部操作栏新增「控制台」按钮，一键打开 metacubexd 网页面板。**

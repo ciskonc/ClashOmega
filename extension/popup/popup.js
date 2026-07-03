@@ -985,9 +985,17 @@ function renderClashStatus(running, config, proxyPort, layout) {
   }
 }
 
+// 控制台面板预设 URL 模板（占位符 %host / %port / %secret 运行时被实际值替换）
+const DASHBOARD_PRESETS = {
+  metacubexd: 'https://metacubex.github.io/metacubexd/#/setup?http=true&hostname=%host&port=%port&secret=%secret',
+  yacd:       'https://yacd.metacubex.one/?hostname=%host&port=%port&secret=%secret',
+  zashboard:  'https://board.zash.run.place/#/setup?http=true&hostname=%host&port=%port&secret=%secret'
+};
+
 /**
- * 打开 metacubexd 网页控制台
- * 从 settings 读取 Clash API 地址和密钥，拼接 metacubexd setup URL 并在新标签页打开
+ * 打开网页控制台面板
+ * 从 settings 读取 dashboardType 选择预设，或使用 dashboardCustomUrl 自定义模板；
+ * 用 Clash API 的 hostname/port/secret 替换占位符后在新标签页打开。
  */
 async function openWebDashboard() {
   const { settings } = await chrome.storage.local.get('settings');
@@ -1004,7 +1012,22 @@ async function openWebDashboard() {
     // URL 解析失败时使用默认值
   }
 
-  const dashboardUrl = `https://metacubex.github.io/metacubexd/#/setup?http=true&hostname=${encodeURIComponent(hostname)}&port=${encodeURIComponent(port)}&secret=${encodeURIComponent(secret)}`;
+  // 选择模板：custom → dashboardCustomUrl；其他 → 预设
+  const type = settings?.dashboardType || 'metacubexd';
+  let template = DASHBOARD_PRESETS[type];
+  if (type === 'custom') {
+    template = (settings?.dashboardCustomUrl || '').trim();
+    // 自定义 URL 为空时回退到 metacubexd，避免打开空白页
+    if (!template) template = DASHBOARD_PRESETS.metacubexd;
+  }
+  // 预设值查不到（如类型名错误）也回退到 metacubexd
+  if (!template) template = DASHBOARD_PRESETS.metacubexd;
+
+  // 替换占位符（encodeURIComponent 避免特殊字符破坏 URL）
+  const dashboardUrl = template
+    .replace(/%host/g, encodeURIComponent(hostname))
+    .replace(/%port/g, encodeURIComponent(port))
+    .replace(/%secret/g, encodeURIComponent(secret));
   chrome.tabs.create({ url: dashboardUrl });
 }
 
@@ -2003,6 +2026,10 @@ function bindSettingsEvents() {
       const zoomScale = parseInt(document.getElementById('zoom-slider').value) || 100;
       const ruleDisplayMode = document.getElementById('rule-display-mode').value;
       const rulePageSize = parseInt(document.getElementById('rule-page-size').value) || 20;
+      // 控制台面板选择：4 选 1 的 radio，custom 时启用自定义 URL 输入框
+      const dashboardRadio = document.querySelector('input[name="dashboard-type"]:checked');
+      const dashboardType = dashboardRadio?.value || 'metacubexd';
+      const dashboardCustomUrl = document.getElementById('settings-dashboard-custom-url').value.trim();
       const settings = {
         currentMode: currentSettings.currentMode || 'system',
         clashApiUrl: document.getElementById('settings-api-url').value.trim(),
@@ -2012,6 +2039,8 @@ function bindSettingsEvents() {
         clashConfigPath: configPath,
         writeToYaml: document.getElementById('settings-write-to-yaml').checked,
         disableFallback: document.getElementById('settings-disable-fallback').checked,
+        dashboardType: dashboardType,
+        dashboardCustomUrl: dashboardCustomUrl,
         language: document.getElementById('language-select').value,
         theme: theme,
         tabLayout: tabLayout,
@@ -2191,6 +2220,20 @@ function bindSettingsEvents() {
       renderScriptRules(window._scriptRulesWithSource, scriptRulePaginationState.proxies);
     }
   });
+
+  // 控制台面板 radio 切换：仅当 custom 选中时启用自定义 URL 输入框
+  document.querySelectorAll('input[name="dashboard-type"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      const customUrlInput = document.getElementById('settings-dashboard-custom-url');
+      if (customUrlInput) {
+        customUrlInput.disabled = (radio.value === 'custom' && radio.checked) ? false : true;
+        // 切换到 custom 时聚焦输入框，提升输入体验
+        if (radio.value === 'custom' && radio.checked) {
+          customUrlInput.focus();
+        }
+      }
+    });
+  });
 }
 
 /**
@@ -2205,6 +2248,22 @@ async function loadSettingsForm(cachedStatus) {
   document.getElementById('settings-config-path').value = settings.clashConfigPath || '';
   document.getElementById('settings-write-to-yaml').checked = settings.writeToYaml === true;
   document.getElementById('settings-disable-fallback').checked = settings.disableFallback === true;
+
+  // 控制台面板选择：选中对应的 radio，custom 时启用自定义 URL 输入框
+  const dashboardType = settings.dashboardType || 'metacubexd';
+  const customUrlInput = document.getElementById('settings-dashboard-custom-url');
+  const dashboardRadio = document.querySelector(`input[name="dashboard-type"][value="${dashboardType}"]`);
+  if (dashboardRadio) {
+    dashboardRadio.checked = true;
+  } else {
+    // 类型名异常时回退到 metacubexd
+    document.getElementById('dashboard-metacubexd').checked = true;
+  }
+  if (customUrlInput) {
+    customUrlInput.value = settings.dashboardCustomUrl || '';
+    // 仅当 custom 选中时启用输入框
+    customUrlInput.disabled = (dashboardType !== 'custom');
+  }
 
   // 用户需求：配置路径为空时自动检测并填充到文本框
   // 用户主动填入后 clashConfigPath 非空，不再自动覆盖

@@ -71,6 +71,11 @@
   "settings_write_to_yaml": "写入 YAML 配置文件",
   "settings_write_to_yaml_hint": "默认写入 Script.js 扩展脚本；勾选后写入当前订阅的 YAML 配置文件（profiles 目录下的 .yaml），需重启 Clash 生效",
 
+  "settings_dashboard_panel": "控制台面板",
+  "settings_dashboard_custom": "自定义",
+  "settings_dashboard_custom_placeholder": "https://example.com/#/setup?hostname=%host&port=%port&secret=%secret",
+  "settings_dashboard_hint": "点击 popup 顶部「控制台」按钮在新标签页打开此面板，自动填入 Clash API 地址与密钥（占位符 %host / %port / %secret 会被实际值替换）",
+
   "settings_title": "设置",
   "settings_api_url": "Clash API 地址",
   "settings_api_hint": "修改 API 地址和端口后自动拼接，也可手动编辑完整 URL",

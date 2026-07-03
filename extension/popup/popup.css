@@ -757,6 +757,57 @@ input, button, select, textarea {
   font: var(--md-typescale-body-medium);
   color: var(--md-sys-color-on-surface);
 }
+
+/* ──── 控制台面板选择（radio + 自定义 URL） ──── */
+.settings-dashboard-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--md-spacing-1);
+  margin-top: var(--md-spacing-2);
+}
+.settings-radio-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--md-spacing-2);
+  padding: var(--md-spacing-1) 0;
+  cursor: pointer;
+  user-select: none;
+}
+.settings-radio-row input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  cursor: pointer;
+  accent-color: var(--md-sys-color-primary);
+  flex-shrink: 0;
+}
+.settings-radio-row label {
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  flex: 1;
+}
+.settings-radio-row .dashboard-name {
+  font: var(--md-typescale-body-medium);
+  color: var(--md-sys-color-on-surface);
+}
+.settings-radio-row .dashboard-url {
+  font: var(--md-typescale-body-small);
+  color: var(--md-sys-color-on-surface-variant);
+  word-break: break-all;
+}
+.settings-radio-row input[type="radio"]:disabled ~ label,
+.settings-radio-row input[type="radio"]:disabled + label {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+#settings-dashboard-custom-url {
+  margin-top: var(--md-spacing-1);
+}
+#settings-dashboard-custom-url:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .native-host-status-hint {
   width: 100%;
   margin-top: var(--md-spacing-1);

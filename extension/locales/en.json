@@ -75,6 +75,11 @@
   "settings_write_to_yaml": "Write to YAML config file",
   "settings_write_to_yaml_hint": "Default: write to Script.js extension script. If checked, write to the current subscription's YAML config file (.yaml in profiles dir). Requires Clash restart.",
 
+  "settings_dashboard_panel": "Dashboard Panel",
+  "settings_dashboard_custom": "Custom",
+  "settings_dashboard_custom_placeholder": "https://example.com/#/setup?hostname=%host&port=%port&secret=%secret",
+  "settings_dashboard_hint": "Click the \"Console\" button at the top of popup to open this panel in a new tab. Clash API host/port/secret are auto-filled (placeholders %host / %port / %secret are replaced with actual values).",
+
   "settings_title": "Settings",
   "settings_api_url": "Clash API URL",
   "settings_api_hint": "Auto-generated from host+port. You can also edit the full URL manually.",

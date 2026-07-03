@@ -26,6 +26,11 @@ chrome.runtime.onInstalled.addListener(async () => {
         clashConfigPath: '',
         writeToYaml: false,
         disableFallback: false,
+        // 控制台面板类型：metacubexd | yacd | zashboard | custom
+        dashboardType: 'metacubexd',
+        // 自定义控制台 URL 模板（仅当 dashboardType='custom' 时使用）
+        // 必须含占位符 %host / %port / %secret，运行时会被实际值替换
+        dashboardCustomUrl: '',
         language: 'zh_CN'
       }
     });

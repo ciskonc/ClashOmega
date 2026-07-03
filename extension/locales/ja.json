@@ -75,6 +75,11 @@
   "settings_write_to_yaml": "YAML 設定ファイルに書き込む",
   "settings_write_to_yaml_hint": "デフォルト: Script.js 拡張スクリプトに書き込み。チェックすると現在のサブスクリプションの YAML 設定ファイル（profiles ディレクトリ内の .yaml）に書き込み。Clash の再起動が必要",
 
+  "settings_dashboard_panel": "コンソールパネル",
+  "settings_dashboard_custom": "カスタム",
+  "settings_dashboard_custom_placeholder": "https://example.com/#/setup?hostname=%host&port=%port&secret=%secret",
+  "settings_dashboard_hint": "popup 上部の「コンソール」ボタンをクリックすると新しいタブでこのパネルを開きます。Clash API の host/port/secret が自動入力されます（プレースホルダー %host / %port / %secret は実際の値に置換されます）",
+
   "settings_title": "設定",
   "settings_api_url": "Clash API URL",
   "settings_api_hint": "ホスト+ポートから自動生成。完全なURLを手動で編集することも可能。",

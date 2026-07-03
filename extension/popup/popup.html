@@ -263,6 +263,39 @@
       <div class="settings-sub-tab-content" data-sub-tab-content="advanced">
         <div class="settings-group" id="settings-group-advanced">
           <div class="settings-group-title" data-i18n="settings_group_advanced">高级</div>
+
+          <!-- 控制台面板选择 -->
+          <label data-i18n="settings_dashboard_panel">控制台面板</label>
+          <div class="settings-dashboard-options">
+            <div class="settings-radio-row">
+              <input type="radio" id="dashboard-metacubexd" name="dashboard-type" value="metacubexd" checked>
+              <label for="dashboard-metacubexd">
+                <span class="dashboard-name">metacubexd</span>
+                <span class="dashboard-url">https://metacubex.github.io/metacubexd/</span>
+              </label>
+            </div>
+            <div class="settings-radio-row">
+              <input type="radio" id="dashboard-yacd" name="dashboard-type" value="yacd">
+              <label for="dashboard-yacd">
+                <span class="dashboard-name">Yacd Meta</span>
+                <span class="dashboard-url">https://yacd.metacubex.one/</span>
+              </label>
+            </div>
+            <div class="settings-radio-row">
+              <input type="radio" id="dashboard-zashboard" name="dashboard-type" value="zashboard">
+              <label for="dashboard-zashboard">
+                <span class="dashboard-name">Zashboard</span>
+                <span class="dashboard-url">https://board.zash.run.place/</span>
+              </label>
+            </div>
+            <div class="settings-radio-row">
+              <input type="radio" id="dashboard-custom" name="dashboard-type" value="custom">
+              <label for="dashboard-custom" data-i18n="settings_dashboard_custom">自定义</label>
+            </div>
+            <input class="md3-text-field" id="settings-dashboard-custom-url" type="text" placeholder="https://example.com/#/setup?hostname=%host&port=%port&secret=%secret" data-i18n-placeholder="settings_dashboard_custom_placeholder" disabled>
+          </div>
+          <div class="settings-hint" data-i18n="settings_dashboard_hint">点击 popup 顶部「控制台」按钮在新标签页打开此面板，自动填入 Clash API 地址与密钥（占位符 %host / %port / %secret 会被实际值替换）</div>
+
           <div class="settings-checkbox-row">
             <input type="checkbox" id="settings-write-to-yaml" style="cursor: pointer;">
             <label for="settings-write-to-yaml" data-i18n="settings_write_to_yaml" style="cursor: pointer;">写入 YAML 配置文件</label>
