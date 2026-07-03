@@ -137,6 +137,7 @@
   "version_update_available": "新バージョンがあります",
   "version_latest": "最新です",
 
+  "web_dashboard": "コンソール",
   "restart_clash": "Clash 再起動",
   "restart_clash_hint": "プロファイルからClashカーネルにルールを同期して再起動",
   "restart_clash_success": "Clash を再起動しました、ルールが適用されました",

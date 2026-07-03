@@ -966,6 +966,7 @@ function renderModeSwitch(currentMode) {
 function renderClashStatus(running, config, proxyPort, layout) {
   const dot = document.getElementById('clash-status-dot');
   const text = document.getElementById('clash-status-text');
+  const dashboardBtn = document.getElementById('web-dashboard-btn');
 
   if (running && config) {
     dot.className = 'status-dot status-dot--on';
@@ -973,13 +974,38 @@ function renderClashStatus(running, config, proxyPort, layout) {
     text.style.cursor = 'default';
     text.title = '';
     text.onclick = null;
+    if (dashboardBtn) dashboardBtn.style.display = '';
   } else {
     dot.className = 'status-dot status-dot--off';
     text.textContent = I18N.t('clash_not_running') + ' — ' + I18N.t('settings_title');
     text.style.cursor = 'pointer';
     text.title = I18N.t('settings_title');
     text.onclick = () => switchToModuleTab('settings', layout);
+    if (dashboardBtn) dashboardBtn.style.display = 'none';
   }
+}
+
+/**
+ * 打开 metacubexd 网页控制台
+ * 从 settings 读取 Clash API 地址和密钥，拼接 metacubexd setup URL 并在新标签页打开
+ */
+async function openWebDashboard() {
+  const { settings } = await chrome.storage.local.get('settings');
+  const apiUrl = settings?.clashApiUrl || 'http://127.0.0.1:9090';
+  const secret = settings?.clashSecret || '';
+
+  let hostname = '127.0.0.1';
+  let port = '9090';
+  try {
+    const url = new URL(apiUrl);
+    hostname = url.hostname;
+    port = url.port || '9090';
+  } catch {
+    // URL 解析失败时使用默认值
+  }
+
+  const dashboardUrl = `https://metacubex.github.io/metacubexd/#/setup?http=true&hostname=${encodeURIComponent(hostname)}&port=${encodeURIComponent(port)}&secret=${encodeURIComponent(secret)}`;
+  chrome.tabs.create({ url: dashboardUrl });
 }
 
 function renderSystemProxyStatus(sysProxy) {
@@ -2723,6 +2749,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // 底部「重启 Clash 内核」按钮
   document.getElementById('restart-clash-btn').addEventListener('click', triggerRestartClash);
+
+  // 「控制台」按钮 — 打开 metacubexd 网页控制台
+  const dashboardBtn = document.getElementById('web-dashboard-btn');
+  if (dashboardBtn) {
+    dashboardBtn.addEventListener('click', openWebDashboard);
+  }
 
   // initPopup 复用已发起的 settingsPromise（避免重复 chrome.storage.local.get）
   // layout 也通过参数传入，避免 initPopup 内部重复 getTabLayout()

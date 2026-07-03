@@ -41,3 +41,9 @@ credentials/
 # 开发副本（本地备份，不入 git，发行版 source code 不包含）
 # 开发时直接改 extension/，versions/ 仅作本地历史备份
 versions/
+
+# 本地图标源文件（仅本地用于 resize_icons.ps1 生成扩展图标）
+icons_preview/
+
+# 本地开发工具脚本（仅本地使用，不提交到 GitHub）
+tools/

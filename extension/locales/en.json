@@ -137,6 +137,7 @@
   "version_update_available": "New version available",
   "version_latest": "Up to date",
 
+  "web_dashboard": "Console",
   "restart_clash": "Restart Clash",
   "restart_clash_hint": "Sync rules from profile file to Clash kernel and restart",
   "restart_clash_success": "Clash restarted, rules applied",

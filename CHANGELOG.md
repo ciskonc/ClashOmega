@@ -2,6 +2,53 @@
 
 ---
 
+## v1.3.9 (2026-07-04)
+
+**顶部操作栏新增「控制台」按钮，一键打开 metacubexd 网页面板。**
+
+---
+
+### 一、新功能
+
+- **顶部操作栏新增「控制台」按钮**：位于「重启 Clash」左侧
+  - 仅在 Clash 连接成功后显示（`clashRunning=true` 时 `display:''`，否则 `display:none'`），避免无意义的跳转
+  - 点击后在新标签页打开 metacubexd 网页面板：`https://metacubex.github.io/metacubexd/#/setup?http=true&hostname={host}&port={port}&secret={secret}`
+  - 自动从 `settings.clashApiUrl` 解析 hostname/port，从 `settings.clashSecret` 取 secret
+  - URL 解析失败时回退到默认值 `127.0.0.1:9090`，保证不抛异常
+  - URL 字段全部 `encodeURIComponent` 编码，防止 secret 中特殊字符破坏 URL
+
+### 二、Bug 修复
+
+- **`native-host/com.clash.omega.json` 路径污染修复**：发现本机绝对路径被错误写入仓库（应为 `REPLACED_BY_INSTALL_PS1` 占位符），已恢复。install.ps1 在安装时仍会自动替换为实际路径
+- **顶部状态行换行问题**：`.status-row` 增加 `white-space: nowrap`，防止 Clash 状态文本过长时折行
+- **popup 宽度调整**：440px → 470px，容纳新增的「控制台」按钮，避免按钮挤压
+
+### 三、文件变更清单
+
+| 文件 | 变更 |
+|------|------|
+| `extension/popup/popup.html` | 顶部操作栏新增 `#web-dashboard-btn` 按钮（默认隐藏） |
+| `extension/popup/popup.css` | `--popup-width` 440→470；`.status-row` 增加 `nowrap` |
+| `extension/popup/popup.js` | 新增 `openWebDashboard()` 函数；`renderClashStatus()` 中根据 `running` 切换按钮显隐；DOMContentLoaded 绑定点击事件 |
+| `extension/locales/zh_CN.json` | 新增 `web_dashboard`: "控制台" |
+| `extension/locales/en.json` | 新增 `web_dashboard`: "Console" |
+| `extension/locales/ja.json` | 新增 `web_dashboard`: "コンソール" |
+| `native-host/com.clash.omega.json` | 恢复 `REPLACED_BY_INSTALL_PS1` 占位符（修复路径污染） |
+| `native-host/install.bat` | 新增 BAT 安装封装（双击运行，绕过 PowerShell 执行策略） |
+| `extension/manifest.json` | 版本号 1.3.8 → 1.3.9 |
+| `README.md` / `README_EN.md` | 版本徽章 1.3.8 → 1.3.9 |
+| `docs/index.html` | hero_badge 版本号 1.3.8 → 1.3.9（中/英） |
+| `.gitignore` | 新增排除 `icons_preview/` 和 `tools/`（本地开发资源） |
+
+### 四、关键决策
+
+- **默认隐藏而非禁用**：未连接 Clash 时直接 `display:none` 而非 `disabled`，因为按钮在没有 Clash 时毫无意义，禁用反而让用户疑惑"为什么点不了"
+- **新标签页打开而非 iframe**：metacubexd 是 PWA 应用且使用 hash 路由，嵌套 iframe 会触发 X-Frame-Options 拦截；新标签页是唯一可行方案
+- **secret 走 URL 参数**：metacubexd 的 `#/setup` hash 接受 `secret` 查询参数，自动填入登录框并连接，无需用户手动复制
+- **不读取 session 缓存的 fallbackApiUrl**：控制台只用用户配置的 URL（`settings.clashApiUrl`），因为 fallback 端口可能未在 metacubexd 中开放 CORS，且用户期望"我配置什么 URL，控制台就连什么 URL"
+
+---
+
 ## v1.3.8 (2026-06-28)
 
 **设置页新增版本号显示与 GitHub 更新检测。**

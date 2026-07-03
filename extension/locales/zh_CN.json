@@ -133,6 +133,7 @@
   "version_update_available": "有新版本可用",
   "version_latest": "已是最新版本",
 
+  "web_dashboard": "控制台",
   "restart_clash": "重启 Clash",
   "restart_clash_hint": "将 profile 文件中的规则同步到 Clash 内核并重启",
   "restart_clash_success": "Clash 已重启，规则已生效",

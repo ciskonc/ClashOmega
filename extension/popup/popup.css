@@ -64,7 +64,7 @@
   --md-spacing-5: 24px;
 
   /* Layout */
-  --popup-width: 440px;
+  --popup-width: 470px;
 
   /* 玻璃拟态专用变量（默认主题下不生效，仅在 glass 主题下激活） */
   --glass-bg: rgba(255, 255, 255, 0.65);
@@ -282,6 +282,7 @@ input, button, select, textarea {
   display: flex;
   align-items: center;
   gap: var(--md-spacing-2);
+  white-space: nowrap;
 }
 
 /* ──── 标签栏 ──── */
