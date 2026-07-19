@@ -20,6 +20,7 @@
   "clash_connected": "Connected",
   "clash_running": "Running",
   "clash_not_running": "Not Running",
+  "clash_status_loading": "Loading...",
   "clash_proxy_port": "Port",
 
   "system_proxy_status": "System Proxy",
@@ -29,6 +30,7 @@
   "system_proxy_unknown": "Unavailable",
   "system_proxy_follow_system": "Follow System",
   "system_proxy_null": "Native Host Not Installed",
+  "system_proxy_loading": "Loading...",
 
   "domain_check_title": "Check Domain in Proxy Group",
   "domain_check_current_site": "Current Site",
@@ -69,6 +71,10 @@
   "script_rules_init_success": "Extension script file initialized",
   "script_rules_init_failed": "Initialization failed",
   "script_rules_not_found": "Extension script file not found (current profile has no option.script)",
+  "script_rules_unsupported_hint": "Only Clash Verge Rev supports extension script rule management. Please manage rules via the Clash client's own UI, or switch to Clash Verge Rev.",
+  "client_current": "Current client",
+  "client_unknown": "Unrecognized",
+  "module_disabled_file_ops": "File operations not supported",
   "rule_restart_hint": "Rules modified, please restart Clash to apply",
   "rule_source_js": "From subscription extension script (.js in profiles dir)",
   "rule_source_yaml": "From YAML config file",

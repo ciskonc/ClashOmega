@@ -497,3 +497,97 @@ async function switchClashMode(mode) {
     return false;
   }
 }
+
+/**
+ * 客户端类型枚举
+ * - clash-verge-rev: Clash Verge Rev，支持 profiles.yaml + Script.js + 快照文件
+ * - flclash: FLClash，Flutter 客户端，仅有外部控制 API，无 Script.js / 快照
+ * - clash-meta: 原版 mihomo / Clash.Meta，仅命令行 + API
+ * - clash-for-windows: Clash for Windows（已停更），有自己的 config.yaml 但无 Script.js
+ * - unknown: 无法识别（可能是远程 OpenClash 或其他内核）
+ */
+const CLIENT_TYPES = {
+  CLASH_VERGE_REV: 'clash-verge-rev',
+  FLCLASH: 'flclash',
+  CLASH_META: 'clash-meta',
+  CLASH_FOR_WINDOWS: 'clash-for-windows',
+  UNKNOWN: 'unknown'
+};
+
+/**
+ * 检测当前连接的 Clash 客户端类型
+ * 策略：调用 Native Host 探测本机特征文件，结合 API 可达性综合判断
+ *
+ * 判断依据（按优先级）：
+ * 1. Native Host 报告本机存在哪个客户端的数据目录
+ * 2. Clash API 可达（确保连的是活着的内核）
+ * 3. 无法确定时返回 unknown（不阻塞功能，仅禁用文件操作类 UI）
+ *
+ * @returns {Promise<{clientType: string, nativeHostAvailable: boolean, details?: object}>}
+ *          details 包含找到的特征文件路径，便于调试
+ */
+async function detectClashClient(apiUrl) {
+  // 先确认 Clash API 可达（不影响 clientType 判断，但用于报告整体可用性）
+  const config = await clashGet('/configs');
+  const apiReachable = config !== null;
+
+  // 调用 Native Host 探测本机客户端特征
+  // 传入 apiUrl 让 Native Host 通过端口找到监听进程，精确判断客户端类型
+  // 解决"多客户端同时运行"问题：CVR 和 FLClash 都在运行时，进程检测按固定优先级
+  // 返回 FLClash，但用户配置的 API 端口（如 9097）才反映当前实际使用的客户端
+  let nativeHostAvailable = false;
+  let probe = null;
+  try {
+    probe = await sendToNativeSafe({ action: 'detectClient', apiUrl: apiUrl || null });
+    nativeHostAvailable = (probe && probe.success === true);
+  } catch {
+    nativeHostAvailable = false;
+  }
+
+  // Native Host 不可用时（未安装 / 非本机 / 远程 OpenClash），无法判断客户端类型
+  // 返回 unknown，让 UI 降级为"仅 API 模式"
+  if (!nativeHostAvailable || !probe) {
+    return {
+      clientType: CLIENT_TYPES.UNKNOWN,
+      nativeHostAvailable: false,
+      apiReachable,
+      details: null
+    };
+  }
+
+  // Native Host 探测到客户端类型，直接采用
+  // Native Host 通过检测各客户端特征文件的存在性判断（见 clash_rules_manager.ps1 detectClient）
+  if (probe.clientType && probe.clientType !== 'unknown') {
+    return {
+      clientType: probe.clientType,
+      nativeHostAvailable: true,
+      apiReachable,
+      details: {
+        configPath: probe.configPath || null,
+        dataDir: probe.dataDir || null,
+        hasProfilesYaml: probe.hasProfilesYaml === true,
+        hasSnapshot: probe.hasSnapshot === true
+      }
+    };
+  }
+
+  // Native Host 可用但未识别出具体客户端（可能是用户自定义路径或其他客户端）
+  return {
+    clientType: CLIENT_TYPES.UNKNOWN,
+    nativeHostAvailable: true,
+    apiReachable,
+    details: {
+      configPath: probe.configPath || null
+    }
+  };
+}
+
+/**
+ * 判断当前客户端类型是否支持文件级操作（Script.js / 快照同步 / profile YAML 写入）
+ * 仅 Clash Verge Rev 支持完整的文件操作链路
+ * @param {string} clientType - detectClashClient 返回的 clientType
+ * @returns {boolean}
+ */
+function isFileOperationSupported(clientType) {
+  return clientType === CLIENT_TYPES.CLASH_VERGE_REV;
+}

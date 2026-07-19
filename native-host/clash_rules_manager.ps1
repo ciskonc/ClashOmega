@@ -26,13 +26,16 @@ $DefaultConfigPaths = @(
     "$env:USERPROFILE\.config\clash-verge\config.yaml",
     # Mihomo / Clash.Meta
     "$env:USERPROFILE\.config\mihomo\config.yaml",
+    # FlClash (Flutter 应用，Windows 数据目录在 APPDATA/LOCALAPPDATA 下，包名 com.follow.clash)
+    "$env:APPDATA\com.follow.clash\config.yaml",
+    "$env:LOCALAPPDATA\com.follow.clash\config.yaml",
+    # FlClash Unix 风格路径（Linux/macOS 兼容）
+    "$env:USERPROFILE\.config\flclash\config.yaml",
     # Clash for Windows
     "$env:USERPROFILE\.config\clash\config.yaml",
     "$env:USERPROFILE\.config\clash\profiles\default.yaml",
     # Clash Nyanpasu
     "$env:USERPROFILE\.config\clash-nyanpasu\config.yaml",
-    # Flclash
-    "$env:USERPROFILE\.config\flclash\config.yaml",
     # 通用 AppData 路径
     "$env:LOCALAPPDATA\clash\config.yaml",
     "$env:APPDATA\clash\config.yaml",
@@ -48,6 +51,9 @@ $ProfileSearchDirs = @(
     "$env:USERPROFILE\.config\clash\profiles",
     "$env:USERPROFILE\.config\clash-verge\profiles",
     "$env:USERPROFILE\.config\mihomo\profiles",
+    # FlClash profiles 目录（Flutter 应用，profiles 子目录）
+    "$env:APPDATA\com.follow.clash\profiles",
+    "$env:LOCALAPPDATA\com.follow.clash\profiles",
     "$env:APPDATA\clash\profiles",
     "$env:LOCALAPPDATA\clash\profiles"
 )
@@ -63,29 +69,10 @@ $ProfilesYamlDirs = @(
     "$env:USERPROFILE\.config\mihomo"
 )
 
-# S-002 修复：配置路径校验（放宽目录白名单，仅校验扩展名和绝对路径）
-# v1.3.0 原有的目录白名单过于严格，导致用户自定义路径被拒绝。现仅保留：
-# 1. 必须是绝对路径 2. 必须是 .yaml/.yml 后缀 3. 禁止路径遍历（.. ）
-function Test-ConfigPathAllowed($path) {
-    if (-not $path -or $path -isnot [string]) { return $false }
-    # 必须是绝对路径
-    if (-not [System.IO.Path]::IsPathRooted($path)) { return $false }
-    # 规范化路径（解析 .., . 等）
-    try {
-        $fullPath = [System.IO.Path]::GetFullPath($path)
-    } catch { return $false }
-    # 必须是 .yaml 或 .yml 后缀
-    $ext = [System.IO.Path]::GetExtension($fullPath)
-    if ($ext -ne '.yaml' -and $ext -ne '.yml') { return $false }
-    # 禁止路径遍历：规范化后的路径不应包含 ..
-    if ($fullPath -match '\.\.') { return $false }
-    return $true
-}
-
 function Get-ConfigPath {
     # 1. 环境变量优先
     $envPath = $env:CLASH_CONFIG_PATH
-    if ($envPath -and (Test-Path $envPath) -and (Test-ConfigPathAllowed $envPath)) {
+    if ($envPath -and (Test-Path $envPath)) {
         return $envPath
     }
 
@@ -196,28 +183,286 @@ function Get-ConfigPath {
     }
 
     # 5. 尝试从运行中的 Clash 进程获取配置文件路径
-    #    S-003 修复：使用精确进程名白名单，避免 like '%clash%' 匹配到恶意进程
-    #    并校验提取的路径在允许的目录范围内
-    $knownProcessNames = @('clash.exe', 'mihomo.exe', 'clash-verge.exe', 'clash-meta.exe', 'clashx.exe', 'flclash.exe', 'verge-mihomo.exe', 'clash-verge-rev.exe')
-    foreach ($procName in $knownProcessNames) {
-        $clashProcs = Get-CimInstance Win32_Process -Filter "name = '$procName'" -ErrorAction SilentlyContinue
-        foreach ($proc in $clashProcs) {
-            if ($proc.CommandLine) {
-                $cmdLine = $proc.CommandLine
-                if ($cmdLine -match '-f\s+"?([^\s"]+\.ya?ml)"?') {
-                    $p = $matches[1]
-                    if ((Test-Path $p) -and (Test-ConfigPathAllowed $p)) { return $p }
-                }
-                if ($cmdLine -match '-d\s+"?([^\s"]+)"?') {
-                    $d = $matches[1]
-                    $p = Join-Path $d "config.yaml"
-                    if ((Test-Path $p) -and (Test-ConfigPathAllowed $p)) { return $p }
-                }
+    $clashProcs = Get-CimInstance Win32_Process -Filter "name like '%clash%' or name like '%mihomo%'" -ErrorAction SilentlyContinue
+    foreach ($proc in $clashProcs) {
+        if ($proc.CommandLine) {
+            $cmdLine = $proc.CommandLine
+            if ($cmdLine -match '-f\s+"?([^\s"]+\.ya?ml)"?') {
+                $p = $matches[1]
+                if (Test-Path $p) { return $p }
+            }
+            if ($cmdLine -match '-d\s+"?([^\s"]+)"?') {
+                $d = $matches[1]
+                $p = Join-Path $d "config.yaml"
+                if (Test-Path $p) { return $p }
             }
         }
     }
 
     return $null
+}
+
+function Detect-Client {
+    param($ApiUrl)
+
+    # 0a. 基于 API 端口的精确检测（最高优先级）
+    #     当用户配置的 API URL 传入时，检查哪个进程监听了该端口。
+    #     解决"多客户端同时运行"问题：CVR 和 FLClash 都在运行时，
+    #     进程检测会按固定优先级返回（FLClash 优先于 CVR），但用户配置的
+    #     API 端口才反映当前实际使用的客户端。
+    #     例如：用户配 9097 端口 → 找到 verge-mihomo 进程 → 判定为 CVR
+    if ($ApiUrl) {
+        # 从 URL 中提取端口（如 http://127.0.0.1:9097 -> 9097）
+        $portMatch = [regex]::Match($ApiUrl, ':(\d+)(?:/|$)')
+        if ($portMatch.Success) {
+            $apiPort = $portMatch.Groups[1].Value
+            # 用 Get-NetTCPConnection 找到监听该端口的进程
+            $conn = Get-NetTCPConnection -LocalPort $apiPort -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($conn) {
+                $portProc = Get-Process -Id $conn.OwningProcess -ErrorAction SilentlyContinue
+                if ($portProc) {
+                    $portProcName = $portProc.ProcessName
+                    # verge-mihomo / clash-verge -> Clash Verge Rev
+                    if ($portProcName -match '(?i)verge') {
+                        $cvrDirs = @(
+                            "$env:APPDATA\io.github.clash-verge-rev.clash-verge-rev",
+                            "$env:LOCALAPPDATA\io.github.clash-verge-rev.clash-verge-rev",
+                            "$env:APPDATA\clash-verge-rev",
+                            "$env:LOCALAPPDATA\clash-verge-rev"
+                        )
+                        foreach ($dir in $cvrDirs) {
+                            $profilesYaml = Join-Path $dir 'profiles.yaml'
+                            if (Test-Path $profilesYaml) {
+                                $snapshot = Join-Path $dir 'clash-verge.yaml'
+                                return @{
+                                    success = $true
+                                    clientType = 'clash-verge-rev'
+                                    dataDir = $dir
+                                    hasProfilesYaml = $true
+                                    hasSnapshot = (Test-Path $snapshot)
+                                    configPath = Get-ConfigPath
+                                }
+                            }
+                        }
+                        return @{
+                            success = $true
+                            clientType = 'clash-verge-rev'
+                            dataDir = $null
+                            hasProfilesYaml = $false
+                            hasSnapshot = $false
+                            configPath = Get-ConfigPath
+                        }
+                    }
+                    # FlClash / FlClashCore -> FLClash
+                    if ($portProcName -match '(?i)flclash') {
+                        $flclashDirs = @(
+                            "$env:APPDATA\com.follow.clash",
+                            "$env:LOCALAPPDATA\com.follow.clash",
+                            "$env:USERPROFILE\.config\flclash"
+                        )
+                        foreach ($dir in $flclashDirs) {
+                            if (Test-Path $dir) {
+                                $configPath = Join-Path $dir 'config.yaml'
+                                if (-not (Test-Path $configPath)) { $configPath = Get-ConfigPath }
+                                return @{
+                                    success = $true
+                                    clientType = 'flclash'
+                                    dataDir = $dir
+                                    hasProfilesYaml = $false
+                                    hasSnapshot = $false
+                                    configPath = $configPath
+                                }
+                            }
+                        }
+                        return @{
+                            success = $true
+                            clientType = 'flclash'
+                            dataDir = $null
+                            hasProfilesYaml = $false
+                            hasSnapshot = $false
+                            configPath = Get-ConfigPath
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    # 0b. 回退到进程检测：检查哪个 Clash GUI 客户端正在运行
+    #    解决"文件残留导致误判"问题：用户从 CVR 切到 FLClash 后，CVR 的 profiles.yaml
+    #    还在磁盘上，但 CVR 进程已退出、FLClash 进程在运行。只检查文件会误判为 CVR，
+    #    导致 getScriptRules 读取 CVR 残留旧规则、UI 不降级。
+    $procs = Get-Process -ErrorAction SilentlyContinue
+
+    # FLClash 进程（Flutter 应用，进程名 flclash / FlClash）
+    $flclashProc = $procs | Where-Object { $_.ProcessName -match '(?i)flclash' } | Select-Object -First 1
+    if ($flclashProc) {
+        $flclashDirs = @(
+            "$env:APPDATA\com.follow.clash",
+            "$env:LOCALAPPDATA\com.follow.clash",
+            "$env:USERPROFILE\.config\flclash"
+        )
+        foreach ($dir in $flclashDirs) {
+            if (Test-Path $dir) {
+                $configPath = Join-Path $dir 'config.yaml'
+                if (-not (Test-Path $configPath)) { $configPath = Get-ConfigPath }
+                return @{
+                    success = $true
+                    clientType = 'flclash'
+                    dataDir = $dir
+                    hasProfilesYaml = $false
+                    hasSnapshot = $false
+                    configPath = $configPath
+                }
+            }
+        }
+        return @{
+            success = $true
+            clientType = 'flclash'
+            dataDir = $null
+            hasProfilesYaml = $false
+            hasSnapshot = $false
+            configPath = Get-ConfigPath
+        }
+    }
+
+    # Clash Verge Rev 进程（Electron 应用，进程名 clash-verge / Clash Verge）
+    $cvrProc = $procs | Where-Object { $_.ProcessName -match '(?i)clash[._-]verge' } | Select-Object -First 1
+    if ($cvrProc) {
+        $cvrDirs = @(
+            "$env:APPDATA\io.github.clash-verge-rev.clash-verge-rev",
+            "$env:LOCALAPPDATA\io.github.clash-verge-rev.clash-verge-rev",
+            "$env:APPDATA\clash-verge-rev",
+            "$env:LOCALAPPDATA\clash-verge-rev"
+        )
+        foreach ($dir in $cvrDirs) {
+            $profilesYaml = Join-Path $dir 'profiles.yaml'
+            if (Test-Path $profilesYaml) {
+                $snapshot = Join-Path $dir 'clash-verge.yaml'
+                $configPath = Get-ConfigPath
+                return @{
+                    success = $true
+                    clientType = 'clash-verge-rev'
+                    dataDir = $dir
+                    hasProfilesYaml = $true
+                    hasSnapshot = (Test-Path $snapshot)
+                    configPath = $configPath
+                }
+            }
+        }
+        return @{
+            success = $true
+            clientType = 'clash-verge-rev'
+            dataDir = $null
+            hasProfilesYaml = $false
+            hasSnapshot = $false
+            configPath = Get-ConfigPath
+        }
+    }
+
+    # Clash Nyanpasu 进程
+    $nyanpasuProc = $procs | Where-Object { $_.ProcessName -match '(?i)nyanpasu' } | Select-Object -First 1
+    if ($nyanpasuProc) {
+        $nyanpasuPath = "$env:USERPROFILE\.config\clash-nyanpasu\config.yaml"
+        return @{
+            success = $true
+            clientType = 'clash-nyanpasu'
+            dataDir = "$env:USERPROFILE\.config\clash-nyanpasu"
+            hasProfilesYaml = $false
+            hasSnapshot = $false
+            configPath = $nyanpasuPath
+        }
+    }
+
+    # Clash for Windows 进程
+    $cfwProc = $procs | Where-Object { $_.ProcessName -match '(?i)clash[._-]for[._-]windows|^cfw$' } | Select-Object -First 1
+    if ($cfwProc) {
+        $cfwPath = "$env:USERPROFILE\.config\clash\config.yaml"
+        return @{
+            success = $true
+            clientType = 'clash-for-windows'
+            dataDir = "$env:USERPROFILE\.config\clash"
+            hasProfilesYaml = $false
+            hasSnapshot = $false
+            configPath = $cfwPath
+        }
+    }
+
+    # 1. 回退到文件检测（无 GUI 进程在运行时的兜底）
+    #    原有逻辑保留，用于无进程信息时通过文件存在性判断
+
+    # 1a. Clash Verge Rev：检测 profiles.yaml
+    foreach ($dir in $ProfilesYamlDirs) {
+        $profilesYaml = Join-Path $dir 'profiles.yaml'
+        if (Test-Path $profilesYaml) {
+            $snapshot = Join-Path $dir 'clash-verge.yaml'
+            return @{
+                success = $true
+                clientType = 'clash-verge-rev'
+                dataDir = $dir
+                hasProfilesYaml = $true
+                hasSnapshot = (Test-Path $snapshot)
+                configPath = Get-ConfigPath
+            }
+        }
+    }
+
+    # 1b. FlClash：检测 com.follow.clash 目录
+    $flclashFileDirs = @(
+        "$env:APPDATA\com.follow.clash",
+        "$env:LOCALAPPDATA\com.follow.clash",
+        "$env:USERPROFILE\.config\flclash"
+    )
+    foreach ($dir in $flclashFileDirs) {
+        if (Test-Path $dir) {
+            $configPath = Join-Path $dir 'config.yaml'
+            if (-not (Test-Path $configPath)) { $configPath = Get-ConfigPath }
+            return @{
+                success = $true
+                clientType = 'flclash'
+                dataDir = $dir
+                hasProfilesYaml = $false
+                hasSnapshot = $false
+                configPath = $configPath
+            }
+        }
+    }
+
+    # 1c. Clash Nyanpasu
+    $nyanpasuDir = "$env:USERPROFILE\.config\clash-nyanpasu"
+    if (Test-Path $nyanpasuDir) {
+        return @{
+            success = $true
+            clientType = 'clash-nyanpasu'
+            dataDir = $nyanpasuDir
+            hasProfilesYaml = $false
+            hasSnapshot = $false
+            configPath = Get-ConfigPath
+        }
+    }
+
+    # 1d. Clash for Windows
+    $cfwDir = "$env:USERPROFILE\.config\clash"
+    if (Test-Path $cfwDir) {
+        return @{
+            success = $true
+            clientType = 'clash-for-windows'
+            dataDir = $cfwDir
+            hasProfilesYaml = $false
+            hasSnapshot = $false
+            configPath = Get-ConfigPath
+        }
+    }
+
+    # 2. 无法识别客户端类型，返回 unknown
+    return @{
+        success = $true
+        clientType = 'unknown'
+        dataDir = $null
+        hasProfilesYaml = $false
+        hasSnapshot = $false
+        configPath = Get-ConfigPath
+    }
 }
 
 function Read-Config($path) {
@@ -227,90 +472,16 @@ function Read-Config($path) {
 }
 
 function Write-Config($path, $content) {
-    # S-013 修复：写入后验证 + 失败回滚
-    # 1. 备份原文件
     $backup = "$path.bak"
-    $hadOriginal = $false
-    $originalContent = $null
     if (Test-Path $path) {
-        $originalContent = Read-Config $path
         Copy-Item -Path $path -Destination $backup -Force
-        $hadOriginal = $true
     }
-    # 2. 写入新内容
     $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
-    try {
-        [System.IO.File]::WriteAllText($path, $content, $utf8NoBom)
-    } catch {
-        # 写入失败：尝试回滚
-        if ($hadOriginal) {
-            try { [System.IO.File]::WriteAllText($path, $originalContent, $utf8NoBom) } catch {}
-        }
-        throw "写入配置文件失败: $($_.Exception.Message)"
-    }
-    # 3. 写入后验证：读回内容比对长度（防止磁盘异常导致截断）
-    try {
-        $written = [System.IO.File]::ReadAllText($path, $utf8NoBom)
-        if ($written.Length -lt $content.Length) {
-            # 写入不完整，回滚
-            if ($hadOriginal) {
-                [System.IO.File]::WriteAllText($path, $originalContent, $utf8NoBom)
-            } else {
-                Remove-Item $path -Force -ErrorAction SilentlyContinue
-            }
-            throw "写入验证失败: 文件长度不一致 (期望 $($content.Length), 实际 $($written.Length))"
-        }
-    } catch {
-        # 验证过程本身异常，不回滚（避免误删），仅抛出警告
-        throw "写入后验证异常: $($_.Exception.Message)"
-    }
-}
-
-# S-008 修复：规则格式校验函数
-# 允许的规则类型白名单（参考 Clash/mihomo 官方文档）
-$script:AllowedRuleTypes = @(
-    'DOMAIN', 'DOMAIN-SUFFIX', 'DOMAIN-KEYWORD', 'DOMAIN-REGEX',
-    'GEOSITE', 'IP-CIDR', 'IP-CIDR6', 'IP-ASN', 'GEOIP',
-    'SRC-GEOIP', 'SRC-IP-ASN', 'SRC-IP-CIDR', 'SRC-PORT', 'DST-PORT',
-    'PROCESS-NAME', 'PROCESS-PATH', 'NETWORK', 'UID',
-    'IN-TYPE', 'IN-USER', 'IN-NAME', 'SUB-RULE', 'RULE-SET',
-    'AND', 'OR', 'NOT', 'MATCH', 'FINAL'
-)
-
-function Test-RuleFormat($rule) {
-    # S-008 修复：校验规则字符串格式，防止注入恶意内容
-    if (-not $rule -or $rule -isnot [string]) { return $false }
-    $rule = $rule.Trim()
-    if ($rule.Length -eq 0 -or $rule.Length -gt 1024) { return $false }
-    # 禁止包含换行符/回车符（防止 YAML 注入）
-    if ($rule -match "[`r`n]") { return $false }
-    # 禁止包含 YAML 特殊注入序列
-    if ($rule -match ':\s*-') { return $false }
-    if ($rule -match '^\s*---') { return $false }
-    if ($rule -match '^\s*%YAML') { return $false }
-    # 解析规则类型（第一个逗号前的部分）
-    $parts = $rule -split ','
-    if ($parts.Count -lt 2) { return $false }
-    $ruleType = $parts[0].Trim().ToUpperInvariant()
-    # MATCH/FINAL 可以只有类型
-    if ($parts.Count -eq 2 -and ($ruleType -eq 'MATCH' -or $ruleType -eq 'FINAL')) {
-        return $true
-    }
-    # 至少需要 类型,payload,policy 三段
-    if ($parts.Count -lt 3) { return $false }
-    # 校验类型白名单
-    if ($AllowedRuleTypes -notcontains $ruleType) { return $false }
-    return $true
+    [System.IO.File]::WriteAllText($path, $content, $utf8NoBom)
 }
 
 function Parse-Rules($content) {
-    # S-007 修复说明：
-    # 本函数使用正则解析 YAML，无法处理多行字符串（|, >）、锚点（&）、引用（*）、
-    # 流式语法（{}, []）等复杂 YAML 特性。由于 Clash 配置文件由内核生成，
-    # rules 字段通常为简单列表项，正则解析足够。但为安全起见，添加以下防护：
-    # 1. 检测多行字符串标记，若存在则跳过该区域解析
-    # 2. 限制单行长度，防止超长行导致正则回溯
-    # 3. 跳过包含流式语法标记的行
+    # 使用 ArrayList 确保始终返回真正的数组，避免 PowerShell streaming 把空数组展平为 $null
     $rules = [System.Collections.ArrayList]::new()
 
     $lines = $content -split "`n"
@@ -357,10 +528,6 @@ function Parse-Rules($content) {
 }
 
 function Add-Rule($content, $rule) {
-    # S-008 修复：校验规则格式，拒绝恶意输入
-    if (-not (Test-RuleFormat $rule)) {
-        throw "Invalid rule format: $rule"
-    }
     # 去除规则首尾的单引号/双引号，防止 YAML 双引号转义问题（''xxx'' 会被解析为空字符串+xxx）
     $rule = $rule.Trim().TrimStart("'").TrimEnd("'").TrimStart('"').TrimEnd('"').Trim()
 
@@ -406,31 +573,41 @@ function Add-Rule($content, $rule) {
     }
 
     # 标准 Clash 配置格式
-    # 关键：新规则前置到 rules 部分开头，优先于所有 RULE-SET
-    # 根因：原逻辑将规则追加到 RULE-SET 之后（MATCH 之前），
-    #       导致被 RULE-SET 先匹配，用户添加的规则永远不生效
     $lines = [System.Collections.ArrayList]::new($content -split "`n")
-    $inRules = $false; $insertIdx = -1; $overrideIdx = -1
+    $inRules = $false; $insertIdx = -1; $overrideIdx = -1; $lastSameTypeIdx = -1
     for ($i = 0; $i -lt $lines.Count; $i++) {
         $trimmed = $lines[$i].Trim()
         if (-not $inRules) {
-            if ($trimmed -eq 'rules:' -or $trimmed.StartsWith('rules:')) {
-                $inRules = $true
-                $insertIdx = $i + 1
-            }
+            if ($trimmed -eq 'rules:' -or $trimmed.StartsWith('rules:')) { $inRules = $true }
             continue
         }
-        if (-not $trimmed -or $trimmed.StartsWith('#')) { continue }
+        if (-not $trimmed -or $trimmed.StartsWith('#')) { $insertIdx = $i + 1; continue }
+        # 检查是否与同类型规则冲突
         if ($trimmed -match "^-\s*'?([^,]+),([^,]+),") {
             $existingType = $Matches[1].Trim()
             $existingPayload = $Matches[2].Trim()
-            if ($existingType -eq $newType -and $existingPayload -eq $newPayload -and $overrideIdx -lt 0) {
-                $overrideIdx = $i
+            if ($existingType -eq $newType) {
+                $lastSameTypeIdx = $i
+                if ($existingPayload -eq $newPayload -and $overrideIdx -lt 0) {
+                    $overrideIdx = $i
+                }
             }
         }
+        if ($trimmed.StartsWith('- ') -or $trimmed.StartsWith("- '") -or $trimmed.StartsWith('- "')) { $insertIdx = $i + 1; continue }
+        if (-not $lines[$i].StartsWith(' ') -and -not $lines[$i].StartsWith("`t") -and $trimmed.Contains(':')) { $insertIdx = $i; break }
     }
+    if ($overrideIdx -ge 0) { $insertIdx = $overrideIdx }
+    elseif ($lastSameTypeIdx -ge 0) { $insertIdx = $lastSameTypeIdx + 1 }
     if ($insertIdx -lt 0) { return $content }
+    # 确保新规则插入到 MATCH（漏网之鱼）之前，避免被兜底规则拦截
+    for ($j = 0; $j -lt $lines.Count; $j++) {
+        if ($lines[$j] -match "^\s*-\s*'?MATCH,") {
+            if ($insertIdx -gt $j) { $insertIdx = $j }
+            break
+        }
+    }
     $newLine = if ($rule.Contains(',')) { "  - '$rule'" } else { "  - $rule" }
+    # 检测到重复规则时，替换原行（而非 Insert 导致重复）
     if ($overrideIdx -ge 0) {
         $lines[$overrideIdx] = $newLine
     } else {
@@ -486,240 +663,6 @@ function Get-SnapshotPath {
         if (Test-Path $p) { return $p }
     }
     return $null
-}
-
-# ──── 扩展脚本规则管理 ────
-# Clash Verge Rev 的 type:script profile 是一个 JS 文件，包含 main(config) 函数
-# 通过修改 config.rules 数组实现规则覆盖。本扩展在此 JS 文件的 main 函数内部维护
-# customRules 数组，main 函数会将 customRules 前置到 config.rules，实现"扩展脚本规则"。
-#
-# 文件格式（由本扩展自动初始化和管理，对齐 Clash Verge Rev 官方推荐写法）：
-#   // === ClashOmega Extension Rules (auto-managed, do not edit manually) ===
-#   function main(config) {
-#     const customRules = [
-#       "DOMAIN-SUFFIX,example.com,Proxy",
-#       "DOMAIN,google.com,Direct"
-#     ];
-#     if (config.rules) {
-#       config.rules = [...customRules, ...config.rules];
-#     } else {
-#       config.rules = customRules;
-#     }
-#     return config;
-#   }
-#   // === End of ClashOmega Extension Rules ===
-#
-# 关键点：规则数组必须定义在 main 函数内部（局部变量），不能放在函数外部，
-# 否则 Clash Verge Rev 的脚本执行环境（QuickJS 沙箱）可能无法捕获外部全局常量，
-# 导致 main 函数内引用时变量不可见，规则不生效。
-
-# 查找当前激活 profile 的 option.script 指向的 JS 文件路径
-# Clash Verge Rev 的每个 remote/local profile 可通过 option.script 引用一个 type:script profile
-# 本扩展将规则写入该脚本文件 main 函数内部的 customRules 数组，main 函数将其前置到 config.rules
-function Get-ScriptPath {
-    foreach ($dir in $ProfilesYamlDirs) {
-        $profilesYaml = Join-Path $dir 'profiles.yaml'
-        if (-not (Test-Path $profilesYaml)) { continue }
-
-        $profileContent = [System.IO.File]::ReadAllText($profilesYaml, $encoding)
-        $lines = $profileContent -split "`n"
-
-        # 1. 解析 current 字段，找到当前激活的 profile UID
-        $currentUid = $null
-        foreach ($line in $lines) {
-            $trimmed = $line.Trim()
-            if ($trimmed -match '^current\s*:\s*(\S+)') {
-                $currentUid = $matches[1]
-                break
-            }
-        }
-        if (-not $currentUid) { continue }
-
-        # 2. 在 items 列表中查找 currentUid 对应条目的 option.script 字段
-        $itemUid = $null; $inOption = $false; $scriptUid = $null; $inCurrent = $false
-        for ($i = 0; $i -lt $lines.Count; $i++) {
-            $trimmed = $lines[$i].Trim()
-            if ($trimmed -match '^-\s*uid\s*:\s*(\S+)') {
-                # 遇到新条目前，检查上一个条目是否是 current 且有 script
-                if ($inCurrent -and $scriptUid) { break }
-                $itemUid = $matches[1]
-                $inCurrent = ($itemUid -eq $currentUid)
-                $inOption = $false
-                $scriptUid = $null
-            }
-            elseif ($inCurrent -and $trimmed -match '^\s*option\s*:') {
-                $inOption = $true
-            }
-            elseif ($inOption -and $trimmed -match '^\s*script\s*:\s*(\S+)') {
-                $scriptUid = $matches[1]
-            }
-        }
-        # 检查最后一个条目（如果 current 是最后一个 item）
-        if (-not $scriptUid -and $inCurrent) {
-            # current 条目没有 option.script
-        }
-
-        if (-not $scriptUid) { continue }
-
-        # 3. 在 items 列表中查找 scriptUid 对应的 file（type:script 条目）
-        $scriptFile = $null
-        $sUid = $null; $sFile = $null
-        for ($i = 0; $i -lt $lines.Count; $i++) {
-            $trimmed = $lines[$i].Trim()
-            if ($trimmed -match '^-\s*uid\s*:\s*(\S+)') {
-                if ($sUid -eq $scriptUid -and $sFile) { $scriptFile = $sFile; break }
-                $sUid = $matches[1]; $sFile = $null
-            }
-            elseif ($trimmed -match '^\s*file\s*:\s*(\S+)') { $sFile = $matches[1] }
-        }
-        if (-not $scriptFile -and $sUid -eq $scriptUid -and $sFile) { $scriptFile = $sFile }
-
-        if ($scriptFile) {
-            $scriptPath = Join-Path (Join-Path $dir 'profiles') $scriptFile
-            if (Test-Path $scriptPath) { return $scriptPath }
-        }
-    }
-    return $null
-}
-
-# 初始化脚本文件为标准扩展脚本格式（对齐 Clash Verge Rev 官方推荐写法）
-function Initialize-ScriptFile($scriptPath) {
-    $template = @"
-// === ClashOmega Extension Rules (auto-managed, do not edit manually) ===
-function main(config) {
-  // 1. 定义自定义规则（由 ClashOmega 扩展自动维护）
-  const customRules = [
-  ];
-
-  // 2. 将自定义规则插入到 config.rules 最前面
-  if (config.rules) {
-    config.rules = [...customRules, ...config.rules];
-  } else {
-    config.rules = customRules;
-  }
-
-  // 3. 返回修改后的配置
-  return config;
-}
-// === End of ClashOmega Extension Rules ===
-"@
-    Write-Config $scriptPath $template
-}
-
-# 检查脚本文件是否为本扩展管理的格式（包含扩展规则标记）
-function Test-ScriptFileManaged($content) {
-    return $content -match 'ClashOmega Extension Rules'
-}
-
-# 从脚本文件的 customRules 数组中解析规则列表
-# 规则数组定义在 main 函数内部（const customRules = [...]），需用单行模式跨行匹配
-function Parse-ScriptRules($content) {
-    $rules = [System.Collections.ArrayList]::new()
-
-    # 匹配 customRules = [ ... ] 区块（兼容旧版 EXT_RULES 命名）
-    if ($content -match '(?s)const\s+(?:customRules|EXT_RULES)\s*=\s*\[(.*?)\]') {
-        $arrayContent = $matches[1]
-        # 匹配每条规则字符串（单引号或双引号）
-        $matches2 = [regex]::Matches($arrayContent, "['""]([^'""]+)['""]")
-        foreach ($m in $matches2) {
-            $rule = $m.Groups[1].Value.Trim()
-            if ($rule) { [void]$rules.Add($rule) }
-        }
-    }
-    return ,$rules.ToArray()
-}
-
-# 向脚本文件的 customRules 数组添加规则（去重：同 type+payload 替换）
-function Add-ScriptRule($content, $rule) {
-    $rule = $rule.Trim().TrimStart("'").TrimEnd("'").TrimStart('"').TrimEnd('"').Trim()
-    if (-not $rule) { return $content }
-
-    # 解析新规则的类型和 payload
-    $ruleParts = $rule -split ','
-    $newType = if ($ruleParts.Count -ge 1) { $ruleParts[0].Trim() } else { '' }
-    $newPayload = if ($ruleParts.Count -ge 2) { $ruleParts[1].Trim() } else { '' }
-
-    # 如果文件不包含扩展规则标记，先初始化
-    if (-not (Test-ScriptFileManaged $content)) {
-        return $content
-    }
-
-    $existingRules = Parse-ScriptRules $content
-    $newRules = [System.Collections.ArrayList]::new()
-    $overridden = $false
-
-    foreach ($r in $existingRules) {
-        $parts = $r -split ','
-        $exType = if ($parts.Count -ge 1) { $parts[0].Trim() } else { '' }
-        $exPayload = if ($parts.Count -ge 2) { $parts[1].Trim() } else { '' }
-        if ($exType -eq $newType -and $exPayload -eq $newPayload) {
-            # 同 type+payload 替换
-            [void]$newRules.Add($rule)
-            $overridden = $true
-        } else {
-            [void]$newRules.Add($r)
-        }
-    }
-    if (-not $overridden) { [void]$newRules.Add($rule) }
-
-    return Rebuild-ScriptContent $content $newRules
-}
-
-# 从脚本文件的 customRules 数组删除规则（归一化比较）
-function Remove-ScriptRule($content, $rule) {
-    $rule = $rule.Trim().TrimStart("'").TrimEnd("'").TrimStart('"').TrimEnd('"').Trim()
-    if (-not $rule) { return $content }
-
-    function Normalize-RuleStr($r) {
-        $parts = $r -split ','
-        if ($parts.Count -ge 1) {
-            $parts[0] = $parts[0].ToUpper().Replace('-', '')
-        }
-        return ($parts -join ',')
-    }
-
-    $normalizedRule = Normalize-RuleStr $rule
-    $existingRules = Parse-ScriptRules $content
-    $newRules = [System.Collections.ArrayList]::new()
-
-    foreach ($r in $existingRules) {
-        if ((Normalize-RuleStr $r) -ne $normalizedRule) {
-            [void]$newRules.Add($r)
-        }
-    }
-
-    return Rebuild-ScriptContent $content $newRules
-}
-
-# 重建脚本内容，规则数组定义在 main 函数内部（对齐 Clash Verge Rev 官方推荐写法）
-function Rebuild-ScriptContent($content, $rules) {
-    # 构建 main 函数内部的 customRules 数组文本
-    $rulesLines = [System.Collections.ArrayList]::new()
-    [void]$rulesLines.Add('// === ClashOmega Extension Rules (auto-managed, do not edit manually) ===')
-    [void]$rulesLines.Add('function main(config) {')
-    [void]$rulesLines.Add('  // 1. 定义自定义规则（由 ClashOmega 扩展自动维护）')
-    [void]$rulesLines.Add('  const customRules = [')
-    if ($rules.Count -gt 0) {
-        foreach ($r in $rules) {
-            [void]$rulesLines.Add("    `"$r`",")
-        }
-    }
-    [void]$rulesLines.Add('  ];')
-    [void]$rulesLines.Add('')
-    [void]$rulesLines.Add('  // 2. 将自定义规则插入到 config.rules 最前面')
-    [void]$rulesLines.Add('  if (config.rules) {')
-    [void]$rulesLines.Add('    config.rules = [...customRules, ...config.rules];')
-    [void]$rulesLines.Add('  } else {')
-    [void]$rulesLines.Add('    config.rules = customRules;')
-    [void]$rulesLines.Add('  }')
-    [void]$rulesLines.Add('')
-    [void]$rulesLines.Add('  // 3. 返回修改后的配置')
-    [void]$rulesLines.Add('  return config;')
-    [void]$rulesLines.Add('}')
-    [void]$rulesLines.Add('// === End of ClashOmega Extension Rules ===')
-    [void]$rulesLines.Add('')
-
-    return ($rulesLines -join "`n")
 }
 
 # 将规则列表写入快照文件的 rules: 区块
@@ -793,14 +736,20 @@ function Send-Message($msg) {
     $json = ConvertTo-Json -InputObject $msg -Compress -Depth 10
     $bytes = $encoding.GetBytes($json)
     $lenBytes = [System.BitConverter]::GetBytes([int]$bytes.Length)
-    $stdout = [Console]::OpenStandardOutput()
+    if ($null -eq $script:stdoutStream) {
+        $script:stdoutStream = [Console]::OpenStandardOutput()
+    }
+    $stdout = $script:stdoutStream
     $stdout.Write($lenBytes, 0, 4)
     $stdout.Write($bytes, 0, $bytes.Length)
     $stdout.Flush()
 }
 
 function Read-Message {
-    $stdin = [Console]::OpenStandardInput()
+    if ($null -eq $script:stdinStream) {
+        $script:stdinStream = [Console]::OpenStandardInput()
+    }
+    $stdin = $script:stdinStream
     $lenBuffer = New-Object byte[] 4
     $read = $stdin.Read($lenBuffer, 0, 4)
     if ($read -lt 4) { return $null }
@@ -848,6 +797,11 @@ function Main {
                     }
                 }
 
+                'detectClient' {
+                    $result = Detect-Client -ApiUrl $msg.apiUrl
+                    Send-Message $result
+                }
+
                 'getRules' {
                     if ($msg.configPath) { $configPath = $msg.configPath }
                     if (-not $configPath) { $configPath = Get-ConfigPath }
@@ -869,46 +823,19 @@ function Main {
                 }
 
                 'addRule' {
-                    # useScript=true 时写入 Script.js 的 EXT_RULES 数组，否则写入 YAML 配置文件
-                    if ($msg.useScript) {
-                        $scriptPath = Get-ScriptPath
-                        if (-not $scriptPath) {
-                            Send-Message @{ success = $false; error = 'Script file not found. Please initialize it first.' }
-                        }
-                        elseif (-not (Test-Path $scriptPath)) {
-                            Send-Message @{ success = $false; error = "Script file does not exist: $scriptPath"; scriptPath = $scriptPath; needInit = $true }
-                        }
-                        else {
-                            try {
-                                $content = Read-Config $scriptPath
-                                if (-not (Test-ScriptFileManaged $content)) {
-                                    Send-Message @{ success = $false; error = 'Script file is not initialized or corrupted. Please initialize it first.'; scriptPath = $scriptPath; needInit = $true }
-                                }
-                                else {
-                                    $newContent = Add-ScriptRule $content $msg.rule
-                                    Write-Config $scriptPath $newContent
-                                    Send-Message @{ success = $true; message = 'Rule added to script'; scriptPath = $scriptPath }
-                                }
-                            } catch {
-                                Send-Message @{ success = $false; error = "$($_.Exception.Message)" }
-                            }
-                        }
+                    if ($msg.configPath) { $configPath = $msg.configPath }
+                    if (-not $configPath) { $configPath = Get-ConfigPath }
+                    if (-not $configPath -or -not (Test-Path $configPath)) {
+                        Send-Message @{ success = $false; error = 'Config file not found. Please set CLASH_CONFIG_PATH or start Clash first.' }
                     }
                     else {
-                        if ($msg.configPath) { $configPath = $msg.configPath }
-                        if (-not $configPath) { $configPath = Get-ConfigPath }
-                        if (-not $configPath -or -not (Test-Path $configPath)) {
-                            Send-Message @{ success = $false; error = 'Config file not found. Please set CLASH_CONFIG_PATH or start Clash first.' }
-                        }
-                        else {
-                            try {
-                                $content = Read-Config $configPath
-                                $newContent = Add-Rule $content $msg.rule
-                                Write-Config $configPath $newContent
-                                Send-Message @{ success = $true; message = 'Rule added'; configPath = $configPath }
-                            } catch {
-                                Send-Message @{ success = $false; error = "$($_.Exception.Message)" }
-                            }
+                        try {
+                            $content = Read-Config $configPath
+                            $newContent = Add-Rule $content $msg.rule
+                            Write-Config $configPath $newContent
+                            Send-Message @{ success = $true; message = 'Rule added'; configPath = $configPath }
+                        } catch {
+                            Send-Message @{ success = $false; error = "$($_.Exception.Message) | Stack: $($_.InvocationInfo.ScriptLineNumber)" }
                         }
                     }
                 }
@@ -923,10 +850,7 @@ function Main {
                         $content = Read-Config $configPath
                         $existing = [System.Collections.Generic.HashSet[string]]::new([string[]](Parse-Rules $content))
                         $added = 0
-                        $skipped = 0
                         foreach ($rule in $msg.rules) {
-                            # S-008 修复：跳过格式无效的规则，不中断整批操作
-                            if (-not (Test-RuleFormat $rule)) { $skipped++; continue }
                             if (-not $existing.Contains($rule)) {
                                 $content = Add-Rule $content $rule
                                 [void]$existing.Add($rule)
@@ -934,64 +858,31 @@ function Main {
                             }
                         }
                         Write-Config $configPath $content
-                        $msg_text = if ($skipped -gt 0) { "$added rules added, $skipped skipped (invalid format)" } else { "$added rules added" }
-                        Send-Message @{ success = $true; message = $msg_text; configPath = $configPath }
+                        Send-Message @{ success = $true; message = "$added rules added"; configPath = $configPath }
                     }
                 }
 
                 'removeRule' {
-                    # useScript=true 时从 Script.js 的 EXT_RULES 数组删除，否则从 YAML 配置文件删除
-                    if ($msg.useScript) {
-                        $scriptPath = Get-ScriptPath
-                        if (-not $scriptPath -or -not (Test-Path $scriptPath)) {
-                            Send-Message @{ success = $false; error = 'Script file not found or does not exist' }
-                        }
-                        else {
-                            try {
-                                $content = Read-Config $scriptPath
-                                if (-not (Test-ScriptFileManaged $content)) {
-                                    Send-Message @{ success = $false; error = 'Script file is not initialized or corrupted'; scriptPath = $scriptPath; needInit = $true }
-                                }
-                                else {
-                                    $newContent = Remove-ScriptRule $content $msg.rule
-                                    Write-Config $scriptPath $newContent
-                                    Send-Message @{ success = $true; message = 'Rule removed from script'; scriptPath = $scriptPath }
-                                }
-                            } catch {
-                                Send-Message @{ success = $false; error = "$($_.Exception.Message)" }
-                            }
-                        }
+                    if ($msg.configPath) { $configPath = $msg.configPath }
+                    if (-not $configPath) { $configPath = Get-ConfigPath }
+                    if (-not $configPath -or -not (Test-Path $configPath)) {
+                        Send-Message @{ success = $false; error = 'Config file not found. Please set CLASH_CONFIG_PATH or start Clash first.' }
                     }
                     else {
-                        if ($msg.configPath) { $configPath = $msg.configPath }
-                        if (-not $configPath) { $configPath = Get-ConfigPath }
-                        if (-not $configPath -or -not (Test-Path $configPath)) {
-                            Send-Message @{ success = $false; error = 'Config file not found. Please set CLASH_CONFIG_PATH or start Clash first.' }
-                        }
-                        else {
-                            $content = Read-Config $configPath
-                            $newContent = Remove-Rule $content $msg.rule
-                            Write-Config $configPath $newContent
-                            Send-Message @{ success = $true; message = 'Rule removed'; configPath = $configPath }
-                        }
+                        $content = Read-Config $configPath
+                        $newContent = Remove-Rule $content $msg.rule
+                        Write-Config $configPath $newContent
+                        Send-Message @{ success = $true; message = 'Rule removed'; configPath = $configPath }
                     }
                 }
 
                 'setConfigPath' {
-                    # S-002 修复：路径白名单校验，防止路径遍历攻击
-                    $candidatePath = $msg.path
-                    if (-not $candidatePath) {
-                        Send-Message @{ success = $false; error = 'Path is empty' }
-                    }
-                    elseif (-not (Test-ConfigPathAllowed $candidatePath)) {
-                        Send-Message @{ success = $false; error = 'Invalid path: must be absolute path ending with .yaml/.yml' }
-                    }
-                    elseif (-not (Test-Path $candidatePath)) {
-                        Send-Message @{ success = $false; error = 'Path does not exist' }
+                    if (Test-Path $msg.path) {
+                        $configPath = $msg.path
+                        Send-Message @{ success = $true; message = 'Config path updated' }
                     }
                     else {
-                        $configPath = $candidatePath
-                        Send-Message @{ success = $true; message = 'Config path updated' }
+                        Send-Message @{ success = $false; error = 'Path does not exist' }
                     }
                 }
 
@@ -1022,72 +913,7 @@ function Main {
                         try {
                             $newContent = Sync-SnapshotRules $snapshotPath $msg.rules
                             Write-Config $snapshotPath $newContent
-                            # 返回快照文件内容，供扩展用 {payload} 方式 PUT /configs 热重载
-                            # mihomo 的 PUT /configs {path} 在某些版本返回 "Body invalid"，
-                            # 只能用 {payload: yamlContent} 方式让内核重新加载完整配置
-                            Send-Message @{ success = $true; message = 'Snapshot synced'; snapshotPath = $snapshotPath; snapshotContent = $newContent }
-                        } catch {
-                            Send-Message @{ success = $false; error = "$($_.Exception.Message)" }
-                        }
-                    }
-                }
-
-                'getSnapshotPath' {
-                    # 返回 clash-verge.yaml 快照文件路径，供扩展调用 PUT /configs {path} 热重载
-                    $snapshotPath = Get-SnapshotPath
-                    if ($snapshotPath) {
-                        Send-Message @{ success = $true; snapshotPath = $snapshotPath }
-                    } else {
-                        Send-Message @{ success = $false; error = 'Snapshot file not found (clash-verge.yaml)' }
-                    }
-                }
-
-                'getScriptPath' {
-                    $scriptPath = Get-ScriptPath
-                    if ($scriptPath) {
-                        $managed = $false
-                        if (Test-Path $scriptPath) {
-                            $content = Read-Config $scriptPath
-                            $managed = Test-ScriptFileManaged $content
-                        }
-                        Send-Message @{ success = $true; scriptPath = $scriptPath; exists = (Test-Path $scriptPath); managed = $managed }
-                    }
-                    else {
-                        Send-Message @{ success = $false; error = 'Script file not found (no option.script in current profile)' }
-                    }
-                }
-
-                'getScriptRules' {
-                    $scriptPath = Get-ScriptPath
-                    if (-not $scriptPath -or -not (Test-Path $scriptPath)) {
-                        Send-Message @{ success = $false; error = 'Script file not found or does not exist'; scriptPath = $scriptPath; needInit = $true }
-                    }
-                    else {
-                        $content = Read-Config $scriptPath
-                        if (-not (Test-ScriptFileManaged $content)) {
-                            Send-Message @{ success = $false; error = 'Script file is not initialized or corrupted'; scriptPath = $scriptPath; needInit = $true }
-                        }
-                        else {
-                            $rules = Parse-ScriptRules $content
-                            Send-Message @{ success = $true; rules = $rules; scriptPath = $scriptPath }
-                        }
-                    }
-                }
-
-                'initScriptFile' {
-                    $scriptPath = Get-ScriptPath
-                    if (-not $scriptPath) {
-                        Send-Message @{ success = $false; error = 'Cannot find script file (current profile has no option.script, or Clash Verge Rev profiles directory not found)' }
-                    }
-                    else {
-                        try {
-                            # 如果文件已存在，先备份
-                            if (Test-Path $scriptPath) {
-                                $backup = "$scriptPath.bak"
-                                Copy-Item -Path $scriptPath -Destination $backup -Force
-                            }
-                            Initialize-ScriptFile $scriptPath
-                            Send-Message @{ success = $true; message = 'Script file initialized'; scriptPath = $scriptPath }
+                            Send-Message @{ success = $true; message = 'Snapshot synced'; snapshotPath = $snapshotPath }
                         } catch {
                             Send-Message @{ success = $false; error = "$($_.Exception.Message)" }
                         }

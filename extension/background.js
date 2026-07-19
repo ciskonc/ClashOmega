@@ -55,41 +55,64 @@ async function handleMessage(message) {
       // ──── 状态查询 ────
       case 'getStatus': {
         const settings = await getSettings();
-        // 状态检测只用用户配置的 URL，不走端口回退
-        // clashConfiguredUrlReachable 准确反映用户配置的 URL 是否可达
-        const config = await getClashConfig({ noFallback: true });
-        const clashConfiguredUrlReachable = config !== null;
 
-        // 如果用户配置的 URL 不通，并行回退检测（竞速，最快响应的端口立即返回）
-        // 用户可在设置中关闭"端口错误自动探测"以禁用回退
-        let fallbackConfig = null;
-        let fallbackApiUrl = null;
-        if (!clashConfiguredUrlReachable && settings.disableFallback !== true) {
-          // ★ 修复：只用 getApiConfig 获取 headers，排除项用 settings.clashApiUrl
-          // 原因：getApiConfig 的 baseUrl 可能是 session 缓存的 clashActualApiUrl（上次回退探测到的端口），
-          //       如果用缓存作为排除项，会把这个可用端口排除在候选之外，导致回退探测失败
-          //       （第一次保存设置时探测到 9097 并写入缓存，第二次调用 getStatus 时 9097 被排除 → 探测失败）
-          const { headers } = await getApiConfig();
-          const apiHost = settings.clashApiHost || '127.0.0.1';
-          // 只排除用户配置的 URL（已通过 noFallback=true 检测过，确定不通）
-          // 从 settings.clashApiUrl 提取端口，只比较端口号避免 URL 格式差异
-          const userPort = settings.clashApiUrl?.match(/:(\d+)(?:\/|$)/)?.[1];
-          const candidateUrls = CLASH_API_PORTS
-            .filter(port => String(port) !== userPort)
-            .map(port => `http://${apiHost}:${port}`);
-          const found = await tryFetchParallel(
-            candidateUrls.map(url => `${url}/configs`),
-            headers
-          );
-          if (found) {
-            fallbackConfig = found.data;
-            // 从 found.url 提取基础 URL（去掉 /configs 后缀）
-            fallbackApiUrl = found.url.replace(/\/configs$/, '');
-            // 缓存到 session，后续业务操作（clashGet/rules 等）直接用这个 URL，不重复尝试错误端口
-            // 注意：缓存只用于业务操作，不用于回退探测的排除项（见上面的注释）
-            await cacheActualApiUrl(fallbackApiUrl);
+        // ★ 性能优化：Clash API 探测与 Native Host 串行组并行执行
+        // 原串行流程：getClashConfig → fallback 探测 → checkNativeHost → getSystemProxyStatus → detectClashClient
+        // 优化后：组1（Clash API）与 组2（Native Host 串行）并行，detectClashClient 仍需串行（混合 Native Host + Clash API）
+        // Native Host 必须串行（PowerShell 单进程不支持并发，避免 native messaging 队列错位）
+
+        // 组1：Clash API 探测（用户配置 URL + 回退探测）
+        const clashApiPromise = (async () => {
+          // 状态检测只用用户配置的 URL，不走端口回退
+          // clashConfiguredUrlReachable 准确反映用户配置的 URL 是否可达
+          const config = await getClashConfig({ noFallback: true });
+          const clashConfiguredUrlReachable = config !== null;
+
+          // 如果用户配置的 URL 不通，并行回退检测（竞速，最快响应的端口立即返回）
+          // 用户可在设置中关闭"端口错误自动探测"以禁用回退
+          let fallbackConfig = null;
+          let fallbackApiUrl = null;
+          if (!clashConfiguredUrlReachable && settings.disableFallback !== true) {
+            // ★ 修复：只用 getApiConfig 获取 headers，排除项用 settings.clashApiUrl
+            // 原因：getApiConfig 的 baseUrl 可能是 session 缓存的 clashActualApiUrl（上次回退探测到的端口），
+            //       如果用缓存作为排除项，会把这个可用端口排除在候选之外，导致回退探测失败
+            //       （第一次保存设置时探测到 9097 并写入缓存，第二次调用 getStatus 时 9097 被排除 → 探测失败）
+            const { headers } = await getApiConfig();
+            const apiHost = settings.clashApiHost || '127.0.0.1';
+            // 只排除用户配置的 URL（已通过 noFallback=true 检测过，确定不通）
+            // 从 settings.clashApiUrl 提取端口，只比较端口号避免 URL 格式差异
+            const userPort = settings.clashApiUrl?.match(/:(\d+)(?:\/|$)/)?.[1];
+            const candidateUrls = CLASH_API_PORTS
+              .filter(port => String(port) !== userPort)
+              .map(port => `http://${apiHost}:${port}`);
+            const found = await tryFetchParallel(
+              candidateUrls.map(url => `${url}/configs`),
+              headers
+            );
+            if (found) {
+              fallbackConfig = found.data;
+              // 从 found.url 提取基础 URL（去掉 /configs 后缀）
+              fallbackApiUrl = found.url.replace(/\/configs$/, '');
+              // 缓存到 session，后续业务操作（clashGet/rules 等）直接用这个 URL，不重复尝试错误端口
+              // 注意：缓存只用于业务操作，不用于回退探测的排除项（见上面的注释）
+              await cacheActualApiUrl(fallbackApiUrl);
+            }
           }
-        }
+          return { config, fallbackConfig, fallbackApiUrl, clashConfiguredUrlReachable };
+        })();
+
+        // 组2：Native Host 调用（仅 checkNativeHost，sysProxy 已改为异步加载不阻塞主页）
+        // ★ 方案 I1（v1.4.2 性能优化）：原 getSystemProxyStatus 调 Native Host 读注册表 500-1000ms，
+        // 阻塞主页加载。改为独立 action 'getSystemProxyStatus'，popup 异步调用并显示"加载中..."
+        const nativeHostPromise = (async () => {
+          const nativeHostInstalled = await checkNativeHost();
+          return { nativeHostInstalled };
+        })();
+
+        // 等两组并行完成
+        const [clashApiResult, nativeHostResult] = await Promise.all([clashApiPromise, nativeHostPromise]);
+        const { config, fallbackConfig, fallbackApiUrl, clashConfiguredUrlReachable } = clashApiResult;
+        const { nativeHostInstalled } = nativeHostResult;
 
         // clashRunning 反映 Clash 实际是否可用（包括回退）
         // 主页用此字段判断是否显示"已连接"，回退找到时也应显示已连接
@@ -97,18 +120,22 @@ async function handleMessage(message) {
         // 主页 renderClashStatus 需要 config 显示端口，回退时用 fallbackConfig
         const effectiveConfig = config || fallbackConfig;
 
-        // 串行调用 Native Host（避免并发导致 native messaging 队列问题）
-        const nativeHostInstalled = await checkNativeHost();
-        const sysProxy = await getSystemProxyStatus();
         const proxyPort = clashRunning
           ? extractProxyAddress(effectiveConfig, settings.clashApiHost).port
           : settings.clashApiPort;
+
+        // ★ 方案 J1（v1.4.2 性能优化）：detectClashClient 异步化
+        // 原实现：getStatus 内 await detectClashClient（含 1 次 Native Host 调用 500-1000ms）→ Clash 状态点晚出
+        // 优化后：getStatus 立即返回 clientType=null（未知），popup 异步调 'detectClient' action 获取
+        // popup 收到 null 时不触发 UI 降级（保留默认可用状态），detectClient 返回后再应用 UI 降级
+        // 客户端类型变化的缓存清理逻辑保留在 detectClient action 内（比对 settings._lastClientType）
+
         return {
           mode: settings.currentMode,
           clashRunning,
           config: effectiveConfig,
           proxyPort,
-          sysProxy: sysProxy,
+          // sysProxy 已改为异步加载（方案 I1），popup 通过独立 action 'getSystemProxyStatus' 获取
           nativeHostInstalled,
           clashApiHost: settings.clashApiHost,
           clashApiPort: settings.clashApiPort,
@@ -117,8 +144,57 @@ async function handleMessage(message) {
           clashConfiguredUrlReachable,
           // 回退检测结果：当用户配置的 URL 不通但回退找到 Clash 时填充
           clashReachableViaFallback: fallbackConfig !== null,
-          fallbackApiUrl: fallbackApiUrl
+          fallbackApiUrl: fallbackApiUrl,
+          // ★ 方案 J1：clientType=null 表示异步加载中，popup 不触发 UI 降级
+          // 真实 clientType 由独立 action 'detectClient' 异步返回
+          clientType: null,
+          clientDetails: null,
+          // fileOperationSupported=null 表示未知，popup 收到 null 时不应用 UI 降级
+          fileOperationSupported: null
         };
+      }
+
+      // ──── 客户端类型检测（异步查询，避免阻塞 getStatus） ────
+      // ★ 方案 J1（v1.4.2 性能优化）：原 detectClashClient 在 getStatus 内同步调用，
+      // 内部 sendToNativeSafe({ action: 'detectClient' }) 启动 PowerShell 500-1000ms 阻塞 Clash 状态点渲染。
+      // 改为独立 action 后，Clash 状态点与系统代理同时出，UI 降级（模块禁用）异步应用。
+      // 客户端类型变化时清除会话级 API URL 缓存，避免上一个客户端的缓存污染新客户端。
+      case 'detectClient': {
+        const settings = await getSettings();
+        let clientType = CLIENT_TYPES.UNKNOWN;
+        let clientDetails = null;
+        try {
+          const clientInfo = await detectClashClient(settings.clashApiUrl);
+          clientType = clientInfo.clientType;
+          clientDetails = clientInfo.details;
+          // 客户端类型变化时清除会话级 API URL 缓存
+          // 场景：从 Clash Verge Rev（端口 9097）切到 FLClash（端口 9090），缓存还指向 9097
+          const lastClientType = settings._lastClientType;
+          if (lastClientType && lastClientType !== clientType) {
+            console.log(`ClashOmega: client type changed ${lastClientType} → ${clientType}, clearing session cache`);
+            await clearCachedApiUrl();
+          }
+          if (lastClientType !== clientType) {
+            settings._lastClientType = clientType;
+            await chrome.storage.local.set({ settings });
+          }
+        } catch (e) {
+          console.warn('ClashOmega: detectClashClient failed:', e.message);
+        }
+        return {
+          clientType,
+          clientDetails,
+          fileOperationSupported: isFileOperationSupported(clientType)
+        };
+      }
+
+      // ──── 系统代理状态（异步查询，避免阻塞 getStatus） ────
+      // ★ 方案 I1（v1.4.2 性能优化）：原 getSystemProxyStatus 在 getStatus 内同步调用，
+      // 调 Native Host 读注册表 500-1000ms 阻塞主页加载。改为独立 action 后，
+      // popup 主页加载不依赖此函数，加载期间显示"加载中..."，本 action 返回后异步渲染。
+      // 优先走 Native Host 读 Windows 系统代理（保留原 UI 语义），Native Host 不可用时回退 chrome.proxy。
+      case 'getSystemProxyStatus': {
+        return await getSystemProxyStatus();
       }
 
       // ──── 快速检测用户配置的 URL（不走回退，用于保存后即时反馈） ────
@@ -220,6 +296,24 @@ async function handleMessage(message) {
         return { success: config !== null, config };
       }
 
+      // ──── 客户端类型检测（独立查询，供 popup 单独调用）────
+      case 'getClientType': {
+        try {
+          const settings = await getSettings();
+          const clientInfo = await detectClashClient(settings.clashApiUrl);
+          return {
+            success: true,
+            clientType: clientInfo.clientType,
+            nativeHostAvailable: clientInfo.nativeHostAvailable,
+            apiReachable: clientInfo.apiReachable,
+            details: clientInfo.details,
+            fileOperationSupported: isFileOperationSupported(clientInfo.clientType)
+          };
+        } catch (e) {
+          return { success: false, error: e.message, clientType: CLIENT_TYPES.UNKNOWN };
+        }
+      }
+
       // ──── Clash 内核模式切换（PATCH /configs {mode}）────
       // 阶段一仅运行时切换，不持久化到 OpenClash uci；走 Clash API 直接生效
       // 注意：不能调用 restartClash，因为 PUT /configs reload 会从配置文件重新加载 mode，重置本次切换
@@ -261,8 +355,17 @@ async function handleMessage(message) {
 
       // ──── 规则管理（Native Host 写入 + Clash API 热重载）────
       // 写入成功后返回，用户需手动重启 Clash 生效
+      // 注意：文件级规则写入仅支持 Clash Verge Rev，非 CVR 客户端返回明确错误
       case 'addRule': {
         const settings = await getSettings();
+        // 客户端类型检查：非 CVR 不支持文件级规则写入
+        if (!isFileOperationSupported(settings._lastClientType || CLIENT_TYPES.UNKNOWN)) {
+          return {
+            success: false,
+            error: 'file_op_not_supported',
+            hint: '当前 Clash 客户端不支持文件级规则写入，仅 Clash Verge Rev 支持 Script.js / YAML 规则管理'
+          };
+        }
         // writeToYaml=true 表示"写入 YAML 配置文件"，writeToYaml=false（默认）表示"写入 Script.js 扩展脚本"
         // Native Host 接口的 useScript 参数语义与字段相反：useScript=true 表示写入 Script.js
         const useScript = settings.writeToYaml !== true;
@@ -272,6 +375,13 @@ async function handleMessage(message) {
 
       case 'batchAddRules': {
         const settings = await getSettings();
+        if (!isFileOperationSupported(settings._lastClientType || CLIENT_TYPES.UNKNOWN)) {
+          return {
+            success: false,
+            error: 'file_op_not_supported',
+            hint: '当前 Clash 客户端不支持文件级规则写入，仅 Clash Verge Rev 支持'
+          };
+        }
         const useScript = settings.writeToYaml !== true;
         // useScript=true 时逐条写入 Script.js（Native Host 已支持）
         if (useScript) {
@@ -288,6 +398,13 @@ async function handleMessage(message) {
 
       case 'removeRule': {
         const settings = await getSettings();
+        if (!isFileOperationSupported(settings._lastClientType || CLIENT_TYPES.UNKNOWN)) {
+          return {
+            success: false,
+            error: 'file_op_not_supported',
+            hint: '当前 Clash 客户端不支持文件级规则删除，仅 Clash Verge Rev 支持'
+          };
+        }
         // 优先使用消息中的 useScript（来自扩展脚本规则列表的删除按钮），
         // 否则根据 settings.writeToYaml 决定：writeToYaml=true → useScript=false（从 YAML 删除），false → useScript=true（从 Script.js 删除）
         const useScript = message.useScript === true || (message.useScript === undefined && settings.writeToYaml !== true);
@@ -296,15 +413,29 @@ async function handleMessage(message) {
       }
 
       // ──── Script.js 扩展脚本规则管理 ────
+      // 注意：Script.js 文件操作仅支持 Clash Verge Rev，非 CVR 客户端返回空结果
       case 'getScriptPath': {
+        const settings = await getSettings();
+        if (!isFileOperationSupported(settings._lastClientType || CLIENT_TYPES.UNKNOWN)) {
+          return { success: false, error: 'file_op_not_supported' };
+        }
         return await getScriptPath();
       }
 
       case 'getScriptRules': {
+        const settings = await getSettings();
+        if (!isFileOperationSupported(settings._lastClientType || CLIENT_TYPES.UNKNOWN)) {
+          // 非 CVR：返回空规则列表（不报错），UI 侧由 updateClientTypeUI 显示"不支持"提示
+          return { success: true, rules: [] };
+        }
         return await getScriptRules();
       }
 
       case 'initScriptFile': {
+        const settings = await getSettings();
+        if (!isFileOperationSupported(settings._lastClientType || CLIENT_TYPES.UNKNOWN)) {
+          return { success: false, error: 'file_op_not_supported' };
+        }
         return await initScriptFile();
       }
 
@@ -331,6 +462,13 @@ async function handleMessage(message) {
       }
 
       case 'saveSettings': {
+        // 清除客户端类型缓存，强制 getStatus 重新检测客户端类型
+        // 原因：用户保存设置可能是因为切换了 Clash 客户端（CVR→FLClash），
+        //       需要重新走 detectClashClient 流程，避免上次缓存的 _lastClientType 污染判断
+        //       （_lastClientType 用于"客户端类型变化时清缓存"的判断，保存后必须重置）
+        if (message.settings) {
+          delete message.settings._lastClientType;
+        }
         await chrome.storage.local.set({ settings: message.settings });
         // 用户修改设置时清除会话级缓存的 API URL，强制重新检测
         await clearCachedApiUrl();
@@ -361,10 +499,39 @@ async function handleMessage(message) {
           return {
             success: false,
             error: 'mihomo-crashed',
-            hint: '请打开 Clash Verge Rev GUI，点击"重启内核"或"重载配置"按钮恢复 mihomo，然后再用插件重启。'
+            hint: '请打开 Clash 客户端 GUI，点击"重启内核"或"重载配置"按钮恢复 mihomo，然后再用插件重启。'
           };
         }
         console.log('[restartClash] Step 0 OK: mihomo alive');
+
+        // 客户端类型检测：非 Clash Verge Rev 客户端不支持文件操作（Script.js / 快照同步）
+        // 走精简路径：直接 POST /restart + 关闭连接，跳过 Step 1-4 的文件操作
+        let clientType = settings._lastClientType || CLIENT_TYPES.UNKNOWN;
+        if (!clientType || clientType === CLIENT_TYPES.UNKNOWN) {
+          try {
+            const clientInfo = await detectClashClient(settings.clashApiUrl);
+            clientType = clientInfo.clientType;
+          } catch {
+            clientType = CLIENT_TYPES.UNKNOWN;
+          }
+        }
+        if (!isFileOperationSupported(clientType)) {
+          console.log(`[restartClash] Client type: ${clientType} (file ops not supported), using API-only restart path`);
+          // 非 CVR 路径：直接 POST /restart + 关闭连接
+          const restarted = await restartKernel();
+          if (!restarted) {
+            console.error('[restartClash] FAILED: POST /restart failed (non-CVR path)');
+            return { success: false, error: 'Clash API unreachable — check API URL & secret in settings' };
+          }
+          console.log('[restartClash] OK: kernel restarted (non-CVR path)');
+          // 关闭活跃连接，强制新连接按新配置匹配
+          await closeAllConnections().catch(() => {});
+          settings.clashRemoteMode = 'rule';
+          await chrome.storage.local.set({ settings });
+          return { success: true, method: 'restart-non-cvr', clientType };
+        }
+
+        console.log('[restartClash] Client type: clash-verge-rev, using full file-ops restart path');
 
         console.log('[restartClash] Step 1: Reading rules from profile file...');
         const yamlResult = await getClashYamlRules(settings.clashConfigPath);

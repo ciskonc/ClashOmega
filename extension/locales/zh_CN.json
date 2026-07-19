@@ -20,6 +20,7 @@
   "clash_connected": "已连接",
   "clash_running": "运行中",
   "clash_not_running": "未运行",
+  "clash_status_loading": "加载中...",
   "clash_proxy_port": "端口",
 
   "system_proxy_status": "系统代理",
@@ -29,6 +30,7 @@
   "system_proxy_unknown": "无法获取",
   "system_proxy_follow_system": "跟随系统",
   "system_proxy_null": "未安装 Native Host",
+  "system_proxy_loading": "加载中...",
 
   "domain_check_title": "检查当前域名在哪个代理组",
   "domain_check_current_site": "当前网站",
@@ -69,6 +71,10 @@
   "script_rules_init_success": "扩展脚本文件已初始化",
   "script_rules_init_failed": "初始化失败",
   "script_rules_not_found": "未找到扩展脚本文件（当前订阅未配置 option.script）",
+  "script_rules_unsupported_hint": "仅 Clash Verge Rev 支持扩展脚本规则管理。请通过 Clash 客户端自身的界面管理规则，或切换到 Clash Verge Rev。",
+  "client_current": "当前客户端",
+  "client_unknown": "未识别",
+  "module_disabled_file_ops": "当前客户端不支持文件操作",
   "rule_restart_hint": "规则已修改，请重启 Clash 生效",
   "rule_source_js": "来自订阅扩展脚本（profiles 目录下的 .js）",
   "rule_source_yaml": "来自 YAML 配置文件",

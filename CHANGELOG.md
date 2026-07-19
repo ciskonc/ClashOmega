@@ -4,6 +4,33 @@
 
 ---
 
+## v1.4.2 — 2026-07-16
+
+主页加载性能优化（4-5 秒 → 2-3 秒）。
+
+### Changed
+
+- **getStatus 内部分组并行**（方案 A）：Clash API 探测与 Native Host 串行组（ping + getSystemProxy）并行执行。`detectClashClient` 仍串行（混合 Native Host + Clash API，且需等 Clash API 缓存建立后命中缓存避免重复请求）。Native Host 内部保持串行（PowerShell 单进程不支持并发，避免 native messaging 队列错位）
+- **queryConnections 重试策略优化**（方案 B）：重试间隔 1500ms → 800ms，最多重试 2 次（总时长 1.6s）。原 1500ms 单次重试改为 800ms 多次重试，提高 Clash 内核建立连接后的命中率
+- **DOMContentLoaded 初始化并行化**（方案 C）：`initTheme` 先执行（避免主题闪烁）→ `I18N.init` + `getZoomScale` + `getTabLayout` 三者并行。原 4 次 await 串行改为 2 次（initTheme + Promise.all）
+- **loadSettingsForm 改非阻塞**（方案 D）：`statusPromise.then(loadSettingsForm)` 非阻塞，`initPopup` 不再 `await statusPromise`。主页域名检测提前启动，不再等 getStatus 返回（getStatus 是最慢步骤）
+- **系统代理状态异步加载**（方案 I1）：`getSystemProxyStatus` 从 `getStatus` 内同步调用改为独立 action 异步调用。主页加载时立即显示"加载中..."，500-1000ms 后异步更新为真实 Windows 系统代理状态。撤销方案 G（曾尝试改用 `chrome.proxy.settings.get()` 读浏览器代理，但破坏"系统代理"栏显示 Windows 系统状态的 UI 语义）。`background.js` getStatus 串行组仅保留 `checkNativeHost`，新增独立 action `getSystemProxyStatus` 供 popup 异步调用。`popup.js` 新增 `loadSystemProxyStatus()` 函数，DOMContentLoaded 与 5 秒轮询时调用，`renderSystemProxyStatus` 新增 null 分支显示"加载中..."
+- **加载状态视觉一致性**（方案 I1 视觉修复）：`renderClashStatus` 新增 null 分支显示橙色"加载中..."，与系统代理加载状态视觉一致；`renderSystemProxyStatus` null 分支颜色从 `status-dot--off`（红色 #F44336）改为 `status-dot--warn`（橙色 #FF9800），加载中属过渡状态而非错误状态；HTML 初始 `clash-status-dot` class 从 `status-dot--off` 改为 `status-dot--warn`，避免 popup 打开瞬间红色闪烁；`loadSystemProxyStatus` 引入 `_lastSysProxy` 全局变量，5 秒轮询时保留上次状态不显示"加载中..."，避免每 5 秒状态点闪烁
+- **客户端类型检测异步化**（方案 J1）：`detectClashClient` 从 `getStatus` 内同步调用改为独立 action `detectClient` 异步调用。原实现 getStatus 串行调用 detectClashClient（含 1 次 Native Host + clashGet），导致 Clash 状态点比系统代理栏晚 500-1000ms 出现。优化后 getStatus 立即返回 `clientType=null`（未知），popup 收到 null 时不触发 UI 降级，`loadClientType()` 异步调用独立 action，返回后通过 `updateClientTypeUI` 应用 UI 降级。客户端类型变化的会话级 API URL 缓存清理逻辑保留在 detectClient action 内。`loadClientType` 引入 `_lastClientType` 全局变量，5 秒轮询时客户端类型未变则不重新渲染 UI 降级，避免重复触发规则重载
+
+### Added
+
+- zh_CN / en / ja 三语言新增 `system_proxy_loading` 翻译键（"加载中..." / "Loading..." / "読み込み中..."）
+- zh_CN / en / ja 三语言新增 `clash_status_loading` 翻译键（"加载中..." / "Loading..." / "読み込み中..."）
+
+### Performance
+
+- 主页内容可见时间：4-5 秒 → 2-3 秒（预估）
+- 系统代理状态渲染：原阻塞主页 500-1000ms → 主页秒开，"系统代理"栏异步加载
+- 瓶颈分析：getStatus 串行调用（Clash API + 3 个 Native Host）+ queryConnections 1.5s 硬延迟 + DOMContentLoaded 串行 await + loadSettingsForm 阻塞 initPopup + getSystemProxyStatus 阻塞主页加载
+
+---
+
 ## v1.4.1 — 2026-07-04
 
 新增 Clash 远程管理模块 + mihomo 崩溃防护。

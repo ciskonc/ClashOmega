@@ -992,6 +992,18 @@ function renderClashStatus(running, config, proxyPort, layout) {
   const text = document.getElementById('clash-status-text');
   const dashboardBtn = document.getElementById('web-dashboard-btn');
 
+  // ★ 方案 I1：running=null 表示异步加载中，显示橙色加载状态
+  // 与 system-proxy 加载中视觉一致，避免 popup 打开瞬间红色状态点闪烁
+  if (running === null || running === undefined) {
+    dot.className = 'status-dot status-dot--warn';
+    text.textContent = I18N.t('clash_status_loading');
+    text.style.cursor = 'default';
+    text.title = '';
+    text.onclick = null;
+    if (dashboardBtn) dashboardBtn.style.display = 'none';
+    return;
+  }
+
   if (running && config) {
     dot.className = 'status-dot status-dot--on';
     text.textContent = `${I18N.t('clash_connected')} | ${I18N.t('clash_proxy_port')} ${proxyPort}`;
@@ -1059,6 +1071,16 @@ function renderSystemProxyStatus(sysProxy) {
   const dot = document.getElementById('system-proxy-dot');
   const text = document.getElementById('system-proxy-text');
 
+  // ★ 方案 I1（v1.4.2）：sysProxy 为 null 表示异步加载中，显示橙色"加载中..."
+  // 用 status-dot--warn（橙色 #FF9800）而非 status-dot--off（红色 #F44336），
+  // 加载中属于过渡状态而非错误状态，视觉语义更准确
+  if (sysProxy === null || sysProxy === undefined) {
+    dot.className = 'status-dot status-dot--warn';
+    text.textContent = I18N.t('system_proxy_loading');
+    text.title = '';
+    return;
+  }
+
   // Native Host 未安装/不可用时，显示 Null（用户需求：未导入 native-host 应显示为 Null）
   if (sysProxy && sysProxy.nativeHostAvailable === false) {
     dot.className = 'status-dot status-dot--off';
@@ -1116,6 +1138,68 @@ function renderSystemProxyStatus(sysProxy) {
 
   dot.className = 'status-dot status-dot--on';
   text.textContent = I18N.t('system_proxy_direct');
+}
+
+/**
+ * 异步加载系统代理状态（方案 I1）
+ *
+ * ★ v1.4.2 性能优化（方案 I1）：原 getStatus 内同步调用 getSystemProxyStatus（500-1000ms）
+ * 阻塞主页加载。现改为独立 action 异步调用，主页秒开，"系统代理"栏加载完后异步更新。
+ *
+ * 调用时机：
+ * 1. DOMContentLoaded 主页加载时立即触发（与 statusPromise 并行）— 显示"加载中..."
+ * 2. 5 秒轮询时同步刷新 — 保留上次状态，避免闪烁
+ * 3. 模式切换后刷新（refreshPopupStatus 内）— 保留上次状态，避免闪烁
+ *
+ * 函数立即将"系统代理"栏设为"加载中..."（仅首次），异步请求完成后调用 renderSystemProxyStatus 渲染真实状态。
+ * 轮询刷新时（_lastSysProxy !== null）不显示"加载中..."，避免每 5 秒状态点闪烁。
+ */
+let _lastSysProxy = null;  // 记录上次系统代理状态，轮询时保留避免闪烁
+
+async function loadSystemProxyStatus() {
+  // 首次加载（_lastSysProxy === null）显示"加载中..."
+  // 轮询刷新（_lastSysProxy !== null）保留上次状态，等数据返回后直接更新
+  if (_lastSysProxy === null) {
+    renderSystemProxyStatus(null);
+  }
+  try {
+    const sysProxy = await sendToBackground({ action: 'getSystemProxyStatus' });
+    _lastSysProxy = sysProxy;
+    renderSystemProxyStatus(sysProxy);
+  } catch (e) {
+    console.warn('ClashOmega: loadSystemProxyStatus failed:', e.message);
+    const errProxy = { success: false, error: e.message };
+    _lastSysProxy = errProxy;
+    renderSystemProxyStatus(errProxy);
+  }
+}
+
+/**
+ * 异步加载客户端类型（方案 J1）
+ *
+ * ★ v1.4.2 性能优化（方案 J1）：原 getStatus 内同步调用 detectClashClient（500-1000ms）
+ * 阻塞 Clash 状态点渲染。现改为独立 action 异步调用，Clash 状态点与系统代理同时出。
+ *
+ * 调用时机：
+ * 1. DOMContentLoaded 主页加载时立即触发（与 statusPromise 并行）
+ * 2. 5 秒轮询时同步刷新
+ *
+ * 函数立即返回（不显示加载中），异步请求完成后调用 updateClientTypeUI 渲染 UI 降级。
+ * 注意：statusPromise 返回的 clientType=null 时不触发 UI 降级，等本函数返回后才应用。
+ */
+let _lastClientType = null;  // 记录上次客户端类型，轮询时比对避免重复 updateClientTypeUI
+
+async function loadClientType() {
+  try {
+    const result = await sendToBackground({ action: 'detectClient' });
+    // 客户端类型变化时才重新渲染 UI 降级，避免重复 updateClientTypeUI 触发规则重载
+    if (_lastClientType !== result.clientType) {
+      _lastClientType = result.clientType;
+      updateClientTypeUI(result.clientType, result.fileOperationSupported);
+    }
+  } catch (e) {
+    console.warn('ClashOmega: loadClientType failed:', e.message);
+  }
 }
 
 function getPolicyClass(proxy) {
@@ -2193,13 +2277,17 @@ function bindSettingsEvents() {
 
       // ★ 保存设置后刷新所有状态指示器（使用 latestStatus，避免重复调用 getStatus）
       // DOMContentLoaded 中的并行渲染只在弹窗打开时执行一次，保存设置后必须显式刷新：
-      //   1. 刷新模式切换按钮高亮 + clash 按钮 disabled 状态（Clash 可用后需启用 clash 按钮）
-      //   2. 刷新主页 Clash 状态点 + 系统代理状态
-      //   3. 刷新设置页 Clash API 状态指示器（绿色"已连接" / 橙色端口不匹配 / 红色无法连接）
-      //   4. 调用 initPopup 刷新域名检测、规则列表等
-      refreshPopupStatus(latestStatus);
+      //   1. 刷新设置页 Clash API 状态指示器（绿色"已连接" / 橙色端口不匹配 / 红色无法连接）
+      //   2. 调用 initPopup 刷新域名检测、规则列表等
+      //   3. 最后调用 refreshPopupStatus 刷新模式按钮 + Clash 状态 + 客户端类型驱动的 UI 降级
+      // ★ 顺序关键：refreshPopupStatus 必须在 initPopup 之后调用
+      //   原因：initPopup 中的 populateProxyGroupSelects 等异步操作会操作 quick-add / batch-detect
+      //         模块内的 select 元素，如果 refreshPopupStatus 在 initPopup 之前调用，
+      //         setModuleDisabled 设置的 disabled 属性可能被 initPopup 的后续操作影响。
+      //         将 refreshPopupStatus 放到最后，确保 setModuleDisabled 的效果不被覆盖。
       await renderClashApiStatus(latestStatus);
       await initPopup(window._currentTabLayout, Promise.resolve({ settings: await sendToBackground({ action: 'getSettings' }) }));
+      refreshPopupStatus(latestStatus);
     });
   });
 
@@ -2550,11 +2638,116 @@ function refreshPopupStatus(freshStatus) {
   renderModeSwitch(freshStatus.mode);
   // 主页 Clash 状态点 + 状态文本（使用当前缓存的 layout，避免重复 getTabLayout）
   renderClashStatus(freshStatus.clashRunning, freshStatus.config, freshStatus.proxyPort, window._currentTabLayout);
-  // 系统代理状态点 + 状态文本
-  renderSystemProxyStatus(freshStatus.sysProxy);
+  // ★ 方案 I1：sysProxy 已不在 getStatus 返回中，改为异步加载（5 秒轮询时刷新）
+  // 异步加载会立即显示"加载中..."，500-1000ms 后更新为真实状态
+  loadSystemProxyStatus();
+  // ★ 方案 J1：clientType 已不在 getStatus 返回中（clientType=null），改为异步加载
+  // 5 秒轮询时异步触发 loadClientType，客户端类型变化时才重新渲染 UI 降级
+  loadClientType();
   // clash 按钮 disabled 状态：Clash 不可用时禁用，避免点击后失败
   const clashBtn = document.querySelector('#mode-switch button[data-mode="clash"]');
   if (clashBtn) clashBtn.disabled = !freshStatus.clashRunning;
+}
+
+/**
+ * 禁用/启用模块内的所有交互元素（input/button/select）
+ * 用于非 CVR 客户端的 UI 降级：不支持文件操作的模块被禁用
+ * @param {string} moduleId - 模块 DOM ID
+ * @param {boolean} disabled - true=禁用，false=启用
+ * @param {string[]} excludeIds - 排除的元素 ID 列表（这些元素不受影响）
+ */
+function setModuleDisabled(moduleId, disabled, excludeIds = []) {
+  const module = document.getElementById(moduleId);
+  if (!module) return;
+  module.querySelectorAll('input, button, select').forEach(el => {
+    if (excludeIds.includes(el.id)) return;
+    el.disabled = disabled;
+  });
+  // 视觉提示：添加/移除禁用样式类 + 设置禁用原因（CSS ::after 通过 attr 显示）
+  if (disabled) {
+    module.classList.add('module-file-ops-disabled');
+    const reason = (typeof I18N !== 'undefined' && I18N.t)
+      ? I18N.t('module_disabled_file_ops')
+      : '当前客户端不支持文件操作';
+    module.setAttribute('data-disabled-reason', reason);
+  } else {
+    module.classList.remove('module-file-ops-disabled');
+    module.removeAttribute('data-disabled-reason');
+  }
+}
+
+/**
+ * 根据客户端类型更新 UI 显示
+ * - Clash Verge Rev：显示完整的 Script.js 规则管理 UI，启用所有依赖文件操作的模块
+ * - 其他客户端（FLClash / CFW / mihomo / unknown）：隐藏规则列表，显示"不支持"提示，
+ *   禁用快捷添加、批量添加等依赖文件操作的模块
+ *
+ * 当客户端类型变化时（如从 CVR 切到 FLClash），自动清空旧规则并重新加载，
+ * 避免显示上一个客户端的残留规则内容
+ *
+ * @param {string} clientType - detectClashClient 返回的客户端类型
+ * @param {boolean} fileOperationSupported - 是否支持文件级操作
+ */
+function updateClientTypeUI(clientType, fileOperationSupported) {
+  const unsupportedBox = document.getElementById('script-rule-unsupported');
+  const contentWrapper = document.getElementById('script-rule-content');
+  const clientNameEl = document.getElementById('unsupported-client-name');
+
+  // 检测客户端类型是否变化
+  const lastClientType = window._lastDisplayedClientType;
+  const clientChanged = lastClientType !== undefined && lastClientType !== clientType;
+  window._lastDisplayedClientType = clientType;
+
+  const fileOpSupported = fileOperationSupported === true;
+
+  // 诊断日志：帮助排查客户端类型检测和模块禁用状态问题
+  console.log(`ClashOmega: updateClientTypeUI(clientType=${clientType}, fileOpSupported=${fileOpSupported}, clientChanged=${clientChanged})`);
+
+  // 根据文件操作支持状态启用/禁用依赖文件操作的模块
+  // 非 CVR 客户端不支持文件级规则写入（addClashRule / batchAddClashRules 会返回 file_op_not_supported）
+  // - 快捷添加规则（quick-add）：整个模块禁用
+  // - 批量检测（batch-detect）：保留"检测页面域名"按钮，禁用批量添加相关元素
+  setModuleDisabled('module-quick-add', !fileOpSupported);
+  setModuleDisabled('module-batch-detect', !fileOpSupported, ['batch-detect-btn']);
+
+  if (fileOpSupported) {
+    // Clash Verge Rev：隐藏提示，显示完整规则 UI
+    if (unsupportedBox) unsupportedBox.style.display = 'none';
+    if (contentWrapper) contentWrapper.style.display = '';
+    // 客户端切换到 CVR 时，重新加载规则（可能之前显示的是 FLClash 的空列表）
+    if (clientChanged) {
+      console.log(`ClashOmega: client type changed to ${clientType}, reloading rules`);
+      loadScriptRules().catch(e => console.warn('reload rules failed:', e));
+    }
+    return;
+  }
+
+  // 非 CVR 客户端：显示"不支持"提示，隐藏规则列表
+  if (unsupportedBox) unsupportedBox.style.display = 'block';
+  if (contentWrapper) contentWrapper.style.display = 'none';
+
+  // 显示检测到的客户端名称
+  const clientNames = {
+    'flclash': 'FLClash',
+    'clash-for-windows': 'Clash for Windows',
+    'clash-nyanpasu': 'Clash Nyanpasu',
+    'clash-meta': 'mihomo / Clash.Meta',
+    'unknown': I18N.t ? I18N.t('client_unknown') : '未识别'
+  };
+  if (clientNameEl) {
+    const name = clientNames[clientType] || clientType;
+    clientNameEl.textContent = `${I18N.t ? I18N.t('client_current') : '当前客户端'}：${name}`;
+  }
+
+  // 客户端切换到非 CVR 时，清空旧的 Script.js 规则列表（避免残留 CVR 规则）
+  // 内置 Clash 规则（GET /rules）会由 loadScriptRules 中的 getClashRules 自动刷新
+  if (clientChanged) {
+    console.log(`ClashOmega: client type changed to ${clientType}, clearing script rules`);
+    window._scriptRulesWithSource = [];
+    renderScriptRules([], null);
+    // 重新加载内置 Clash 规则（走 API，非 CVR 也可用）
+    loadScriptRules().catch(e => console.warn('reload clash rules failed:', e));
+  }
 }
 
 /**
@@ -2646,19 +2839,22 @@ async function initPopup(layout, settingsPromise) {
       }
 
       const queryConnections = (retryCount = 0) => {
+        // ★ 性能优化：重试间隔 1500ms → 800ms，最多重试 2 次（总时长 1.6s，原 1.5s 1 次）
+        // 原因：首次查询未命中通常是 Clash 内核还在建立连接，800ms 间隔多次重试比 1500ms 单次重试命中率更高
+        // 风险评估：800ms 间隔可能仍查不到（连接建立需 1s+），但总时长不变，用户体验不恶化
         sendToBackground({ action: 'getDomainConnections' }).then(connResult => {
           if (connResult.success && connResult.connections) {
             const connMatched = findMatchingRulesFromConnections(domain, connResult.connections, clashRules);
             if (connMatched.length > 0) {
               renderDomainRuleCheck(domain, connMatched, proxies);
-            } else if (localImprecise && retryCount === 0) {
-              setTimeout(() => queryConnections(1), 1500);
-            } else if (retryCount > 0) {
+            } else if (localImprecise && retryCount < 2) {
+              setTimeout(() => queryConnections(retryCount + 1), 800);
+            } else {
               renderDomainRuleCheck(domain, matched, proxies);
             }
-          } else if (localImprecise && retryCount === 0) {
-            setTimeout(() => queryConnections(1), 1500);
-          } else if (retryCount > 0) {
+          } else if (localImprecise && retryCount < 2) {
+            setTimeout(() => queryConnections(retryCount + 1), 800);
+          } else {
             renderDomainRuleCheck(domain, matched, proxies);
           }
         });
@@ -2784,22 +2980,31 @@ function compareSemver(a, b) {
 // ──── 入口 ────
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // 初始化主题（在 i18n 之前，避免闪烁）
+  // ★ 性能优化：初始化阶段并行化
+  // 原串行流程：initTheme → I18N.init → getZoomScale → getTabLayout（4 次 await 串行）
+  // 优化后：initTheme 先执行（避免主题闪烁）→ I18N.init + getZoomScale + getTabLayout 并行
+  // 风险评估：initTheme 必须先执行（原注释"在 i18n 之前，避免闪烁"），其余 3 个无数据依赖可并行
+
+  // initTheme 先执行（主题切换闪烁风险，必须先应用主题再渲染 i18n 文本）
   await initTheme();
 
   // 监听系统主题变化（玻璃拟态变体切换）
   bindSystemThemeListener();
 
-  await I18N.init();
+  // I18N.init + getZoomScale + getTabLayout 并行（无数据依赖）
+  const [, zoomScale, layout] = await Promise.all([
+    I18N.init(),
+    getZoomScale(),
+    getTabLayout()
+  ]);
+
   refreshAllI18n();
 
   // 应用缩放比例
-  const zoomScale = await getZoomScale();
   applyZoom(zoomScale);
 
-  // 获取标签页布局并构建 UI
-  const layout = await getTabLayout();
   window._currentTabLayout = layout;
+  // 获取标签页布局并构建 UI
   buildTabLayout(layout);
 
   // 绑定标签页切换
@@ -2830,6 +3035,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const settingsPromise = chrome.storage.local.get('settings');  // 本地，快
   const statusPromise = sendToBackground({ action: 'getStatus' }); // 网络，慢
 
+  // ★ 方案 I1：popup 打开瞬间立即显示 Clash/系统代理 加载中状态（橙色），避免 HTML 初始红色状态点闪烁
+  // 等 statusPromise / loadSystemProxyStatus 返回后再渲染真实状态
+  renderClashStatus(null, null, null, layout);
+
   // settings 先到 → 立即渲染模式切换按钮（系统代理/直连/clash代理 高亮）
   settingsPromise.then(({ settings }) => {
     if (settings && settings.currentMode) {
@@ -2843,10 +3052,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // status 先到 → 立即渲染 Clash 连接状态 + 系统代理状态
+  // status 先到 → 立即渲染 Clash 连接状态 + 客户端类型驱动的 UI 降级
+  // ★ 方案 I1：sysProxy 已不在 getStatus 返回中，改为独立异步加载（与 statusPromise 并行触发）
+  // ★ 方案 J1：clientType=null 表示异步加载中，不触发 UI 降级，等 loadClientType 返回后再应用
   statusPromise.then(status => {
     renderClashStatus(status.clashRunning, status.config, status.proxyPort, layout);
-    renderSystemProxyStatus(status.sysProxy);
 
     const clashBtn = document.querySelector('#mode-switch button[data-mode="clash"]');
     if (clashBtn) {
@@ -2857,15 +3067,33 @@ document.addEventListener('DOMContentLoaded', async () => {
       window._clashStatusNotified = true;
       showToast(I18N.t('error_clash_not_running'), 'warn', { duration: 4000 });
     }
+
+    // ★ 方案 J1：clientType=null（未知）时不触发 UI 降级，等 loadClientType 异步返回后再应用
+    // 原实现：updateClientTypeUI(status.clientType, ...) 立即应用，但 clientType 来自 getStatus 串行 detectClashClient
+    // 优化后：getStatus 不再等 detectClashClient，clientType=null；loadClientType 异步调用独立 action
+    if (status.clientType !== null && status.clientType !== undefined) {
+      updateClientTypeUI(status.clientType, status.fileOperationSupported);
+    }
   });
 
-  // 以下是必须 await 的串行步骤（有数据依赖）：
-  // loadSettingsForm 需要完整 status 数据（Clash API URL、端口、配置路径等），await 即可
-  // 注意：上面的 .then() 已在 status 到达时立即渲染了状态指示器，这里 await 只为填充表单
-  const status = await statusPromise;
-  loadSettingsForm(status);
+  // ★ 方案 I1：异步加载系统代理状态，与 statusPromise 并行触发
+  // 主页加载时立即显示"加载中..."，500-1000ms 后异步更新为真实 Windows 系统代理状态
+  loadSystemProxyStatus();
 
-  // 初始化标签页布局编辑器
+  // ★ 方案 J1：异步加载客户端类型，与 statusPromise + loadSystemProxyStatus 并行触发
+  // Clash 状态点立即可见（不依赖 clientType），UI 降级（模块禁用）异步应用
+  loadClientType();
+
+  // ★ 性能优化（方案 D）：loadSettingsForm 改非阻塞，initPopup 不再 await statusPromise
+  // 原流程：await statusPromise → loadSettingsForm(status) → ... → await initPopup
+  // 优化后：statusPromise.then(loadSettingsForm) 非阻塞，initPopup 立即执行
+  // 收益：initPopup 不再等 getStatus 返回（getStatus 是最慢的步骤），主页域名检测提前启动
+  // 风险：用户在 initPopup 完成前快速切换设置页，可能看到空表单（极端情况，loadSettingsForm 会异步填充）
+  statusPromise.then(status => {
+    loadSettingsForm(status);
+  });
+
+  // 初始化标签页布局编辑器（同步，不依赖 status）
   renderTabLayoutEditor(layout);
   bindTabLayoutEditorEvents(layout);
 
@@ -2880,8 +3108,29 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // initPopup 复用已发起的 settingsPromise（避免重复 chrome.storage.local.get）
   // layout 也通过参数传入，避免 initPopup 内部重复 getTabLayout()
+  // ★ 不再 await statusPromise，initPopup 可提前执行（方案 D 核心改动）
   await initPopup(layout, settingsPromise);
 
   // 版本更新检测（非阻塞，不影响主流程；网络失败时静默降级为仅显示当前版本号）
   checkVersionUpdate();
+
+  // ── 定期刷新状态（5秒轮询）──
+  // 场景：popup 长时间打开时，Clash 客户端那边切换了端口/配置/客户端类型，
+  //       或 Clash 崩溃/重启，popup 不感知仍显示旧状态。
+  //       定期轮询 getStatus 可覆盖这些场景，客户端类型变化时自动重载规则。
+  // 性能：一次 getStatus = 1 次 Clash API GET /configs + 1 次 Native Host ping，
+  //       5 秒间隔对 localhost 零负载，popup 关闭后 interval 自动清除（页面卸载）
+  window._statusRefreshTimer = setInterval(async () => {
+    try {
+      const freshStatus = await sendToBackground({ action: 'getStatus' });
+      if (freshStatus) {
+        refreshPopupStatus(freshStatus);
+        // 同步刷新设置页 Clash API 状态指示器（用户可能停留在设置页）
+        renderClashApiStatus(freshStatus);
+      }
+    } catch (e) {
+      // 静默失败，不打断用户操作
+      console.warn('ClashOmega: status refresh failed:', e.message);
+    }
+  }, 5000);
 });

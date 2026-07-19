@@ -749,9 +749,12 @@ input, button, select, textarea {
 .settings-checkbox-row input[type="checkbox"] {
   width: 16px;
   height: 16px;
+  margin: 0;
   cursor: pointer;
   accent-color: var(--md-sys-color-primary);
   flex-shrink: 0;
+  /* 消除浏览器默认 margin 导致的垂直偏移，强制垂直居中 */
+  vertical-align: middle;
 }
 .settings-checkbox-row span {
   font: var(--md-typescale-body-medium);
@@ -1222,11 +1225,14 @@ input, button, select, textarea {
   padding: var(--md-spacing-1) 0;
 }
 .settings-checkbox-row input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
+  margin: 0;
   accent-color: var(--md-sys-color-primary);
   cursor: pointer;
   flex-shrink: 0;
+  /* 消除浏览器默认 margin 导致的垂直偏移，强制垂直居中 */
+  vertical-align: middle;
 }
 .settings-about {
   text-align: center;
@@ -1672,6 +1678,26 @@ input, button, select, textarea {
 /* 玻璃拟态主题下的按钮圆角统一 */
 [data-theme="glass"] .md3-button {
   border-radius: var(--md-shape-corner-full);
+}
+
+/* ──── 非 CVR 客户端模块禁用样式 ──── */
+/* 当检测到非 Clash Verge Rev 客户端时，依赖文件操作的模块被禁用 */
+/* 整个模块降低透明度 + 添加禁用提示边框，让用户直观感知功能不可用 */
+.module-file-ops-disabled {
+  opacity: 0.55;
+  position: relative;
+}
+.module-file-ops-disabled::after {
+  content: attr(data-disabled-reason);
+  position: absolute;
+  top: var(--md-spacing-1);
+  right: var(--md-spacing-2);
+  font: var(--md-typescale-label-small);
+  color: var(--md-sys-color-on-surface-variant);
+  background: var(--md-sys-color-surface-container-high);
+  padding: 2px var(--md-spacing-1);
+  border-radius: 4px;
+  pointer-events: none;
 }
 
 /* ──── 缩放滑块样式 ──── */

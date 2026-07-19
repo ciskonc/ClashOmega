@@ -9,7 +9,7 @@
   <div id="top-action-bar">
     <div id="status-info">
       <div class="status-row">
-        <span class="status-dot status-dot--off" id="clash-status-dot"></span>
+        <span class="status-dot status-dot--warn" id="clash-status-dot"></span>
         <span data-i18n="clash_status" style="font: var(--md-typescale-body-small);">Clash</span>
         <span id="clash-status-text" style="font: var(--md-typescale-body-small); margin-left: 4px; color: var(--md-sys-color-on-surface-variant); cursor: pointer;" title=""></span>
       </div>
@@ -114,6 +114,12 @@
         <span class="help-tip" data-i18n-title="script_rules_help_tip" title="">?</span>
         <button class="md3-button md3-button--text script-toggle-btn" id="script-toggle-btn" style="margin-left: auto; padding: 0 var(--md-spacing-1); font: var(--md-typescale-label-small); display: none;" data-i18n="script_rules_collapse">折叠</button>
       </h3>
+      <!-- 客户端不支持提示：非 Clash Verge Rev 客户端显示此提示，隐藏规则列表和搜索框 -->
+      <div id="script-rule-unsupported" style="display: none; color: var(--md-sys-color-on-surface-variant); font: var(--md-typescale-body-small); padding: var(--md-spacing-1) 0; background: var(--md-sys-color-surface-container-high); border-radius: 8px; padding: var(--md-spacing-2); margin-bottom: var(--md-spacing-2);">
+        <div id="unsupported-client-name" style="font-weight: 500; margin-bottom: var(--md-spacing-1);"></div>
+        <div data-i18n="script_rules_unsupported_hint">仅 Clash Verge Rev 支持扩展脚本规则管理。请通过 Clash 客户端自身的界面管理规则，或切换到 Clash Verge Rev。</div>
+      </div>
+      <div id="script-rule-content" class="script-rule-content-wrapper">
       <div class="rule-search-box">
         <input class="md3-text-field rule-search-input" id="script-rule-search" type="text" data-i18n-placeholder="search_rules_placeholder" placeholder="搜索规则（域名、类型、代理组）...">
       </div>
@@ -129,6 +135,7 @@
         <button class="md3-button md3-button--outlined" id="script-init-btn" data-i18n="script_rules_init_btn" style="margin-left: var(--md-spacing-2);">初始化</button>
       </div>
       <div id="script-rule-not-found" style="display: none; color: var(--md-sys-color-error); font: var(--md-typescale-body-small); padding: var(--md-spacing-1) 0;" data-i18n="script_rules_not_found">未找到扩展脚本文件</div>
+      </div><!-- /script-rule-content -->
     </div>
 
     <!-- ════ 模块：内置规则列表 ════ -->

@@ -106,6 +106,10 @@ async function checkNativeHost() {
  * 优先使用 Native Host 读取 Windows 注册表（系统级代理）
  * 若 Native Host 不可用，回退到 chrome.proxy.settings.get() 读取浏览器级代理（兼容部分 Chromium 内核浏览器）
  *
+ * ★ v1.4.2 性能优化（方案 I1）：本函数不再在 getStatus 内同步调用，
+ * 改由 popup 异步调用独立 action 'getSystemProxyStatus'，避免阻塞主页加载。
+ * popup 加载期间"系统代理"栏显示"加载中..."，本函数返回后异步渲染。
+ *
  * 返回字段说明：
  * - nativeHostAvailable: boolean - Native Host 是否可用（false 时表示未安装/未注册）
  * - 当 nativeHostAvailable=true 时：返回 Native Host 读取的系统级代理

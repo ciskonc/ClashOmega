@@ -20,6 +20,7 @@
   "clash_connected": "接続済み",
   "clash_running": "実行中",
   "clash_not_running": "未実行",
+  "clash_status_loading": "読み込み中...",
   "clash_proxy_port": "ポート",
 
   "system_proxy_status": "システムプロキシ",
@@ -29,6 +30,7 @@
   "system_proxy_unknown": "取得不可",
   "system_proxy_follow_system": "システムに従う",
   "system_proxy_null": "Native Host 未インストール",
+  "system_proxy_loading": "読み込み中...",
 
   "domain_check_title": "プロキシグループの確認",
   "domain_check_current_site": "現在のサイト",
@@ -69,6 +71,10 @@
   "script_rules_init_success": "拡張スクリプトファイルを初期化しました",
   "script_rules_init_failed": "初期化に失敗しました",
   "script_rules_not_found": "拡張スクリプトファイルが見つかりません（現在のプロファイルに option.script がありません）",
+  "script_rules_unsupported_hint": "Clash Verge Rev のみ拡張スクリプトルール管理をサポートしています。Clash クライアント自身のインターフェースでルールを管理するか、Clash Verge Rev に切り替えてください。",
+  "client_current": "現在のクライアント",
+  "client_unknown": "未識別",
+  "module_disabled_file_ops": "ファイル操作はサポートされていません",
   "rule_restart_hint": "ルールが変更されました。Clash を再起動して適用してください",
   "rule_source_js": "サブスクリプション拡張スクリプトから（profiles ディレクトリ内の .js）",
   "rule_source_yaml": "YAML 設定ファイルから",
