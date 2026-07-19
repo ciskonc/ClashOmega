@@ -115,7 +115,11 @@ async function triggerRestartClash() {
 function showNativeError(result, fallbackKey) {
   if (result && result.error) {
     const err = result.error;
-    if (err.includes('not found') || err.includes('native messaging host')) {
+    // ★ 方案 2A（v1.4.2）：收紧匹配条件，只匹配 Native Messaging 专有错误
+    // 原实现 err.includes('not found') 过宽，把 Native Host 返回的 'Config file not found'
+    // 误判为 Native Host 未安装，导致设置页显示"已安装"但删除规则提示"未安装"的矛盾
+    // Native Host 真未安装时 Chrome 抛出的 chrome.runtime.lastError 文案包含 "native messaging host"
+    if (err.includes('native messaging host') || err.includes('native host not installed')) {
       showToast(I18N.t('error_native_not_installed'), 'error');
       console.error('Native Host error:', err, '| Extension ID:', chrome.runtime.id);
       return;
