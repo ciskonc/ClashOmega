@@ -71,6 +71,10 @@
   "script_rules_init_success": "拡張スクリプトファイルを初期化しました",
   "script_rules_init_failed": "初期化に失敗しました",
   "script_rules_not_found": "拡張スクリプトファイルが見つかりません（現在のプロファイルに option.script がありません）",
+  "script_rules_unsupported_action": "現在のクライアントはファイル操作をサポートしていません（非 Clash Verge Rev 互換性フォールバック）",
+  "script_rules_need_reinstall": "Native Host のバージョンが古すぎます。install.ps1 を再実行し、Chrome を完全に再起動してください",
+  "script_rules_native_host_missing": "Native Host がインストールされていません。先に Native Host をインストールしてください",
+  "script_rules_view_install_guide": "インストールガイドを表示",
   "script_rules_unsupported_hint": "Clash Verge Rev のみ拡張スクリプトルール管理をサポートしています。Clash クライアント自身のインターフェースでルールを管理するか、Clash Verge Rev に切り替えてください。",
   "client_current": "現在のクライアント",
   "client_unknown": "未識別",
@@ -191,6 +195,7 @@
   "error_native_host": "Native Host 通信エラー",
   "error_native_not_installed": "Native Hostがインストールされていません。native-host\\install.ps1 を実行してください",
   "success_rule_added": "ルールを追加しました",
+  "error_rule_add_failed": "ルール追加に失敗しました",
   "success_rules_added": "件のルールを追加しました",
   "success_rule_deleted": "ルールを削除しました",
 

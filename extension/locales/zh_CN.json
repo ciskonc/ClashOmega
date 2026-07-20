@@ -71,6 +71,10 @@
   "script_rules_init_success": "扩展脚本文件已初始化",
   "script_rules_init_failed": "初始化失败",
   "script_rules_not_found": "未找到扩展脚本文件（当前订阅未配置 option.script）",
+  "script_rules_unsupported_action": "当前客户端不支持文件操作（非 Clash Verge Rev 兼容性兜底）",
+  "script_rules_need_reinstall": "Native Host 版本过旧，请重新运行 install.ps1 并完全重启 Chrome",
+  "script_rules_native_host_missing": "Native Host 未安装，请先安装 Native Host",
+  "script_rules_view_install_guide": "查看安装指引",
   "script_rules_unsupported_hint": "仅 Clash Verge Rev 支持扩展脚本规则管理。请通过 Clash 客户端自身的界面管理规则，或切换到 Clash Verge Rev。",
   "client_current": "当前客户端",
   "client_unknown": "未识别",
@@ -187,6 +191,7 @@
   "error_native_host": "Native Host 通信失败",
   "error_native_not_installed": "Native Host 未安装，请运行 native-host\\install.ps1",
   "success_rule_added": "规则已添加",
+  "error_rule_add_failed": "添加规则失败",
   "success_rules_added": "条规则已添加",
   "success_rule_deleted": "规则已删除",
 

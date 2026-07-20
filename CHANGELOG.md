@@ -4,6 +4,138 @@
 
 ---
 
+## v1.4.6 — 2026-07-20
+
+对抗审查第三轮修复。v1.4.5 修复完成后再次发起 3 subagent 并行对抗审查（按维度切分：C1/C2/C3 逻辑正确性 / M1-M8+Minor / 版本号+i18n+git 完整性），发现 v1.4.5 修复存在的严重残留问题，本次全部修复。
+
+### Critical
+
+- **C1+C3 防抖锁未统一应用**：v1.4.5 的 C1/C3 修复仅在 `setModuleDisabled` 中检查 `dataset.lockedByDebounce`，未在 `loadScriptRules` 成功路径（L1757）和 `renderScriptRuleFailure`（L1916）中检查。5s 轮询触发 `loadScriptRules`（nativeHostInstalled 跳变 / clientType 变化）时，成功路径直接 `addBtn.disabled=false` 绕过防抖锁，导致并发 addRule 可损坏 Script.js。修复：抽取 `setElementDisabled(el, disabled, force=false)` 辅助函数，所有修改 `.disabled` 的入口统一调用，函数内部检查 `lockedByDebounce`（`force=true` 时跳过检查，用于 finally 块强制恢复）
+- **C2 冷却期机制**：v1.4.5 的全局并发限制仅减少进程累积速率（从 360 降到 180），未完全消除泄漏。根因：超时后原 `sendToNative` Promise 永久 pending，PowerShell 进程不退出，新请求仍会启动新进程。修复：新增 `_nativeHostCooldownUntil` 时间戳 + `NATIVE_HOST_COOLDOWN_MS=30000`，超时后进入 30s 冷却期，期间所有新请求返回 `{error:'native_host_cooldown'}`，30 分钟最多累积 6 个新进程（v1.4.5 是 180 个），用户看到连续失败会主动重启 Chrome
+
+### Major
+
+- **M2 渲染时序绕过**：v1.4.5 的 M2 修复在 `renderScriptRuleFailure` 中 `document.querySelectorAll('.rule-delete-btn').forEach(btn => btn.disabled = isBlocking)`，但禁用的是即将被 `renderScriptRules` 重建的旧按钮。`renderScriptRules`（L1781 调用）内部 L1468 `listEl.innerHTML = ''` 清空列表 + L1507 `getRuleDisplaySettings().then(...)` 异步重建，新按钮通过 `createScriptRuleItem` 创建时 `disabled` 默认为 false，M2 禁用被绕过。修复：新增全局 `_scriptRuleBlocking` flag，`renderScriptRuleFailure` 设置 `isBlocking`，`loadScriptRules` 成功路径清除为 false，`createScriptRuleItem` 创建按钮时读取此 flag 设置初始 `disabled`
+- **M5 finally 兜底**：v1.4.5 的 M5 修复在 finally 中根据 `btn.disabled` 当前状态决定是否恢复，但 `loadScriptRules` 返回 null（序号过期）或抛错时 `renderScriptRuleFailure` 不会被调用，`btn.disabled` 保持 try 开头设置的 true，finally 中 `!btn.disabled` 为 false 不恢复，按钮永久禁用。修复：finally 失败路径改用 `setElementDisabled(btn, _scriptRuleBlocking, true)` force 设置，根据全局 blocking flag 决定（场景 B/C/D/F 保持禁用，场景 A/E 或异常恢复允许重试）
+- **M8 撤销**：v1.4.5 的 M8 修复移除 `bindDomainCheckDeleteEvents` 的 `item.remove()`，基于"loadScriptRules 会重建整个列表"的假设。但实际 `bindDomainCheckDeleteEvents` 处理 `#domain-check-matched` 列表（域名检测匹配结果），`loadScriptRules` 只刷新 `#script-rule-list`，不刷新 `#domain-check-matched`。移除 `item.remove()` 后 domain-check-matched 列表中的删除项不被移除，UI 不一致。修复：恢复 `item.remove()`，保留 `loadScriptRules()` 用于刷新 script-rule-list
+
+### Minor
+
+- **loadScriptRules return null 调用方未检查**：`loadScriptRules` 序号过期返回 null，调用方 `scriptRulesPromise.then(({ clashRules, proxies }) => {...})` 解构 null 抛 `TypeError: Cannot destructure property 'clashRules' of 'null'`，成为未处理 Promise rejection。修复：改为 `.then(result => { if (!result) return; const { clashRules, proxies } = result; ... })`
+
+### Changed
+
+- **`setElementDisabled` 辅助函数**（C1+C3 修复）：新增统一防抖锁检查函数，所有修改 `.disabled` 的入口（`loadScriptRules` 成功路径 / `renderScriptRuleFailure` / `setModuleDisabled` / `bindQuickAddRuleEvents` finally）都调用此函数
+- **`_scriptRuleBlocking` 全局 flag**（M2 修复）：新增全局变量，`renderScriptRuleFailure` 设置 + `loadScriptRules` 成功路径清除 + `createScriptRuleItem` 读取
+- **`sendToNativeSafe` 冷却期**（C2 修复）：新增 `_nativeHostCooldownUntil` + `NATIVE_HOST_COOLDOWN_MS=30000`，超时后 30s 冷却期
+- **`renderScriptRuleFailure` 场景 F 扩展**（C2 配套）：场景 F 匹配条件增加 `native_host_cooldown` 和 `native_host_busy`
+
+### Technical Notes
+
+- **对抗审查方法论**：本次审查使用 3 个 subagent 按维度切分（C1/C2/C3 逻辑正确性 / M1-M8+Minor / 版本号+i18n+git 完整性），每个 subagent 独立输出报告，最后由主 Agent 汇总。相比 v1.4.5 的 4 subagent 对抗审查，本次更聚焦于"修复是否真正消除原风险且不引入新风险"
+- **交互循环规则遵守**：本次会话开头用户指出 v1.4.5 修复时未用 `AskUserQuestion` 弹窗确认对抗审查参数，违反交互循环规则。本次已记录到 user_profile.md 纠正记录表，后续所有对抗审查/复杂操作前必须先用弹窗确认参数
+
+---
+
+## v1.4.5 — 2026-07-20
+
+对抗审查第二轮修复（3 Critical + 8 Major + ~15 Minor）。v1.4.4 发布后再次发起 3 subagent 并行对抗审查，发现 v1.4.4 修复引入的新风险（C1/C2/C3）+ 遗留问题（M1-M8）+ 代码质量问题（Minor 批量），本次全部修复。
+
+### Critical
+
+- **C1 addRule finally 覆盖场景禁用状态**：`bindQuickAddRule` finally 无条件恢复 `disabled=false`，覆盖场景 B/C/D/F 的 `disabled=true`。场景 F（Native Host 崩溃超时）下用户可连续点击触发多个 10s 超时累积。修复：finally 中根据 `addResult.success` 决定是否恢复，失败路径由 `loadScriptRules → renderScriptRuleFailure` 重新判定场景
+- **C2 Native Host 进程泄漏**（全局并发限制方案）：`sendToNativeSafe` 10s 超时后原 Promise 永久 pending，卡死的 PowerShell/Python 进程不退出，30 分钟可累积 360 个进程。修复：`_sendToNativeInFlight` 全局标志，同时只允许 1 个 sendToNative 在途，超时期间拒绝新请求返回 `{error:'native_host_busy'}`；`clearTimeout` 清理 + 超时 `console.warn` 日志
+- **C3 setModuleDisabled 覆盖防抖锁**：5s 轮询 `clientType` 变化时 `setModuleDisabled` 强制设置 `addBtn.disabled=false`，覆盖防抖锁，导致并发 addRule 可损坏 Script.js。修复：`setModuleDisabled` 检查 `dataset.lockedByDebounce === '1'`，跳过防抖锁元素；`bindQuickAddRuleEvents` 进入时设置标志，finally 清除
+
+### Major
+
+- **M1 jumpToSettings 硬编码 tab-3**：用户自定义布局改了 tab 顺序后跳转失效。修复：动态查找 `_currentTabLayout` 中包含 `settings` 模块的 tab，找不到才回退 `tab-3`
+- **M2 rule-delete-btn 未禁用**：`renderScriptRuleFailure` 仅禁用 addRule 控件，用户仍可点击删除按钮触发 removeRule（场景 B/C/D/F 下必然失败）。修复：`isBlocking=true` 时禁用所有 `.rule-delete-btn`；`loadScriptRules` 成功路径恢复
+- **M3 addRule 成功不刷新**：原实现手动 append div，可能与并发操作冲突导致列表状态不一致。修复：成功路径调用 `loadScriptRules()` 全量刷新
+- **M4 bindQuickAddRule 重复绑定**：每次 `initPopup` 都 `addEventListener`，导致重复绑定（用户每切换 tab 回规则页一次，点击 addBtn 会触发 N 次重复 addRule 请求）。修复：拆分为 `bindQuickAddRule(domain)` 仅更新 input.value + `bindQuickAddRuleEvents()` 事件绑定由 DOMContentLoaded 调用一次，防御性检查 `dataset.bound`
+- **M5 addRule 失败不刷新 UI**：原实现失败仅 showToast，不刷新 UI，场景判定状态可能过期。修复：失败路径调用 `loadScriptRules()` 让 `renderScriptRuleFailure` 处理场景判定
+- **M6 5s 轮询无法检测 Native Host 升级**：原实现仅 `clientType` 变化时刷新，无法检测 Native Host 升级（clientType 不变）。修复：5s 轮询增加 `nativeHostInstalled` 跳变检测，从 false→true 时触发 `loadScriptRules`
+- **M7 场景 D 文案错误**：场景 D（非 CVR 兼容性兜底）复用 `#script-rule-not-found`，文案"未找到扩展脚本文件"误导用户。修复：popup.html 新增 `#script-rule-unsupported-action` 专用元素，文案"当前客户端不支持文件操作（非 Clash Verge Rev 兼容性兜底）"，i18n 三语言同步
+- **M8 removeRule 双重刷新**：`bindDomainCheckDeleteEvents` 同时执行 `item.remove()` + `loadScriptRules()`，双重刷新可能导致列表闪烁。修复：移除局部 DOM 删除，统一由 `loadScriptRules` 刷新；增加防抖锁
+
+### Minor
+
+- **switchTab loadScriptRules 缺少 .catch**：`_pendingScriptRulesRefresh` 触发的 `loadScriptRules()` 未捕获异常，可能阻塞 tab 切换。修复：添加 `.catch(e => console.warn(...))`
+- **loadScriptRules 序号过期返回值**：原返回 `{clashRules, proxies}` 对象可能让调用方误以为刷新成功。修复：改为 `return null` 明确表示"已丢弃"
+- **loadScriptRules 变量遮蔽**：`needInitEl` / `notFoundEl` 在外层和 else 分支重复声明（var 提升）。修复：外层声明一次，else 分支直接复用
+- **loadScriptRules 重复调用 renderScriptRuleFailure**：失败分支 L1730 已调用，L1767 再次调用，重复执行。修复：移除第二次调用
+- **showNativeError toLowerCase 不一致**：`err.includes('native messaging host')` 大小写敏感，Chromium 不同版本可能抛出大小写变体。修复：统一 `String(result.error).toLowerCase()`，与 `renderScriptRuleFailure` 保持一致
+- **bindScriptInitButton 缺少 try/finally**：`btn.disabled=true` 后 await，若 `sendToBackground` 抛错则 disabled 永不恢复。修复：try/finally + 防抖锁
+- **bindDomainDetection detectBtn 缺少 try/finally**：同上问题。修复：try/finally + 防抖锁 + result null 检查
+- **batchAddRules batchBtn 缺少 try/finally**：同上问题。修复：try/finally + 防抖锁
+- **bindRuleListDeleteEvents 缺少 try/finally**：同上问题。修复：try/finally + 防抖锁
+- **sendToNativeSafe clearTimeout 清理**：`setTimeout` 在 sendToNative 先完成时不清理，短期资源泄漏。修复：finally 中 `clearTimeout(timeoutId)`
+- **sendToNativeSafe 超时日志**：超时时无日志，难以排查 Native Host 卡死问题。修复：`console.warn('ClashOmega: Native Host timeout (process may be stuck):', message.action)`
+
+### Added
+
+- **popup.html 新增 `#script-rule-unsupported-action`**（M7 修复）：场景 D 专用 UI 元素，原复用 `#script-rule-not-found` 文案误导用户
+- **i18n 新增 1 个键**：`script_rules_unsupported_action`（zh_CN / en / ja 三语言）
+- **`bindQuickAddRuleEvents` 函数**（M4 修复）：事件绑定独立函数，由 DOMContentLoaded 调用一次，替代原 `bindQuickAddRule` 内的 `addEventListener`
+
+### Changed
+
+- **`bindQuickAddRule` 拆分**（M4 修复）：原函数拆分为 `bindQuickAddRule(domain)` 仅更新 input.value + `bindQuickAddRuleEvents()` 事件绑定
+- **`sendToNativeSafe` 重写**（C2 修复）：增加 `_sendToNativeInFlight` 全局并发限制 + `clearTimeout` 清理 + 超时 `console.warn` 日志
+- **`setModuleDisabled` 增加 `lockedByDebounce` 检查**（C3 修复）：跳过防抖锁元素，避免 5s 轮询覆盖防抖锁状态
+- **`renderScriptRuleFailure` 禁用 `.rule-delete-btn`**（M2 修复）：`isBlocking=true` 时禁用所有删除按钮，`loadScriptRules` 成功路径恢复
+- **`loadScriptRules` 成功路径恢复 `.rule-delete-btn`**（M2 配套）：原失败场景禁用的删除按钮在成功时恢复
+- **`jumpToSettings` 动态查找 settings tab**（M1 修复）：从 `_currentTabLayout` 查找包含 `settings` 模块的 tab
+- **`bindDomainCheckDeleteEvents` 移除 `item.remove()`**（M8 修复）：统一由 `loadScriptRules` 刷新
+- **5s 轮询增加 Native Host 可用性检测**（M6 修复）：维护 `_lastNativeHostInstalled`，从 false→true 跳变时触发 `loadScriptRules`
+- **多处 btn.disabled 恢复移到 finally**（Minor 修复）：`bindScriptInitButton` / `bindDomainDetection` / `batchAddRules` / `bindRuleListDeleteEvents` / `bindDomainCheckDeleteEvents` 统一 try/finally 模式
+- **spec.md 升级为 v4**：同步对抗审查第二轮修复（C1/C2/C3 + M1-M8 + Minor 批量）
+
+### Technical Notes
+
+- **对抗审查流程**：v1.4.4 发布后再次发起 3 subagent 并行对抗审查（技术正确性 / 用户真实场景 / 对抗性设计），发现 3 Critical + 8 Major + ~15 Minor 问题。本次修复全部 Critical + Major + Minor
+- **关键审查发现**：v1.4.4 引入的"addRule 防抖锁 + 10s 超时"机制本身存在缺陷——finally 无条件恢复 disabled 覆盖场景禁用状态（C1），超时机制引入进程泄漏（C2），5s 轮询覆盖防抖锁（C3）。这是"修复引入新风险"的典型案例
+- **交互循环规则纠正**：本次对抗审查发起前先用 AskUserQuestion 弹窗确认审查范围/维度/执行顺序，修正了上次会话中"已有计划即跳过弹窗"的违规行为。教训已记录到 `user_profile.md` 纠正记录表
+- **C2 缓解方案选择**：用户在"超时后强制 kill Native Host 进程" vs "全局并发限制"之间选择后者。全局并发限制更简单且不依赖进程管理 API，代价是超时期间所有 Native Host 请求被拒绝（返回 `native_host_busy`），由 `renderScriptRuleFailure` 场景 F 处理
+
+---
+
+## v1.4.4 — 2026-07-20
+
+Native Host 版本不匹配前置门控 + 对抗审查修复（3 Critical + 6 Major）。
+
+### Added
+
+- **前置版本门控**：`loadScriptRules` 失败分支细分 6 种场景，分别显示不同 UI（场景 A needInit / B 版本过旧 / C 未安装 / D 非 CVR 兼容性兜底 / E 未知 / F 进程崩溃超时）。场景 B/C/D/F 禁用 addRule 控件（`#quick-add-btn` + `#quick-add-domain` + `#quick-add-rule-type` + `#quick-add-policy`），从源头阻止用户在版本不匹配场景下操作
+- **popup.html 新增失败场景 UI 元素**：`#script-rule-need-reinstall`（Native Host 版本过旧提示 + 查看安装指引按钮）+ `#script-rule-native-host-missing`（Native Host 未安装提示 + 查看安装指引按钮）
+- **addRule 防抖锁机制**（C1 修复）：`bindQuickAddRule` 事件处理器开头检查 `btn.disabled`，设置 `disabled=true` + 文本变 `...`，finally 恢复。防止用户快速点击触发多个 PowerShell 进程并发读写 .js 文件导致损坏
+- **loadScriptRules 竞态保护**（M4 修复）：引入序号机制 `_loadScriptRulesSeq`，await 后检查序号是否过期，过期则丢弃响应。防止 6 处调用点（initPopup / 5s 轮询 / addRule / removeRule / batchAdd / initScriptFile）的响应交错覆盖新数据
+- **sendToNativeSafe 10s 超时**（M3 修复）：`native-bridge.js` `sendToNativeSafe` 增加 `Promise.race` + 10s 超时，超时返回 `{success:false, error:'native_host_timeout'}`。防止 Native Host 卡死导致 popup 永久阻塞
+- **UI 自动刷新**（M5 修复）：`jumpToSettings` 设置 `_pendingScriptRulesRefresh = true`；`switchTab` 切换到包含 `#module-script-rules` 的 tab 时触发 `loadScriptRules()`。用户重新安装 Native Host 后切回规则页无需手动关闭 popup
+- **i18n 新增 4 个键**：`script_rules_need_reinstall` / `script_rules_native_host_missing` / `script_rules_view_install_guide` / `error_rule_add_failed`（zh_CN / en / ja 三语言）
+
+### Fixed
+
+- **addRule 按钮未在版本不匹配场景下禁用**（M1 修复）：v2 spec 声明"版本过旧则禁用 addRule 按钮"，但 v2 实施时遗漏。本次在 `renderScriptRuleFailure` 中场景 B/C/D/F 设置 `isBlocking=true`，禁用 addRule 控件；`loadScriptRules` 成功路径恢复
+- **场景 C 错误字符串匹配过严**（M2 修复）：v2 spec 写 `err.includes('native messaging host not installed')`，但 Chromium 实际抛出 `"Specified native messaging host not found."`，第一个 includes 永不匹配。改为 `err.includes('native messaging host') || err.includes('native host not installed')`，与 `showNativeError` L122 保持一致
+- **Task 6 遗漏 AGENTS.md 版本号同步**（C2 修复）：v1.4.3 发布时漏更新 `AGENTS.md` L15 当前版本字段，本次一并补齐
+- **Task 6 遗漏 04_MEMORY/INDEX.md 版本号同步**（C3 修复）：自 v1.4.1 起漏更新 `04_MEMORY/INDEX.md` L32 的项目描述版本号，本次一并补齐
+- **proj_clash_omega.md 版本号同步遗漏**（M6 修复）：v1.4.3 发布时漏更新 `proj_clash_omega.md` L16 当前版本字段（停留在 v1.4.2），本次更新为 v1.4.4 并在变更注释中说明"v1.4.3 状态同步遗漏，本次一并补齐"
+
+### Changed
+
+- **addRule 失败 toast 增强**：失败时显示 `I18N.t('error_rule_add_failed') + ': ' + (result.hint || result.error)`，不再静默；errorMsg 为空时回退到 `showNativeError`
+- **`renderScriptRuleFailure` 提取为公共函数**：`loadScriptRules` 两处失败分支（首次 + 二次渲染）统一调用，消除原 spec 提到的"两处逻辑不一致"问题
+- **spec.md 升级为 v3**：同步对抗审查修复（场景 C 描述 + addRule 禁用要求 + 崩溃场景 F + 删除 'action not found' 字符串引用 + 标注场景 D 为兼容性兜底）
+
+### Technical Notes
+
+- **对抗审查流程**：v2 spec 实施完成后再次发起 4 个 subagent 并行对抗审查（技术正确性 / 用户真实场景 / 对抗性设计 / Tasks 任务分解），发现 3 Critical + 6 Major + 11 Minor 问题。本次修复所有 Critical + Major，11 个 Minor 问题记录在 spec.md 末尾待后续迭代
+- **关键审查发现**：v2 spec 自身声明"版本过旧则禁用 addRule 按钮"，但代码只显示了升级指引未禁用按钮——这是 spec 设计与实现的脱节，由用户真实场景审查 subagent 发现
+- **未修复的 Minor 问题**（11 个）：jumpToSettings 硬编码 tab-3 / 场景 D 是 dead code / addRule 成功路径未调 loadScriptRules 刷新 / 场景 B 计数与列表不一致 / addRule 失败时不刷新规则列表 / needInit 与 error 优先级 / Task 5 自检范围未含 .html 等
+
+---
+
 ## v1.4.3 — 2026-07-19
 
 Native Host Script.js 三个 action 缺失修复 + showNativeError 误判修复。

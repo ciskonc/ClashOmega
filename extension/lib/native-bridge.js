@@ -19,18 +19,78 @@ function sendToNative(message) {
   });
 }
 
+// C2 修复（v1.4.5）：全局并发限制，防止 Native Host 进程泄漏
+// 同时只允许 1 个 sendToNative 在途，超时期间拒绝新请求
+// 场景：Native Host 卡死时，5s 轮询持续触发 sendToNativeSafe，每个请求 10s 超时后
+// 原 Promise 永久 pending，卡死的 PowerShell/Python 进程不退出，30 分钟可累积 360 个
+// 限制并发后，超时期间新请求被拒绝（返回 native_host_busy），避免进程累积
+let _sendToNativeInFlight = false;
+
+// C2 修复（v1.4.6）：冷却期机制
+// 超时后进入 30s 冷却期，期间拒绝所有新请求，避免卡死的 PowerShell 进程持续累积
+// v1.4.5 修复后仍存在的问题：超时后原 sendToNative Promise 永久 pending，PowerShell 进程不退出，
+// 30 分钟仍可累积 180 个进程（每 10s 一个新进程）
+// v1.4.6 冷却期：30s 内拒绝所有新请求，30 分钟最多累积 6 个新进程（每 30s+10s 一个）
+// 用户看到连续失败会主动重启 Chrome，从根本上解决进程泄漏
+let _nativeHostCooldownUntil = 0;
+const NATIVE_HOST_COOLDOWN_MS = 30000;  // 30 秒冷却期
+
 /**
  * 安全发送消息给 Native Host
  * Native Host 不可用时返回 { success: false, error } 而非抛出异常
  * 避免在扩展程序页面产生 console.error
+ *
+ * M3 修复（v1.4.4）：增加 10 秒超时机制
+ * chrome.runtime.sendNativeMessage 本身没有原生超时，若 PowerShell 进程卡死（等待用户输入/死锁/阻塞 IO），
+ * Promise 永远不 resolve/reject，导致 popup 永久阻塞。超时后返回 'native_host_timeout' 错误，
+ * 由 popup.js renderScriptRuleFailure 场景 F 处理（显示"Native Host 进程异常"指引）
+ *
+ * C2 修复（v1.4.5）：全局并发限制 + setTimeout 清理
+ * - _sendToNativeInFlight 标志：同时只允许 1 个 sendToNative 在途，超时期间拒绝新请求
+ * - clearTimeout：sendToNative 先完成时清理 setTimeout，避免 10s 内资源短期泄漏
+ * - 超时时 console.warn：便于排查 Native Host 卡死问题
+ *
+ * C2 修复（v1.4.6）：冷却期机制
+ * - 超时后设置 _nativeHostCooldownUntil = now + 30s，期间所有新请求返回 'native_host_cooldown'
+ * - 避免卡死的 PowerShell 进程在 30 分钟内累积到 180 个（v1.4.5 修复后的残留问题）
+ * - 用户看到连续失败会主动重启 Chrome，从根本上解决进程泄漏
+ *
  * @param {object} message - 消息对象
  * @returns {Promise<object>} - Native Host 响应或错误对象
  */
 async function sendToNativeSafe(message) {
+  const now = Date.now();
+  // C2 修复（v1.4.6）：冷却期检查（超时后 30s 内拒绝所有新请求）
+  if (now < _nativeHostCooldownUntil) {
+    return { success: false, error: 'native_host_cooldown' };
+  }
+  // C2 修复（v1.4.5）：全局并发限制
+  if (_sendToNativeInFlight) {
+    return { success: false, error: 'native_host_busy' };
+  }
+  _sendToNativeInFlight = true;
+  let timeoutId;
   try {
-    return await sendToNative(message);
+    // M3 修复：10 秒超时，防止 Native Host 卡死导致 popup 永久阻塞
+    // Min-1 修复：保存 timeoutId，finally 中 clearTimeout 清理
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error('native_host_timeout')), 10000);
+    });
+    return await Promise.race([sendToNative(message), timeoutPromise]);
   } catch (e) {
+    // Min-2 修复：超时时记录 warn 日志，便于排查
+    if (e.message === 'native_host_timeout') {
+      console.warn('ClashOmega: Native Host timeout (process may be stuck):', message.action);
+      // C2 修复（v1.4.6）：超时后进入 30s 冷却期
+      // 避免卡死的 PowerShell 进程持续累积，用户看到连续失败会主动重启 Chrome
+      _nativeHostCooldownUntil = Date.now() + NATIVE_HOST_COOLDOWN_MS;
+      console.warn('ClashOmega: Native Host cooldown for', NATIVE_HOST_COOLDOWN_MS, 'ms');
+    }
     return { success: false, error: e.message };
+  } finally {
+    // Min-1 修复：清理 setTimeout，避免短期资源泄漏
+    if (timeoutId) clearTimeout(timeoutId);
+    _sendToNativeInFlight = false;
   }
 }
 

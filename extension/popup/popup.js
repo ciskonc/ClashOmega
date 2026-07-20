@@ -94,19 +94,24 @@ function showToast(message, type = '', options = {}) {
  */
 async function triggerRestartClash() {
   const btn = document.getElementById('restart-clash-btn');
+  if (!btn) return null;
   const originalText = btn.textContent;
   btn.disabled = true;
   btn.textContent = '...';
-  const result = await sendToBackground({ action: 'restartClash' });
-  btn.disabled = false;
-  btn.textContent = originalText;
-  if (result && result.success) {
-    showToast(I18N.t('restart_clash_success'), 'success');
-    setTimeout(() => { initPopup(); }, 300);
-  } else {
-    showToast(I18N.t('restart_clash_failed'), 'error');
+  // M4 修复（v1.4.5）：统一使用 try/finally，确保异常路径也能恢复按钮状态
+  try {
+    const result = await sendToBackground({ action: 'restartClash' });
+    if (result && result.success) {
+      showToast(I18N.t('restart_clash_success'), 'success');
+      setTimeout(() => { initPopup(); }, 300);
+    } else {
+      showToast(I18N.t('restart_clash_failed'), 'error');
+    }
+    return result;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
   }
-  return result;
 }
 
 /**
@@ -114,7 +119,10 @@ async function triggerRestartClash() {
  */
 function showNativeError(result, fallbackKey) {
   if (result && result.error) {
-    const err = result.error;
+    // Minor 修复（v1.4.5）：统一 toLowerCase，与 renderScriptRuleFailure 保持一致
+    // 原实现 err.includes('native messaging host') 大小写敏感，
+    // Chromium 在不同版本可能抛出 "Native messaging host" / "native messaging host" 等变体
+    const err = String(result.error).toLowerCase();
     // ★ 方案 2A（v1.4.2）：收紧匹配条件，只匹配 Native Messaging 专有错误
     // 原实现 err.includes('not found') 过宽，把 Native Host 返回的 'Config file not found'
     // 误判为 Native Host 未安装，导致设置页显示"已安装"但删除规则提示"未安装"的矛盾
@@ -124,7 +132,8 @@ function showNativeError(result, fallbackKey) {
       console.error('Native Host error:', err, '| Extension ID:', chrome.runtime.id);
       return;
     }
-    showToast(err, 'error');
+    // 未匹配 Native Messaging 专有错误时，显示原始错误文案（保留原大小写）
+    showToast(result.error, 'error');
     return;
   }
   if (result && result.message) {
@@ -384,6 +393,17 @@ function switchTab(tabId) {
   document.querySelectorAll('.tab-panel').forEach(panel => {
     panel.classList.toggle('active', panel.dataset.tabPanel === tabId);
   });
+  // M5 修复：如果切换到包含 script-rules 模块的 tab，且有待刷新 flag，触发 loadScriptRules
+  // 场景：用户在"Native Host 未安装/版本过旧"提示下点击"查看安装指引"跳转到设置页，
+  // 完成安装后切回规则页时，自动刷新规则列表，避免用户手动关闭 popup 重新打开
+  if (_pendingScriptRulesRefresh) {
+    const scriptRulesModule = document.querySelector(`#panel-${tabId} #module-script-rules`);
+    if (scriptRulesModule) {
+      _pendingScriptRulesRefresh = false;
+      // Minor 修复（v1.4.5）：添加 .catch，避免 loadScriptRules 抛错时阻塞 tab 切换
+      loadScriptRules().catch(e => console.warn('ClashOmega: pending script rules refresh failed:', e.message));
+    }
+  }
 }
 
 /**
@@ -1593,6 +1613,13 @@ function createScriptRuleItem(ruleStr, source, proxies) {
     dataset: { rule: fullRule, script: scriptFlag }
   }, '✕');
   btn.setAttribute('data-i18n-title', 'rule_delete');
+  // M2 修复（v1.4.6）：创建按钮时读取全局 blocking flag
+  // 场景 B/C/D/F 下 renderScriptRuleFailure 设置 _scriptRuleBlocking=true，
+  // renderScriptRules 重建列表时新按钮需读取此 flag 设置 disabled，
+  // 否则用户仍可点击删除按钮触发 removeRule，M2 修复失效
+  if (_scriptRuleBlocking) {
+    btn.disabled = true;
+  }
   row2.appendChild(btn);
   div.appendChild(row2);
 
@@ -1684,14 +1711,50 @@ function bindSettingsSubTabEvents() {
   });
 }
 
+// M4 修复：loadScriptRules 竞态保护序号
+// 每次调用 loadScriptRules 时递增，await 后检查序号是否过期，过期则丢弃响应
+let _loadScriptRulesSeq = 0;
+
+// M5 修复：用户点击"查看安装指引"后，等待用户切回规则页时自动刷新
+// flag 在 jumpToSettings 中设置为 true，在 switchTab 切换到包含 script-rules 模块的 tab 时触发刷新
+let _pendingScriptRulesRefresh = false;
+
+// M2 修复（v1.4.6）：全局 blocking flag，createScriptRuleItem 创建按钮时读取
+// renderScriptRuleFailure 设置为 true（场景 B/C/D/F），loadScriptRules 成功路径设置为 false
+// 避免渲染时序问题：renderScriptRuleFailure 禁用旧按钮后 renderScriptRules 重建新按钮，
+// 若不在创建时读取 blocking flag，新按钮 disabled 默认为 false，防抖锁失效
+let _scriptRuleBlocking = false;
+
+// C1+C3 修复（v1.4.6）：统一防抖锁检查辅助函数
+// 所有修改 .disabled 的入口都应调用此函数，避免绕过 dataset.lockedByDebounce 防抖锁
+// force=true 时跳过防抖锁检查（用于 finally 块强制恢复）
+// 场景：5s 轮询触发 loadScriptRules（nativeHostInstalled 跳变 / clientType 变化）时，
+// 成功路径直接 addBtn.disabled=false 会绕过防抖锁，导致并发 addRule 损坏 Script.js
+function setElementDisabled(el, disabled, force = false) {
+  if (!el) return;
+  if (!force && el.dataset && el.dataset.lockedByDebounce === '1') return;
+  el.disabled = disabled;
+}
+
 async function loadScriptRules() {
+  // M4 修复：序号机制，防止 6 处调用点（initPopup / 5s 轮询 / addRule / removeRule / batchAdd / initScriptFile）的响应交错
+  const seq = ++_loadScriptRulesSeq;
   const [scriptResult, proxiesResult, clashRulesResult] = await Promise.all([
     sendToBackground({ action: 'getScriptRules' }),
     sendToBackground({ action: 'getProxies' }),
     sendToBackground({ action: 'getClashRules' })
   ]);
+  // 如果在 await 期间有更新的调用，丢弃当前响应（避免旧响应覆盖新数据）
+  // Minor 修复（v1.4.5）：return null 而非对象，调用方按需处理
+  // 原返回 { clashRules, proxies } 对象可能让调用方误以为刷新成功，使用 null 明确表示"已丢弃"
+  if (seq !== _loadScriptRulesSeq) {
+    return null;
+  }
   const proxies = proxiesResult.success ? proxiesResult.proxies : null;
   const clashRules = clashRulesResult.success ? clashRulesResult.rules : null;
+  // Minor 修复（v1.4.5）：移除变量遮蔽
+  // 原 L1728-1729 声明 needInitEl/notFoundEl，L1739-1740 在 else 分支重复声明（var 提升）
+  // 改为外层声明一次，else 分支直接复用
   const needInitEl = document.getElementById('script-rule-need-init');
   const notFoundEl = document.getElementById('script-rule-not-found');
 
@@ -1699,14 +1762,36 @@ async function loadScriptRules() {
   let jsFileOk = true;
   if (!scriptResult.success) {
     jsFileOk = false;
-    if (scriptResult.needInit) {
-      needInitEl.style.display = 'block';
-    } else {
-      notFoundEl.style.display = 'block';
-    }
-    document.getElementById('script-rule-count').textContent = '0';
+    renderScriptRuleFailure(scriptResult);
   } else {
     jsRules = scriptResult.rules || [];
+    // 成功路径：隐藏所有失败 UI 元素
+    const needReinstallEl = document.getElementById('script-rule-need-reinstall');
+    const nativeHostMissingEl = document.getElementById('script-rule-native-host-missing');
+    // M7 配套：成功路径也要隐藏场景 D 专用元素
+    const unsupportedActionEl = document.getElementById('script-rule-unsupported-action');
+    [needInitEl, notFoundEl, needReinstallEl, nativeHostMissingEl, unsupportedActionEl].forEach(el => {
+      if (el) el.style.display = 'none';
+    });
+    // M1 修复：成功路径恢复 addRule 相关控件（之前可能在失败场景被禁用）
+    // C1+C3 修复（v1.4.6）：改用 setElementDisabled，跳过防抖锁元素
+    // 场景：用户点击 addRule 期间 5s 轮询触发 loadScriptRules，成功路径不应覆盖防抖锁
+    const addBtn = document.getElementById('quick-add-btn');
+    const domainInput = document.getElementById('quick-add-domain');
+    const ruleTypeSelect = document.getElementById('quick-add-rule-type');
+    const policySelect = document.getElementById('quick-add-policy');
+    setElementDisabled(addBtn, false);
+    setElementDisabled(domainInput, false);
+    setElementDisabled(ruleTypeSelect, false);
+    setElementDisabled(policySelect, false);
+    // M2 配套修复：成功路径恢复所有 .rule-delete-btn
+    // 失败场景 renderScriptRuleFailure 禁用了 .rule-delete-btn，成功时需恢复
+    // C1+C3 修复（v1.4.6）：改用 setElementDisabled 跳过防抖锁
+    document.querySelectorAll('.rule-delete-btn').forEach(btn => {
+      setElementDisabled(btn, false);
+    });
+    // M2 修复（v1.4.6）：成功路径清除 blocking flag
+    _scriptRuleBlocking = false;
   }
 
   let yamlRules = [];
@@ -1723,11 +1808,9 @@ async function loadScriptRules() {
     // 即使 Native Host 失败，也赋值 window._scriptRulesWithSource，确保搜索框可用
     window._scriptRulesWithSource = merged;
     renderScriptRules(merged, proxies);
-    if (scriptResult.needInit) {
-      needInitEl.style.display = 'block';
-    } else if (!scriptResult.success) {
-      notFoundEl.style.display = 'block';
-    }
+    // Minor 修复（v1.4.5）：移除重复调用 renderScriptRuleFailure
+    // 原实现 L1730 已调用 renderScriptRuleFailure(scriptResult)，L1767 再次调用，重复执行
+    // 第一次调用已正确设置 isBlocking + 禁用控件，第二次调用多余
     return { clashRules, proxies };
   }
 
@@ -1743,16 +1826,148 @@ async function loadScriptRules() {
 function bindScriptInitButton() {
   document.getElementById('script-init-btn').addEventListener('click', async () => {
     const btn = document.getElementById('script-init-btn');
+    // Minor 修复（v1.4.5）：增加防抖锁 + try/finally
+    // 原实现 btn.disabled=true 后 await，若 sendToBackground 抛错则 disabled 永不恢复
+    if (btn.disabled) return;
     btn.disabled = true;
-    const result = await sendToBackground({ action: 'initScriptFile' });
-    btn.disabled = false;
-    if (result.success) {
-      showToast(I18N.t('script_rules_init_success'), 'success');
-      await loadScriptRules();
-    } else {
-      showToast(I18N.t('script_rules_init_failed') + ': ' + (result.error || ''), 'error');
+    let result = null;
+    try {
+      result = await sendToBackground({ action: 'initScriptFile' });
+      if (result && result.success) {
+        showToast(I18N.t('script_rules_init_success'), 'success');
+        await loadScriptRules();
+      } else {
+        showToast(I18N.t('script_rules_init_failed') + ': ' + (result?.error || ''), 'error');
+      }
+    } finally {
+      btn.disabled = false;
     }
   });
+
+  // 绑定"查看安装指引"按钮（Native Host 版本过旧 + 未安装两个场景共用）
+  // 跳转到设置页，让用户查看 Native Host 安装指引
+  const reinstallBtn = document.getElementById('script-reinstall-btn');
+  const installGuideBtn = document.getElementById('script-install-guide-btn');
+  const jumpToSettings = () => {
+    // M1 修复（v1.4.5）：动态查找包含 settings 模块的 tab，移除硬编码 tab-3
+    // 原实现硬编码 switchTab('tab-3')，用户自定义布局改了 tab 顺序后跳转失效
+    // 修复：优先从 _currentTabLayout 查找包含 'settings' 模块的 tab，找不到才回退 tab-3
+    if (typeof switchTab === 'function') {
+      const layout = window._currentTabLayout;
+      if (layout && Array.isArray(layout.tabs)) {
+        const settingsTab = layout.tabs.find(t =>
+          Array.isArray(t.modules) && t.modules.includes('settings')
+        );
+        if (settingsTab) {
+          switchTab(settingsTab.id);
+        } else {
+          // 兜底：用户自定义布局可能删除了 settings 模块，回退到默认 tab-3
+          switchTab('tab-3');
+        }
+      } else {
+        // _currentTabLayout 未初始化（极端情况），回退到默认 tab-3
+        switchTab('tab-3');
+      }
+    }
+    // M5 修复：设置 flag，用户切回规则页时自动刷新 loadScriptRules
+    _pendingScriptRulesRefresh = true;
+  };
+  if (reinstallBtn) reinstallBtn.addEventListener('click', jumpToSettings);
+  if (installGuideBtn) installGuideBtn.addEventListener('click', jumpToSettings);
+}
+
+/**
+ * 渲染 Script 规则失败分支 UI
+ * 根据 scriptResult 的错误类型细分显示不同 UI 元素：
+ * - needInit:true → 显示初始化按钮（.js 文件未初始化）
+ * - error 含 'unknown action' → 显示"Native Host 版本过旧"指引（不显示初始化按钮）
+ * - error 含 'native messaging host' / 'native host not installed' → 显示"Native Host 未安装"指引
+ * - error === 'file_op_not_supported' → 显示"不支持文件操作"提示（非 CVR 客户端）
+ * - error 含 'host ended' / 'host crashed' / 'native_host_timeout' → 显示"Native Host 进程异常"指引
+ * - 其他 → 保守显示初始化按钮（兼容未来错误）
+ *
+ * M1 修复：场景 B/C/D/F 下禁用 quick-add-btn 及相关输入控件，从源头阻止用户在版本不匹配场景下操作
+ * @param {object} scriptResult - getScriptRules 返回值
+ */
+function renderScriptRuleFailure(scriptResult) {
+  const needInitEl = document.getElementById('script-rule-need-init');
+  const notFoundEl = document.getElementById('script-rule-not-found');
+  const needReinstallEl = document.getElementById('script-rule-need-reinstall');
+  const nativeHostMissingEl = document.getElementById('script-rule-native-host-missing');
+  // M7 修复（v1.4.5）：场景 D 新增专用元素，原复用 notFoundEl 文案"未找到扩展脚本文件"误导用户
+  const unsupportedActionEl = document.getElementById('script-rule-unsupported-action');
+
+  // 隐藏所有失败 UI 元素（避免残留显示）
+  [needInitEl, notFoundEl, needReinstallEl, nativeHostMissingEl, unsupportedActionEl].forEach(el => {
+    if (el) el.style.display = 'none';
+  });
+
+  const err = String(scriptResult?.error || '').toLowerCase();
+
+  // 判定场景类型
+  // isBlocking = true 时禁用 addRule 按钮（场景 B/C/D/F：Native Host 不可用或版本不匹配）
+  // isBlocking = false 时允许 addRule（场景 A/E：用户可点击初始化后继续添加规则）
+  let isBlocking = false;
+
+  if (scriptResult?.needInit) {
+    // 场景 A：.js 文件未初始化 → 显示初始化按钮
+    if (needInitEl) needInitEl.style.display = 'block';
+  } else if (err.includes('unknown action')) {
+    // 场景 B：Native Host 版本过旧 → 显示重新安装指引，不显示初始化按钮
+    if (needReinstallEl) needReinstallEl.style.display = 'block';
+    isBlocking = true;
+  } else if (err.includes('native messaging host') || err.includes('native host not installed')) {
+    // 场景 C：Native Host 未安装 → 显示安装指引，不显示初始化按钮
+    // M2 修复：放宽匹配条件，覆盖 Chromium 各种文案变体（与 L122 保持一致）
+    if (nativeHostMissingEl) nativeHostMissingEl.style.display = 'block';
+    isBlocking = true;
+  } else if (err === 'file_op_not_supported') {
+    // 场景 D：非 CVR 客户端 → 显示"不支持文件操作"专用提示
+    // M7 修复：原复用 notFoundEl 文案"未找到扩展脚本文件"误导用户，改为专用元素
+    // 注：当前 background.js getScriptRules 在非 CVR 时返回 success:true + 空规则列表，
+    // 此分支为兼容性兜底（若未来 background.js 改为返回 file_op_not_supported）
+    if (unsupportedActionEl) unsupportedActionEl.style.display = 'block';
+    isBlocking = true;
+  } else if (err.includes('host ended') || err.includes('host crashed') || err === 'native_host_timeout' || err === 'native_host_cooldown' || err === 'native_host_busy') {
+    // 场景 F：Native Host 进程崩溃/超时/冷却期/繁忙 → 显示重新安装指引（与场景 B 共用 UI）
+    // C2 修复（v1.4.6）：增加 native_host_cooldown（冷却期内拒绝）和 native_host_busy（并发拒绝）
+    // 这两种状态都表明 Native Host 不可用，应禁用 addRule 控件
+    if (needReinstallEl) needReinstallEl.style.display = 'block';
+    isBlocking = true;
+  } else {
+    // 场景 E：其他未知错误 → 保守显示初始化按钮（兼容未来可能的错误）
+    if (needInitEl) needInitEl.style.display = 'block';
+  }
+
+  // M1 修复：根据场景启用/禁用 addRule 相关控件
+  // C1+C3 修复（v1.4.6）：改用 setElementDisabled，跳过防抖锁元素
+  // 场景：addRule 防抖期间 5s 轮询触发 loadScriptRules → renderScriptRuleFailure，
+  // 若直接设置 disabled 会覆盖防抖锁
+  // 注：isBlocking=true 时跳过防抖锁元素不影响安全（防抖锁元素已 disabled=true）
+  //     isBlocking=false 时跳过防抖锁元素，保持防抖锁状态，避免并发 addRule
+  const addBtn = document.getElementById('quick-add-btn');
+  const domainInput = document.getElementById('quick-add-domain');
+  const ruleTypeSelect = document.getElementById('quick-add-rule-type');
+  const policySelect = document.getElementById('quick-add-policy');
+  setElementDisabled(addBtn, isBlocking);
+  setElementDisabled(domainInput, isBlocking);
+  setElementDisabled(ruleTypeSelect, isBlocking);
+  setElementDisabled(policySelect, isBlocking);
+
+  // M2 修复：isBlocking=true 时禁用所有 .rule-delete-btn
+  // 原实现仅禁用 addRule 控件，用户仍可点击删除按钮触发 removeRule
+  // 场景 B/C/D/F 下 Native Host 不可用，removeRule 必然失败，禁用避免无效操作
+  // C1+C3 修复（v1.4.6）：改用 setElementDisabled 跳过防抖锁
+  // M2 核心修复（v1.4.6）：renderScriptRules 重建列表时新按钮 disabled 默认 false，
+  //   此处禁用的是即将被重建的旧按钮，因此需要 _scriptRuleBlocking 全局 flag
+  //   让 createScriptRuleItem 创建新按钮时读取，否则 M2 修复失效
+  document.querySelectorAll('.rule-delete-btn').forEach(btn => {
+    setElementDisabled(btn, isBlocking);
+  });
+  // M2 修复（v1.4.6）：设置全局 blocking flag，供 createScriptRuleItem 创建按钮时读取
+  _scriptRuleBlocking = isBlocking;
+
+  document.getElementById('script-rule-count').textContent = '0';
 }
 
 function renderLanguageSetting() {
@@ -1859,75 +2074,107 @@ document.getElementById('clash-mode-switch').addEventListener('click', async (e)
 
 /**
  * 绑定快捷添加规则事件（S-001 修复：使用 DOM API 替代 innerHTML）
+ *
+ * M4 修复（v1.4.5）：拆分事件绑定与状态更新
+ * - bindQuickAddRule(domain) 仅更新 input.value，由 initPopup 每次调用
+ * - bindQuickAddRuleEvents() 事件绑定只执行一次，由 DOMContentLoaded 调用
+ *   原实现每次 initPopup 都 addEventListener，导致重复绑定（用户每切换 tab 回规则页一次，
+ *   点击 addBtn 会触发 N 次重复 addRule 请求）
+ *
+ * C1 修复（v1.4.5）：finally 场景感知
+ * - 原实现 finally 无条件恢复 addBtn.disabled=false，覆盖场景 B/C/D/F 的 disabled=true
+ *   场景 F（Native Host 崩溃超时）下用户可连续点击触发多个 10s 超时累积
+ * - 修复：finally 中仅在 addResult.success 时恢复 disabled=false
+ *   失败路径由 loadScriptRules → renderScriptRuleFailure 重新判定场景并设置 disabled
+ *
+ * M3 修复（v1.4.5）：成功路径调用 loadScriptRules() 替代手动 append
+ * - 原实现手动 append div，可能与并发操作冲突导致列表状态不一致
+ * - 修复：成功后调用 loadScriptRules() 全量刷新
+ *
+ * M5 修复（v1.4.5）：失败路径调用 loadScriptRules() 触发场景判定
+ * - 原实现失败仅 showToast，不刷新 UI，场景判定状态可能过期
+ * - 修复：失败时调用 loadScriptRules() 让 renderScriptRuleFailure 处理场景判定
  */
 function bindQuickAddRule(domain) {
+  // M4 修复：仅更新 input.value，事件绑定移到 bindQuickAddRuleEvents
   document.getElementById('quick-add-domain').value = domain;
+}
 
-  document.getElementById('quick-add-btn').addEventListener('click', async () => {
-    const inputDomain = document.getElementById('quick-add-domain').value.trim();
-    if (!inputDomain) {
-      showToast(I18N.t('quick_add_select_policy'), 'error');
-      return;
-    }
-    const ruleType = document.getElementById('quick-add-rule-type').value;
-    const policy = document.getElementById('quick-add-policy').value;
-    if (!policy) {
-      showToast(I18N.t('quick_add_select_policy'), 'error');
-      return;
-    }
-    const rule = `${ruleType},${inputDomain},${policy}`;
+// M4 修复：事件绑定函数，由 DOMContentLoaded 调用一次
+// 防御性检查 dataset.bound，避免极端情况下重复绑定
+function bindQuickAddRuleEvents() {
+  const addBtn = document.getElementById('quick-add-btn');
+  if (!addBtn) return;
+  if (addBtn.dataset.bound === '1') return;
+  addBtn.dataset.bound = '1';
 
-    const result = await sendToBackground({ action: 'addRule', rule });
-    if (result && result.success) {
-      showToast(I18N.t('success_rule_added') + ' — ' + I18N.t('rule_restart_hint'), 'success', {
-        action: {
-          label: I18N.t('restart_clash'),
-          callback: triggerRestartClash
-        }
-      });
-      const settings = await sendToBackground({ action: 'getSettings' });
-      // writeToYaml=true 表示"写入 YAML"，来源标签显示 YA；false 表示"写入 Script.js"，显示 JS
-      const writeToYaml = settings.writeToYaml === true;
-      const listEl = document.getElementById('script-rule-list');
-      const countEl = document.getElementById('script-rule-count');
-      const placeholder = listEl.querySelector('div[style]');
-      if (placeholder && !placeholder.classList.contains('rule-item')) {
-        listEl.innerHTML = '';
+  addBtn.addEventListener('click', async (e) => {
+    // C1 修复：防抖锁机制，防止用户快速点击触发并发 PowerShell 进程读写 .js 文件
+    const btn = e.currentTarget;
+    if (btn.disabled) return;
+    btn.disabled = true;
+    // C3 配套：设置防抖锁标志，setModuleDisabled 跳过此元素
+    btn.dataset.lockedByDebounce = '1';
+    const originalText = btn.textContent;
+    btn.textContent = '...';
+    let addResult = null;
+    try {
+      const inputDomain = document.getElementById('quick-add-domain').value.trim();
+      if (!inputDomain) {
+        showToast(I18N.t('quick_add_select_policy'), 'error');
+        return;
       }
-      document.getElementById('script-rule-empty').style.display = 'none';
+      const ruleType = document.getElementById('quick-add-rule-type').value;
+      const policy = document.getElementById('quick-add-policy').value;
+      if (!policy) {
+        showToast(I18N.t('quick_add_select_policy'), 'error');
+        return;
+      }
+      const rule = `${ruleType},${inputDomain},${policy}`;
 
-      const div = document.createElement('div');
-      div.className = 'rule-item rule-item--card';
-      const policyClass = getPolicyClass(policy);
-
-      // 第一行：来源 + 类型 + 代理组名 + 最终代理
-      const row1 = el('div', { className: 'rule-item-row rule-item-meta' });
-      row1.appendChild(el('span', {
-        className: writeToYaml ? 'rule-source-tag rule-source--yaml' : 'rule-source-tag rule-source--js',
-        title: writeToYaml ? I18N.t('rule_source_yaml') : I18N.t('rule_source_js')
-      }, writeToYaml ? 'YA' : 'JS'));
-      row1.appendChild(el('span', { className: 'rule-type-tag' }, ruleType));
-      row1.appendChild(el('span', { className: 'rule-group-name', title: policy }, policy));
-      row1.appendChild(el('span', { className: `rule-policy ${policyClass}` }, policy));
-      div.appendChild(row1);
-
-      // 第二行：域名 + 删除按钮
-      const row2 = el('div', { className: 'rule-item-row rule-item-payload' });
-      row2.appendChild(el('span', { className: 'rule-payload', title: rule }, inputDomain));
-
-      const btn = el('button', {
-        className: 'rule-delete-btn',
-        title: I18N.t('rule_delete'),
-        dataset: { rule: rule, script: writeToYaml ? '0' : '1' }
-      }, '✕');
-      btn.setAttribute('data-i18n-title', 'rule_delete');
-      row2.appendChild(btn);
-      div.appendChild(row2);
-
-      listEl.appendChild(div);
-      countEl.textContent = parseInt(countEl.textContent) + 1;
-    } else {
-      showNativeError(result, 'error_native_host');
+      addResult = await sendToBackground({ action: 'addRule', rule });
+      if (addResult && addResult.success) {
+        showToast(I18N.t('success_rule_added') + ' — ' + I18N.t('rule_restart_hint'), 'success', {
+          action: {
+            label: I18N.t('restart_clash'),
+            callback: triggerRestartClash
+          }
+        });
+        // M3 修复：成功路径调用 loadScriptRules() 全量刷新，替代手动 append
+        // 避免与并发操作冲突导致列表状态不一致
+        await loadScriptRules();
+      } else {
+        // 失败时显示失败 toast（不再静默）
+        // 优先显示 hint（含升级指引），其次显示 error，最后回退到 Native Host 通信失败
+        const errorMsg = addResult?.hint || addResult?.error || '';
+        if (errorMsg) {
+          showToast(I18N.t('error_rule_add_failed') + ': ' + errorMsg, 'error');
+        } else {
+          // result 为空或无 error 字段，回退到 showNativeError（兼容原有错误处理）
+          showNativeError(addResult, 'error_native_host');
+        }
+        // M5 修复：失败路径调用 loadScriptRules() 触发场景判定
+        // renderScriptRuleFailure 会根据 scriptResult.error 设置 isBlocking
+        // 场景 B/C/D/F 下 disabled=true，由 finally 保留；场景 A/E 下 disabled=false
+        await loadScriptRules();
+      }
+    } finally {
+      // C1 修复（v1.4.6）：finally 场景感知 + M5 兜底
+      // - 成功路径：force 恢复 disabled=false（loadScriptRules 成功路径用 setElementDisabled 跳过防抖锁，
+      //   finally 用 force=true 强制恢复，确保按钮可用）
+      // - 失败路径：根据 _scriptRuleBlocking 全局 flag 决定
+      //   场景 B/C/D/F 下 renderScriptRuleFailure 设置 _scriptRuleBlocking=true，保持禁用
+      //   场景 A/E 下 _scriptRuleBlocking=false，恢复按钮允许重试
+      //   loadScriptRules 异常或返回 null 时 _scriptRuleBlocking 反映最后一次状态，避免按钮永久禁用
+      if (addResult && addResult.success) {
+        setElementDisabled(btn, false, true);  // force 恢复（自己设置的防抖锁，可强制覆盖）
+      } else {
+        // M5 修复：失败路径根据 _scriptRuleBlocking 决定，避免 loadScriptRules 异常/返回 null 时按钮永久禁用
+        setElementDisabled(btn, _scriptRuleBlocking, true);  // force 设置（覆盖 try 开头的 disabled=true）
+      }
+      btn.textContent = originalText;
+      // C3 配套：清除防抖锁标志
+      btn.dataset.lockedByDebounce = '';
     }
   });
 }
@@ -1945,36 +2192,37 @@ function bindDomainDetection(tabId) {
   let currentSuggestions = [];
 
   detectBtn.addEventListener('click', async () => {
+    // Minor 修复（v1.4.5）：增加防抖锁 + try/finally
+    // 原实现 detectBtn.disabled=true 后 await，若 sendToBackground 抛错则 disabled 永不恢复
+    if (detectBtn.disabled) return;
     detectBtn.disabled = true;
+    const originalText = detectBtn.textContent;
     detectBtn.textContent = '...';
+    try {
+      const result = await sendToBackground({ action: 'getPageDomains' });
+      if (!result || !result.success || !result.domains || result.domains.length === 0) {
+        summaryEl.style.display = 'block';
+        summaryEl.textContent = `${I18N.t('batch_detect_collected')} 0 ${I18N.t('batch_detect_domains')}`;
+        listEl.style.display = 'none';
+        actionsEl.style.display = 'none';
+        return;
+      }
 
-    const result = await sendToBackground({ action: 'getPageDomains' });
-    detectBtn.disabled = false;
-    detectBtn.textContent = I18N.t('batch_detect_btn');
+      const suggestions = smartGroupDomains(result.domains);
+      currentSuggestions = suggestions;
 
-    if (!result.success || result.domains.length === 0) {
       summaryEl.style.display = 'block';
-      summaryEl.textContent = `${I18N.t('batch_detect_collected')} 0 ${I18N.t('batch_detect_domains')}`;
-      listEl.style.display = 'none';
-      actionsEl.style.display = 'none';
-      return;
-    }
+      summaryEl.textContent = `${I18N.t('batch_detect_collected')} ${result.count} ${I18N.t('batch_detect_domains')}, ${I18N.t('batch_detect_grouped')} ${suggestions.length} ${I18N.t('batch_detect_groups')}`;
 
-    const suggestions = smartGroupDomains(result.domains);
-    currentSuggestions = suggestions;
+      listEl.style.display = 'block';
+      listEl.innerHTML = '';
+      actionsEl.style.display = 'flex';
 
-    summaryEl.style.display = 'block';
-    summaryEl.textContent = `${I18N.t('batch_detect_collected')} ${result.count} ${I18N.t('batch_detect_domains')}, ${I18N.t('batch_detect_grouped')} ${suggestions.length} ${I18N.t('batch_detect_groups')}`;
+      suggestions.forEach((s, idx) => {
+        const div = document.createElement('div');
+        div.className = 'domain-group-item';
 
-    listEl.style.display = 'block';
-    listEl.innerHTML = '';
-    actionsEl.style.display = 'flex';
-
-    suggestions.forEach((s, idx) => {
-      const div = document.createElement('div');
-      div.className = 'domain-group-item';
-
-      const label = document.createElement('label');
+        const label = document.createElement('label');
       label.className = 'md3-checkbox';
 
       const input = document.createElement('input');
@@ -2005,6 +2253,11 @@ function bindDomainDetection(tabId) {
 
       listEl.appendChild(div);
     });
+    } finally {
+      // Minor 修复：detectBtn 状态恢复移到 finally，确保异常时也能恢复
+      detectBtn.disabled = false;
+      detectBtn.textContent = originalText;
+    }
   });
 
   document.getElementById('batch-detect-select-all').addEventListener('click', () => {
@@ -2034,15 +2287,21 @@ function bindDomainDetection(tabId) {
 
     const rules = Array.from(checked).map(cb => `${cb.dataset.type},${cb.value},${policy}`);
 
+    // Minor 修复（v1.4.5）：batchBtn 状态恢复移到 finally
+    if (batchBtn.disabled) return;
     batchBtn.disabled = true;
-    const result = await sendToBackground({ action: 'batchAddRules', rules });
-    batchBtn.disabled = false;
+    let result = null;
+    try {
+      result = await sendToBackground({ action: 'batchAddRules', rules });
 
-    if (result && result.success) {
-      showToast(`${checked.length} ${I18N.t('success_rules_added')}`, 'success');
-      await loadScriptRules();
-    } else {
-      showNativeError(result, 'error_native_host');
+      if (result && result.success) {
+        showToast(`${checked.length} ${I18N.t('success_rules_added')}`, 'success');
+        await loadScriptRules();
+      } else {
+        showNativeError(result, 'error_native_host');
+      }
+    } finally {
+      batchBtn.disabled = false;
     }
   });
 }
@@ -2054,24 +2313,41 @@ function bindDomainCheckDeleteEvents() {
 
     const ruleStr = btn.dataset.rule;
     const isScript = btn.dataset.script === '1';
-    let result;
-    if (isScript) {
-      result = await sendToBackground({ action: 'removeRule', rule: ruleStr, useScript: true });
-    } else {
-      result = await sendToBackground({ action: 'removeRule', rule: ruleStr, useScript: false });
-    }
-    if (result && result.success) {
-      showToast(I18N.t('success_rule_deleted') + ' — ' + I18N.t('rule_restart_hint'), 'success', {
-        action: {
-          label: I18N.t('restart_clash'),
-          callback: triggerRestartClash
-        }
-      });
-      const item = btn.closest('.matched-rule-item');
-      if (item) item.remove();
-      await loadScriptRules();
-    } else {
-      showNativeError(result, 'error_native_host');
+    // M8 修复（v1.4.5）：增加防抖锁，防止用户快速点击触发并发 removeRule
+    if (btn.disabled) return;
+    btn.disabled = true;
+    // 作用域说明：result 在 try 外声明，finally 中可访问
+    let result = null;
+    try {
+      if (isScript) {
+        result = await sendToBackground({ action: 'removeRule', rule: ruleStr, useScript: true });
+      } else {
+        result = await sendToBackground({ action: 'removeRule', rule: ruleStr, useScript: false });
+      }
+      if (result && result.success) {
+        showToast(I18N.t('success_rule_deleted') + ' — ' + I18N.t('rule_restart_hint'), 'success', {
+          action: {
+            label: I18N.t('restart_clash'),
+            callback: triggerRestartClash
+          }
+        });
+        // M8 撤销（v1.4.6）：恢复 item.remove()
+        // v1.4.5 M8 修复基于"loadScriptRules 会重建整个列表"的假设是错误的：
+        //   - bindDomainCheckDeleteEvents 处理 #domain-check-matched 列表（域名检测匹配结果）
+        //   - loadScriptRules 只刷新 #script-rule-list，不刷新 #domain-check-matched
+        //   - 移除 item.remove() 后 domain-check-matched 列表中的删除项不被移除，UI 不一致
+        // 保留 loadScriptRules() 用于刷新 script-rule-list（删除规则后脚本规则列表也需更新）
+        const item = btn.closest('.rule-item');
+        if (item) item.remove();
+        await loadScriptRules();
+      } else {
+        showNativeError(result, 'error_native_host');
+      }
+    } finally {
+      // 失败时恢复按钮（成功时 loadScriptRules 会重建 DOM，原按钮已被替换）
+      if (!(result && result.success)) {
+        btn.disabled = false;
+      }
     }
   });
 }
@@ -2080,6 +2356,8 @@ function bindRuleListDeleteEvents() {
   document.body.addEventListener('click', async (e) => {
     const btn = e.target.closest('.rule-delete-btn');
     if (!btn) return;
+    // Minor 修复（v1.4.5）：增加防抖锁检查
+    if (btn.disabled) return;
 
     const ruleStr = btn.dataset.rule;
     const isScript = btn.dataset.script === '1';
@@ -2087,33 +2365,39 @@ function bindRuleListDeleteEvents() {
     if (!ruleItem) return;
     ruleItem.style.opacity = '0.5';
     btn.disabled = true;
-
-    let result;
-    if (isScript) {
-      result = await sendToBackground({ action: 'removeRule', rule: ruleStr, useScript: true });
-    } else {
-      result = await sendToBackground({ action: 'removeRule', rule: ruleStr, useScript: false });
-    }
-
-    if (result && result.success) {
-      showToast(I18N.t('success_rule_deleted') + ' — ' + I18N.t('rule_restart_hint'), 'success', {
-        action: {
-          label: I18N.t('restart_clash'),
-          callback: triggerRestartClash
-        }
-      });
-      ruleItem.remove();
-      const countEl = isScript
-        ? document.getElementById('script-rule-count')
-        : document.getElementById('rule-count');
-      countEl.textContent = Math.max(0, parseInt(countEl.textContent) - 1);
-      if (isScript && parseInt(countEl.textContent) === 0) {
-        document.getElementById('script-rule-empty').style.display = 'block';
+    // 作用域说明：result 在 try 外声明，finally 中可访问
+    let result = null;
+    try {
+      if (isScript) {
+        result = await sendToBackground({ action: 'removeRule', rule: ruleStr, useScript: true });
+      } else {
+        result = await sendToBackground({ action: 'removeRule', rule: ruleStr, useScript: false });
       }
-    } else {
-      ruleItem.style.opacity = '1';
-      btn.disabled = false;
-      showNativeError(result, 'error_native_host');
+
+      if (result && result.success) {
+        showToast(I18N.t('success_rule_deleted') + ' — ' + I18N.t('rule_restart_hint'), 'success', {
+          action: {
+            label: I18N.t('restart_clash'),
+            callback: triggerRestartClash
+          }
+        });
+        ruleItem.remove();
+        const countEl = isScript
+          ? document.getElementById('script-rule-count')
+          : document.getElementById('rule-count');
+        countEl.textContent = Math.max(0, parseInt(countEl.textContent) - 1);
+        if (isScript && parseInt(countEl.textContent) === 0) {
+          document.getElementById('script-rule-empty').style.display = 'block';
+        }
+      } else {
+        showNativeError(result, 'error_native_host');
+      }
+    } finally {
+      // Minor 修复：失败时恢复按钮，成功时按钮已被 ruleItem.remove() 移除
+      if (!(result && result.success)) {
+        ruleItem.style.opacity = '1';
+        btn.disabled = false;
+      }
     }
   });
 }
@@ -2665,7 +2949,11 @@ function setModuleDisabled(moduleId, disabled, excludeIds = []) {
   if (!module) return;
   module.querySelectorAll('input, button, select').forEach(el => {
     if (excludeIds.includes(el.id)) return;
-    el.disabled = disabled;
+    // C3 修复（v1.4.6）：改用 setElementDisabled 统一防抖锁检查
+    // 场景：5s 轮询触发 updateClientTypeUI → setModuleDisabled，强制覆盖防抖锁状态
+    // 导致 addRule 防抖期间 addBtn.disabled 被覆盖为 false，并发 addRule 可损坏 Script.js
+    // 防抖锁由 bindQuickAddRuleEvents 设置 dataset.lockedByDebounce='1'，finally 中清除
+    setElementDisabled(el, disabled);
   });
   // 视觉提示：添加/移除禁用样式类 + 设置禁用原因（CSS ::after 通过 attr 显示）
   if (disabled) {
@@ -2815,14 +3103,21 @@ async function initPopup(layout, settingsPromise) {
     domainCheckModeHint.style.display = 'block';
     domainCheckMatched.innerHTML = '';
     domainCheckNotMatched.style.display = 'none';
-    scriptRulesPromise.then(({ clashRules, proxies }) => {
+    // Minor 2 修复（v1.4.6）：loadScriptRules 可能返回 null（序号过期），调用方需 null 检查
+    // 原实现 .then(({ clashRules, proxies }) => {...}) 解构 null 会抛 TypeError
+    scriptRulesPromise.then(result => {
+      if (!result) return;
+      const { clashRules, proxies } = result;
       if (clashRules) {
         renderRuleList(clashRules, proxies);
       }
     });
   } else {
     domainCheckModeHint.style.display = 'none';
-    scriptRulesPromise.then(({ clashRules, proxies }) => {
+    // Minor 2 修复（v1.4.6）：同上，null 检查
+    scriptRulesPromise.then(result => {
+      if (!result) return;
+      const { clashRules, proxies } = result;
       if (!clashRules) return;
 
       const matched = findMatchingRules(domain, clashRules);
@@ -3021,6 +3316,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   bindSettingsEvents();
   bindScriptRulesControls();
   bindSettingsSubTabEvents();
+  // M4 修复（v1.4.5）：quick-add-btn 事件绑定只执行一次，由 DOMContentLoaded 调用
+  // 原 bindQuickAddRule 每次 initPopup 都 addEventListener，导致重复绑定
+  bindQuickAddRuleEvents();
   renderLanguageSetting();
   renderThemeSetting();
 
@@ -3124,6 +3422,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   //       定期轮询 getStatus 可覆盖这些场景，客户端类型变化时自动重载规则。
   // 性能：一次 getStatus = 1 次 Clash API GET /configs + 1 次 Native Host ping，
   //       5 秒间隔对 localhost 零负载，popup 关闭后 interval 自动清除（页面卸载）
+  // M6 修复（v1.4.5）：增加 Native Host 可用性跳变检测
+  // 场景：用户在 Native Host 未安装时打开 popup，点击"查看安装指引"跳转设置页，
+  //       完成安装后切回规则页，5s 轮询应检测到 Native Host 可用并触发 loadScriptRules
+  // 原实现仅 clientType 变化时刷新，无法检测 Native Host 升级（clientType 不变）
+  let _lastNativeHostInstalled = null;
   window._statusRefreshTimer = setInterval(async () => {
     try {
       const freshStatus = await sendToBackground({ action: 'getStatus' });
@@ -3131,6 +3434,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         refreshPopupStatus(freshStatus);
         // 同步刷新设置页 Clash API 状态指示器（用户可能停留在设置页）
         renderClashApiStatus(freshStatus);
+
+        // M6 修复：Native Host 可用性跳变检测
+        // 从 false→true 跳变时，用户可能刚安装/升级 Native Host，需刷新规则列表
+        const currentNativeHostInstalled = freshStatus.nativeHostInstalled === true;
+        if (_lastNativeHostInstalled === false && currentNativeHostInstalled === true) {
+          console.log('ClashOmega: Native Host became available, reloading script rules');
+          loadScriptRules().catch(e => console.warn('reload rules after native host recovery failed:', e));
+        }
+        _lastNativeHostInstalled = currentNativeHostInstalled;
       }
     } catch (e) {
       // 静默失败，不打断用户操作

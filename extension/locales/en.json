@@ -71,6 +71,10 @@
   "script_rules_init_success": "Extension script file initialized",
   "script_rules_init_failed": "Initialization failed",
   "script_rules_not_found": "Extension script file not found (current profile has no option.script)",
+  "script_rules_unsupported_action": "File operations not supported by current client (non-Clash Verge Rev compatibility fallback)",
+  "script_rules_need_reinstall": "Native Host version is too old. Please re-run install.ps1 and fully restart Chrome.",
+  "script_rules_native_host_missing": "Native Host is not installed. Please install Native Host first.",
+  "script_rules_view_install_guide": "View Install Guide",
   "script_rules_unsupported_hint": "Only Clash Verge Rev supports extension script rule management. Please manage rules via the Clash client's own UI, or switch to Clash Verge Rev.",
   "client_current": "Current client",
   "client_unknown": "Unrecognized",
@@ -191,6 +195,7 @@
   "error_native_host": "Native Host communication failed",
   "error_native_not_installed": "Native Host not installed. Run native-host\\install.ps1",
   "success_rule_added": "Rule added",
+  "error_rule_add_failed": "Failed to add rule",
   "success_rules_added": "rules added",
   "success_rule_deleted": "Rule deleted",
 
