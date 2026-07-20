@@ -4,6 +4,33 @@
 
 ---
 
+## v1.4.3 — 2026-07-19
+
+Native Host Script.js 三个 action 缺失修复 + showNativeError 误判修复。
+
+### Fixed
+
+- **showNativeError 误判"Config file not found"为"Native Host 未安装"**（方案 2A）：`popup.js` L118 `showNativeError` 的错误匹配条件过宽（`err.includes('not found')`），把 Native Host 返回的"Config file not found. Please set CLASH_CONFIG_PATH or start Clash first."误判为"Native Host 未安装"，导致设置页显示"已安装"但删除规则提示"未安装"的矛盾。收紧匹配条件为 `err.includes('native messaging host') || err.includes('native host not installed')`，只匹配 Native Messaging 专有错误。通用"not found"错误现在直接显示原始错误文案
+- **Native Host Script.js 三个 action 缺失**（方案 1A-1）：Native Host `clash_rules_manager.ps1` 的 switch 分支缺少 `getScriptPath` / `getScriptRules` / `initScriptFile` 三个 action 处理器，全部落到 default 分支返回 `Unknown action`。导致扩展"额外脚本规则"模块永远显示"未找到扩展脚本文件"，初始化按钮永远不显示。新增 6 个函数 + 3 个 switch case：
+  - **Get-ScriptPath**：读 profiles.yaml current + option.script 拼路径，返回 `{scriptPath, exists, managed, scriptUid, currentUid}`
+  - **Get-ScriptRules**：解析 .js 文件中 customRules 数组（兼容旧 EXT_RULES），返回 `{rules, scriptPath, needInit, arrayFormat, managed}`
+  - **Init-ScriptFile**：备份原文件后写入标准 ClashOmega 模板（customRules 空数组 + main 函数）
+  - **Add-ScriptRule / Remove-ScriptRule / BatchAdd-ScriptRules**：操作 customRules 数组，支持去重和批量添加
+  - `addRule` / `removeRule` / `batchAddRules` switch case：根据 `msg.useScript` 分支，true 走 .js 文件，false/未设置走 YAML（保持原有行为）
+
+### Changed
+
+- **CVR 扩展脚本机制设计修正**：v1.2.x 扩展侧代码写死操作全局 `Script.js` 的设计本身就是错的。CVR 实际机制是"每个订阅有自己的 .js 文件"（通过 profiles.yaml 的 current + option.script 字段绑定）。方案 1A-1 让 Native Host 读 profiles.yaml current + option.script 拼路径，操作当前激活订阅绑定的 .js 文件。用户实际看到的 4 条规则（ip9.com.cn / cangku.moe / ts.tan0.me / sub.tan0.me）在 `s8XWAjDjLilq.js`（当前激活订阅 RHIBxScuGfpf 的扩展脚本），不在 `Script.js`
+
+### Technical Notes
+
+- **关键 bug 修复**：Remove-ScriptRule 原用倒序扫描 + 状态机，倒序时 `]` 行不匹配 array start 正则（`^const\s+customRules\s*=\s*\[`），导致 `$inArray` 永远为 false，规则匹配失败。修复为顺序扫描 + 收集索引 + 倒序删除（与 Add-ScriptRule / Get-ScriptRules 一致）
+- **扩展侧契约对齐**：`native-bridge.js` L207-L225 三个函数 + `background.js` L417-L441 三个 case 已存在（v1.2.x 遗留），本次只改 Native Host，扩展侧无需改动
+- **兼容性**：旧版 `EXT_RULES = []` 格式可读取，但写入统一用 customRules 格式；非 CVR 客户端已有 `isFileOperationSupported` 检查
+- **已知限制**：多订阅切换后扩展内缓存的规则列表不会自动刷新，需用户重新打开 popup
+
+---
+
 ## v1.4.2 — 2026-07-16
 
 主页加载性能优化（4-5 秒 → 2-3 秒）。

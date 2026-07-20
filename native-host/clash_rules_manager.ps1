@@ -1,4 +1,4 @@
-﻿# Clash Rules Manager - Native Messaging Host (PowerShell)
+# Clash Rules Manager - Native Messaging Host (PowerShell)
 # 被 Chrome 按需调用，读写 Clash 配置文件中的 rules 字段。
 # 协议: stdin/stdout 二进制消息 (4字节小端序长度 + UTF-8 JSON)
 # 依赖: 仅 Windows 内置 PowerShell，零额外安装
@@ -665,6 +665,453 @@ function Get-SnapshotPath {
     return $null
 }
 
+# ──── Script.js 扩展脚本规则管理 ────
+# v1.4.2 方案 1A-1：操作当前激活订阅绑定的 .js 文件
+# CVR 扩展脚本机制：每个订阅通过 profiles.yaml 的 option.script 字段绑定一个 .js 文件
+# 路径推断流程：profiles.yaml → current 字段 → items 列表中匹配 uid → 该 item 的 option.script → 拼接 profiles/<script_uid>.js
+
+function Get-ScriptPath {
+    # 1. 在 CVR 数据目录下查找 profiles.yaml
+    $dirs = @(
+        "$env:APPDATA\io.github.clash-verge-rev.clash-verge-rev",
+        "$env:LOCALAPPDATA\io.github.clash-verge-rev.clash-verge-rev",
+        "$env:APPDATA\clash-verge-rev",
+        "$env:LOCALAPPDATA\clash-verge-rev"
+    )
+    $profilesYamlPath = $null
+    $profileDir = $null
+    foreach ($dir in $dirs) {
+        $candidate = Join-Path $dir 'profiles.yaml'
+        if (Test-Path $candidate) {
+            $profilesYamlPath = $candidate
+            $profileDir = $dir
+            break
+        }
+    }
+    if (-not $profilesYamlPath) {
+        return @{ success = $false; error = 'profiles.yaml not found (Clash Verge Rev not installed or no profile created)' }
+    }
+
+    # 2. 解析 profiles.yaml，提取 current 字段和 items 列表
+    #    YAML 结构（关键字段）：
+    #    current: RHIBxScuGfpf
+    #    items:
+    #    - uid: RHIBxScuGfpf
+    #      type: remote
+    #      file: RHIBxScuGfpf.yaml
+    #      option:
+    #        script: s8XWAjDjLilq   ← 订阅绑定的扩展脚本 uid
+    #      ...
+    $content = [System.IO.File]::ReadAllText($profilesYamlPath, $encoding)
+    $lines = $content -split "`n"
+
+    # 2a. 提取 current 字段
+    $currentUid = $null
+    foreach ($line in $lines) {
+        $trimmed = $line.Trim()
+        if ($trimmed -match '^current\s*:\s*(\S+)') {
+            $currentUid = $matches[1]
+            break
+        }
+    }
+    if (-not $currentUid) {
+        return @{ success = $false; error = 'profiles.yaml missing current field' }
+    }
+
+    # 2b. 在 items 列表中查找 uid 匹配 current 的条目，提取其 option.script
+    #     option 是嵌套字段，需要在 item 块内继续扫描
+    $scriptUid = $null
+    $inTargetItem = $false
+    $inOption = $false
+    foreach ($line in $lines) {
+        $trimmed = $line.Trim()
+        # 检测新 item 开始（- uid: ...）
+        if ($trimmed -match '^-\s*uid\s*:\s*(\S+)') {
+            $itemUid = $matches[1]
+            $inTargetItem = ($itemUid -eq $currentUid)
+            $inOption = $false
+            continue
+        }
+        if (-not $inTargetItem) { continue }
+
+        # 检测进入 option 块
+        if ($trimmed -match '^option\s*:\s*$') {
+            $inOption = $true
+            continue
+        }
+        # 检测离开 option 块（遇到同级或顶级 key）
+        if ($inOption -and $line -match '^\S' -and -not $trimmed.StartsWith('option')) {
+            $inOption = $false
+        }
+        # 在 option 块内查找 script: 字段
+        if ($inOption -and $trimmed -match '^script\s*:\s*(\S+)') {
+            $scriptUid = $matches[1]
+            break
+        }
+    }
+
+    if (-not $scriptUid) {
+        # 订阅未绑定扩展脚本
+        return @{ success = $false; error = "Current profile ($currentUid) has no bound script (option.script not set)"; needInit = $true }
+    }
+
+    # 3. 拼接脚本文件路径
+    $scriptPath = Join-Path (Join-Path $profileDir 'profiles') "$scriptUid.js"
+    $exists = Test-Path $scriptPath
+
+    # 4. 检查文件是否由 ClashOmega 管理（含标记）
+    $managed = $false
+    if ($exists) {
+        $scriptContent = [System.IO.File]::ReadAllText($scriptPath, $encoding)
+        if ($scriptContent -match 'ClashOmega Extension Rules' -or $scriptContent -match 'Clash Manager Extension Rules') {
+            $managed = $true
+        }
+    }
+
+    return @{
+        success = $true
+        scriptPath = $scriptPath
+        exists = $exists
+        managed = $managed
+        scriptUid = $scriptUid
+        currentUid = $currentUid
+    }
+}
+
+function Get-ScriptRules {
+    # 1. 获取脚本路径
+    $pathResult = Get-ScriptPath
+    if (-not $pathResult.success) {
+        # 透传 needInit 标记，让 popup 显示"初始化"按钮
+        return $pathResult
+    }
+    $scriptPath = $pathResult.scriptPath
+    if (-not (Test-Path $scriptPath)) {
+        return @{
+            success = $false
+            error = "Script file not found: $scriptPath"
+            needInit = $true
+            scriptPath = $scriptPath
+        }
+    }
+
+    # 2. 读取文件内容
+    $content = [System.IO.File]::ReadAllText($scriptPath, $encoding)
+
+    # 3. 解析规则数组（兼容两种格式）
+    #    新格式（ClashOmega v1.4.x）：const customRules = [ "DOMAIN,xxx", ... ];
+    #    旧格式（ClashOmega v1.2.x）：const EXT_RULES = [ "DOMAIN,xxx", ... ];
+    $rules = [System.Collections.ArrayList]::new()
+    $inArray = $false
+    $arrayFormat = $null  # 'customRules' | 'EXT_RULES'
+
+    foreach ($line in $content -split "`n") {
+        $trimmed = $line.Trim()
+        if (-not $inArray) {
+            if ($trimmed -match '^const\s+customRules\s*=\s*\[') {
+                $inArray = $true
+                $arrayFormat = 'customRules'
+            } elseif ($trimmed -match '^const\s+EXT_RULES\s*=\s*\[') {
+                $inArray = $true
+                $arrayFormat = 'EXT_RULES'
+            }
+            continue
+        }
+        # 在数组内，检测结束
+        if ($trimmed.StartsWith(']')) {
+            $inArray = $false
+            break
+        }
+        # 提取规则字符串（支持 "DOMAIN,xxx,Proxy" 或 'DOMAIN,xxx,Proxy'）
+        if ($trimmed -match "^\s*['""]([^'""]+)['""]") {
+            $rule = $matches[1].Trim()
+            if ($rule) { [void]$rules.Add($rule) }
+        }
+    }
+
+    return @{
+        success = $true
+        rules = $rules.ToArray()
+        scriptPath = $scriptPath
+        needInit = $false
+        arrayFormat = $arrayFormat
+        managed = $pathResult.managed
+    }
+}
+
+function Init-ScriptFile {
+    # 1. 获取脚本路径（即使订阅未绑定脚本，也需要返回路径用于提示用户）
+    $pathResult = Get-ScriptPath
+    if (-not $pathResult.success) {
+        # 订阅未绑定 script，无法初始化（需用户在 CVR 中设置 option.script）
+        return $pathResult
+    }
+    $scriptPath = $pathResult.scriptPath
+
+    # 2. 备份原文件（若存在）
+    if (Test-Path $scriptPath) {
+        $bakPath = "$scriptPath.bak.$([int](Get-Date -UFormat %s))"
+        try {
+            Copy-Item -Path $scriptPath -Destination $bakPath -Force
+        } catch {
+            # 备份失败不阻塞，仅记录
+            [Console]::Error.WriteLine("Init-ScriptFile: backup failed: $($_.Exception.Message)")
+        }
+    }
+
+    # 3. 写入标准 ClashOmega 扩展脚本模板
+    #    使用 customRules 数组格式（与 v1.4.x 用户的实际文件对齐）
+    $template = @'
+// === ClashOmega Extension Rules (auto-managed, do not edit manually) ===
+function main(config) {
+  // 1. 定义自定义规则（由 ClashOmega 扩展自动维护）
+  const customRules = [
+  ];
+
+  // 2. 将自定义规则插入到 config.rules 最前面
+  if (config.rules) {
+    config.rules = [...customRules, ...config.rules];
+  } else {
+    config.rules = customRules;
+  }
+
+  // 3. 返回修改后的配置
+  return config;
+}
+// === End of ClashOmega Extension Rules ===
+'@
+
+    try {
+        $parentDir = Split-Path -Parent $scriptPath
+        if (-not (Test-Path $parentDir)) {
+            New-Item -ItemType Directory -Path $parentDir -Force | Out-Null
+        }
+        [System.IO.File]::WriteAllText($scriptPath, $template, $encoding)
+        return @{
+            success = $true
+            message = 'Script file initialized'
+            scriptPath = $scriptPath
+        }
+    } catch {
+        return @{ success = $false; error = "Init failed: $($_.Exception.Message)" }
+    }
+}
+
+# ──── Script.js 规则增删（useScript=true 时调用） ────
+# 这些函数操作当前激活订阅绑定的 .js 文件中的 customRules 数组
+# 与 Get-ScriptRules 配对，只读写 customRules（兼容旧 EXT_RULES 但写入统一用 customRules）
+
+function Add-ScriptRule($rule) {
+    # 1. 获取脚本路径
+    $pathResult = Get-ScriptPath
+    if (-not $pathResult.success) {
+        return $pathResult  # 透传 needInit 等标记
+    }
+    $scriptPath = $pathResult.scriptPath
+    if (-not (Test-Path $scriptPath)) {
+        return @{ success = $false; error = "Script file not found: $scriptPath"; needInit = $true }
+    }
+
+    # 2. 清理规则字符串（去除首尾引号）
+    $rule = $rule.Trim().TrimStart("'").TrimEnd("'").TrimStart('"').TrimEnd('"').Trim()
+    if (-not $rule) {
+        return @{ success = $false; error = 'Empty rule' }
+    }
+
+    # 3. 读取文件内容
+    $content = [System.IO.File]::ReadAllText($scriptPath, $encoding)
+    $lines = [System.Collections.ArrayList]::new($content -split "`n")
+
+    # 4. 找到 customRules 数组（或旧 EXT_RULES 数组）的起始与结束
+    $arrayStart = -1
+    $arrayEnd = -1
+    $arrayFormat = $null
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        $trimmed = $lines[$i].Trim()
+        if ($arrayStart -lt 0) {
+            if ($trimmed -match '^const\s+customRules\s*=\s*\[') {
+                $arrayStart = $i
+                $arrayFormat = 'customRules'
+            } elseif ($trimmed -match '^const\s+EXT_RULES\s*=\s*\[') {
+                $arrayStart = $i
+                $arrayFormat = 'EXT_RULES'
+            }
+            continue
+        }
+        # 数组内，找结束（以 ] 开头的行）
+        if ($trimmed.StartsWith(']')) {
+            $arrayEnd = $i
+            break
+        }
+    }
+
+    if ($arrayStart -lt 0 -or $arrayEnd -lt 0) {
+        return @{ success = $false; error = 'customRules array not found in script file (need init?)'; needInit = $true }
+    }
+
+    # 5. 检查是否已存在相同规则（避免重复）
+    for ($i = $arrayStart + 1; $i -lt $arrayEnd; $i++) {
+        $trimmed = $lines[$i].Trim()
+        if ($trimmed -match "^\s*['""]([^'""]+)['""]") {
+            if ($matches[1].Trim() -eq $rule) {
+                return @{ success = $true; message = 'Rule already exists (skipped)'; scriptPath = $scriptPath }
+            }
+        }
+    }
+
+    # 6. 插入新规则到数组末尾（] 之前）
+    #    使用 2 空格缩进 + 双引号包裹（与现有格式对齐）
+    $newLine = "    `"$rule`","
+    $lines.Insert($arrayEnd, $newLine)
+
+    # 7. 写回文件
+    $newContent = $lines -join "`n"
+    [System.IO.File]::WriteAllText($scriptPath, $newContent, $encoding)
+
+    return @{ success = $true; message = 'Rule added to script'; scriptPath = $scriptPath; arrayFormat = $arrayFormat }
+}
+
+function Remove-ScriptRule($rule) {
+    # 1. 获取脚本路径
+    $pathResult = Get-ScriptPath
+    if (-not $pathResult.success) {
+        return $pathResult
+    }
+    $scriptPath = $pathResult.scriptPath
+    if (-not (Test-Path $scriptPath)) {
+        return @{ success = $false; error = "Script file not found: $scriptPath"; needInit = $true }
+    }
+
+    # 2. 清理规则字符串
+    $rule = $rule.Trim().TrimStart("'").TrimEnd("'").TrimStart('"').TrimEnd('"').Trim()
+    if (-not $rule) {
+        return @{ success = $false; error = 'Empty rule' }
+    }
+
+    # 3. 读取文件内容
+    $content = [System.IO.File]::ReadAllText($scriptPath, $encoding)
+    $lines = [System.Collections.ArrayList]::new($content -split "`n")
+
+    # 4. 在 customRules / EXT_RULES 数组内查找匹配规则并删除
+    #    顺序扫描（与 Add-ScriptRule / Get-ScriptRules 一致），先收集索引再统一删除
+    $inArray = $false
+    $removeIndices = [System.Collections.ArrayList]::new()
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        $trimmed = $lines[$i].Trim()
+        if (-not $inArray) {
+            if ($trimmed -match '^const\s+customRules\s*=\s*\[' -or $trimmed -match '^const\s+EXT_RULES\s*=\s*\[') {
+                $inArray = $true
+            }
+            continue
+        }
+        # 数组内
+        if ($trimmed.StartsWith(']')) {
+            $inArray = $false
+            continue
+        }
+        if ($trimmed -match "^\s*['""]([^'""]+)['""]") {
+            if ($matches[1].Trim() -eq $rule) {
+                [void]$removeIndices.Add($i)
+            }
+        }
+    }
+
+    $removed = $removeIndices.Count -gt 0
+    if (-not $removed) {
+        return @{ success = $true; message = 'Rule not found in script (no change)'; scriptPath = $scriptPath }
+    }
+
+    # 倒序删除（避免索引偏移）
+    for ($j = $removeIndices.Count - 1; $j -ge 0; $j--) {
+        $lines.RemoveAt($removeIndices[$j])
+    }
+
+    # 5. 写回文件
+    $newContent = $lines -join "`n"
+    [System.IO.File]::WriteAllText($scriptPath, $newContent, $encoding)
+
+    return @{ success = $true; message = 'Rule removed from script'; scriptPath = $scriptPath }
+}
+
+function BatchAdd-ScriptRules($rules) {
+    # 1. 获取脚本路径
+    $pathResult = Get-ScriptPath
+    if (-not $pathResult.success) {
+        return $pathResult
+    }
+    $scriptPath = $pathResult.scriptPath
+    if (-not (Test-Path $scriptPath)) {
+        return @{ success = $false; error = "Script file not found: $scriptPath"; needInit = $true }
+    }
+
+    # 2. 清理规则列表
+    $cleanRules = [System.Collections.ArrayList]::new()
+    foreach ($r in $rules) {
+        $clean = $r.Trim().TrimStart("'").TrimEnd("'").TrimStart('"').TrimEnd('"').Trim()
+        if ($clean) { [void]$cleanRules.Add($clean) }
+    }
+    if ($cleanRules.Count -eq 0) {
+        return @{ success = $false; error = 'No valid rules to add' }
+    }
+
+    # 3. 读取文件内容
+    $content = [System.IO.File]::ReadAllText($scriptPath, $encoding)
+    $lines = [System.Collections.ArrayList]::new($content -split "`n")
+
+    # 4. 找到 customRules / EXT_RULES 数组
+    $arrayStart = -1
+    $arrayEnd = -1
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        $trimmed = $lines[$i].Trim()
+        if ($arrayStart -lt 0) {
+            if ($trimmed -match '^const\s+customRules\s*=\s*\[' -or $trimmed -match '^const\s+EXT_RULES\s*=\s*\[') {
+                $arrayStart = $i
+            }
+            continue
+        }
+        if ($trimmed.StartsWith(']')) {
+            $arrayEnd = $i
+            break
+        }
+    }
+
+    if ($arrayStart -lt 0 -or $arrayEnd -lt 0) {
+        return @{ success = $false; error = 'customRules array not found in script file (need init?)'; needInit = $true }
+    }
+
+    # 5. 收集已有规则
+    $existing = [System.Collections.Generic.HashSet[string]]::new()
+    for ($i = $arrayStart + 1; $i -lt $arrayEnd; $i++) {
+        $trimmed = $lines[$i].Trim()
+        if ($trimmed -match "^\s*['""]([^'""]+)['""]") {
+            [void]$existing.Add($matches[1].Trim())
+        }
+    }
+
+    # 6. 插入新规则（去重）
+    $added = 0
+    $insertIdx = $arrayEnd
+    foreach ($rule in $cleanRules) {
+        if (-not $existing.Contains($rule)) {
+            $newLine = "    `"$rule`","
+            $lines.Insert($insertIdx, $newLine)
+            $insertIdx++
+            $added++
+            [void]$existing.Add($rule)
+        }
+    }
+
+    if ($added -eq 0) {
+        return @{ success = $true; message = 'All rules already exist (skipped)'; scriptPath = $scriptPath }
+    }
+
+    # 7. 写回文件
+    $newContent = $lines -join "`n"
+    [System.IO.File]::WriteAllText($scriptPath, $newContent, $encoding)
+
+    return @{ success = $true; message = "$added rules added to script"; scriptPath = $scriptPath; added = $added }
+}
+
 # 将规则列表写入快照文件的 rules: 区块
 function Sync-SnapshotRules($snapshotPath, $rules) {
     # 参数验证：拒绝空或非数组 rules，防止清空快照文件
@@ -823,6 +1270,17 @@ function Main {
                 }
 
                 'addRule' {
+                    # useScript=true → 写入当前订阅绑定的 .js 文件（customRules 数组）
+                    # useScript=false 或未设置 → 写入 YAML 配置文件（默认行为）
+                    if ($msg.useScript -eq $true) {
+                        try {
+                            $result = Add-ScriptRule $msg.rule
+                            Send-Message $result
+                        } catch {
+                            Send-Message @{ success = $false; error = "$($_.Exception.Message) | Stack: $($_.InvocationInfo.ScriptLineNumber)" }
+                        }
+                        break
+                    }
                     if ($msg.configPath) { $configPath = $msg.configPath }
                     if (-not $configPath) { $configPath = Get-ConfigPath }
                     if (-not $configPath -or -not (Test-Path $configPath)) {
@@ -841,6 +1299,17 @@ function Main {
                 }
 
                 'batchAddRules' {
+                    # useScript=true → 批量写入 .js 文件
+                    # useScript=false 或未设置 → 批量写入 YAML
+                    if ($msg.useScript -eq $true) {
+                        try {
+                            $result = BatchAdd-ScriptRules $msg.rules
+                            Send-Message $result
+                        } catch {
+                            Send-Message @{ success = $false; error = "$($_.Exception.Message) | Stack: $($_.InvocationInfo.ScriptLineNumber)" }
+                        }
+                        break
+                    }
                     if ($msg.configPath) { $configPath = $msg.configPath }
                     if (-not $configPath) { $configPath = Get-ConfigPath }
                     if (-not $configPath -or -not (Test-Path $configPath)) {
@@ -863,6 +1332,17 @@ function Main {
                 }
 
                 'removeRule' {
+                    # useScript=true → 从 .js 文件删除
+                    # useScript=false 或未设置 → 从 YAML 删除
+                    if ($msg.useScript -eq $true) {
+                        try {
+                            $result = Remove-ScriptRule $msg.rule
+                            Send-Message $result
+                        } catch {
+                            Send-Message @{ success = $false; error = "$($_.Exception.Message) | Stack: $($_.InvocationInfo.ScriptLineNumber)" }
+                        }
+                        break
+                    }
                     if ($msg.configPath) { $configPath = $msg.configPath }
                     if (-not $configPath) { $configPath = Get-ConfigPath }
                     if (-not $configPath -or -not (Test-Path $configPath)) {
@@ -917,6 +1397,33 @@ function Main {
                         } catch {
                             Send-Message @{ success = $false; error = "$($_.Exception.Message)" }
                         }
+                    }
+                }
+
+                'getScriptPath' {
+                    try {
+                        $result = Get-ScriptPath
+                        Send-Message $result
+                    } catch {
+                        Send-Message @{ success = $false; error = "$($_.Exception.Message)" }
+                    }
+                }
+
+                'getScriptRules' {
+                    try {
+                        $result = Get-ScriptRules
+                        Send-Message $result
+                    } catch {
+                        Send-Message @{ success = $false; error = "$($_.Exception.Message)" }
+                    }
+                }
+
+                'initScriptFile' {
+                    try {
+                        $result = Init-ScriptFile
+                        Send-Message $result
+                    } catch {
+                        Send-Message @{ success = $false; error = "$($_.Exception.Message)" }
                     }
                 }
 
