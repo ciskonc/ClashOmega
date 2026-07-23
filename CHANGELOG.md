@@ -4,6 +4,31 @@
 
 ---
 
+## v1.4.7 — 2026-07-23
+
+修复 v1.4.6 C2 并发限制引入的回归 bug。v1.4.6 的 `_sendToNativeInFlight` 并发拒绝模式误伤了 popup 打开时的正常并行请求。
+
+### Critical
+
+- **C2 并发限制回归修复**：v1.4.6 的 `_sendToNativeInFlight` 标志同时只允许 1 个 `sendToNativeSafe` 在途，第二个请求立即返回 `{error:'native_host_busy'}`。popup 打开时 `detectClient`（客户端类型检测）和 `getScriptRules`（获取脚本规则）并行发起，必然有一个被拒绝：
+  - `getScriptRules` 被拒绝 → 走场景 F 显示"重新安装"指引（用户误判为"Native Host 未安装"）
+  - `detectClient` 被拒绝 → `clientType=unknown`，5s 轮询恢复后又变 `clash-verge-rev`，Console 反复输出 `client type changed`，UI 反复切换
+  - 如果第一个请求超时（PowerShell 启动慢），进入 30s 冷却期，所有后续请求返回 `native_host_cooldown`，加剧问题
+
+  修复：改为**队列模式**（`_nativeHostQueue`），新请求排队等待前一个完成而非立即拒绝。仍只允许 1 个 Native Host 进程在途，保留进程泄漏防护。冷却期检查保留（入队前快速拒绝 + 出队后再次检查，防止队列等待期间进入冷却期的请求执行）
+
+### Changed
+
+- **`sendToNativeSafe` 队列模式**（C2 回归修复）：移除 `_sendToNativeInFlight` 布尔标志，改用 `_nativeHostQueue = Promise.resolve()` 队列链。每个请求 `await previousQueue` 后再执行 `sendToNative`，完成后 `releaseQueue()` 释放下一个
+- **冷却期双重检查**：入队前检查（快速拒绝，不排队）+ 出队后检查（队列等待期间可能进入冷却期）
+
+### Technical Notes
+
+- **回归根因**：v1.4.6 C2 修复关注"Native Host 卡死时进程泄漏"场景，未考虑 popup 打开时的正常并发请求场景。`detectClient` 和 `getScriptRules` 在 popup 打开时必然并行发起，并发拒绝模式导致其中一个必然失败
+- **队列模式 vs 并发拒绝模式**：并发拒绝模式优先保护系统（拒绝新请求防止进程累积），但误伤正常并发；队列模式优先保证功能完整（排队等待不丢失请求），同时仍串行执行只允许 1 个进程在途，兼顾两者
+
+---
+
 ## v1.4.6 — 2026-07-20
 
 对抗审查第三轮修复。v1.4.5 修复完成后再次发起 3 subagent 并行对抗审查（按维度切分：C1/C2/C3 逻辑正确性 / M1-M8+Minor / 版本号+i18n+git 完整性），发现 v1.4.5 修复存在的严重残留问题，本次全部修复。
