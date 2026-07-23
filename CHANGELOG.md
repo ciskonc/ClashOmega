@@ -4,6 +4,29 @@
 
 ---
 
+## v1.4.8 — 2026-07-23
+
+Native Host 错误日志盲区修复。v1.4.7 队列模式修复后，部分用户反馈 popup 仍显示"未安装"，但 Service Worker Console 无任何 Native Host 错误日志，无法定位根因。
+
+### Fixed
+
+- **`sendToNativeSafe` 非超时错误无日志输出**：v1.4.6/v1.4.7 的 catch 块仅在 `native_host_timeout` 分支输出 `console.warn`，其他错误（"Native host has exited" / "Specified native messaging host not found" / "Access to the specified native messaging host is forbidden"）静默返回 `{success:false, error}`，导致：
+  - popup 走场景 C/F 显示"未安装"或"重新安装"指引
+  - Service Worker Console 无任何 Native Host 错误日志，排查盲区
+  - 用户无法区分"Native Host 真未安装" vs "allowed_origins 不匹配" vs "进程立即退出"
+  修复：catch 块新增 else 分支，所有非超时错误也输出 `console.warn('ClashOmega: Native Host error:', e.message, '(action:', message.action + ')')`，与超时日志保持同等可见性
+
+### Changed
+
+- **`sendToNativeSafe` catch 块日志增强**：新增 else 分支输出非超时错误日志，包含错误消息 + 触发 action，便于定位是哪个请求失败
+
+### Technical Notes
+
+- **排查方法论**：本次问题排查使用"直接测试 Native Host"方案（绕过 Chrome，通过 PowerShell 直接调用 .bat 并发送 Native Messaging 协议消息），快速区分"Native Host 本身问题" vs "Chrome 扩展端问题"。测试脚本 `test-native-host.ps1` 已保留在 native-host/ 目录，供后续排查复用
+- **日志盲区根因**：v1.4.6 引入 C2 冷却期机制时，catch 块只关注超时错误（需要触发冷却期），忽略了其他错误也需要日志输出。这是"修复引入新风险"的典型案例——修复一个问题（进程泄漏）时引入了另一个问题（日志盲区）
+
+---
+
 ## v1.4.7 — 2026-07-23
 
 修复 v1.4.6 C2 并发限制引入的回归 bug。v1.4.6 的 `_sendToNativeInFlight` 并发拒绝模式误伤了 popup 打开时的正常并行请求。

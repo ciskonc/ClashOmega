@@ -79,6 +79,11 @@ async function sendToNativeSafe(message) {
       // C2 修复（v1.4.6）：超时后进入 30s 冷却期
       _nativeHostCooldownUntil = Date.now() + NATIVE_HOST_COOLDOWN_MS;
       console.warn('ClashOmega: Native Host cooldown for', NATIVE_HOST_COOLDOWN_MS, 'ms');
+    } else {
+      // v1.4.8 修复：非超时错误也输出日志，解决"无日志"排查盲区
+      // 场景：Native Host 进程立即退出（PowerShell 启动失败）/ 未注册 / allowed_origins 不匹配
+      // 这些错误原先静默返回，导致 popup 显示"未安装"但 Console 无任何线索
+      console.warn('ClashOmega: Native Host error:', e.message, '(action:', message.action + ')');
     }
     return { success: false, error: e.message };
   } finally {
