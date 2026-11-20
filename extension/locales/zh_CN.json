@@ -43,6 +43,8 @@
   "quick_add_confirm": "确认添加",
   "quick_add_loading": "加载代理组中...",
   "quick_add_select_policy": "请先选择代理组",
+  "quick_add_invalid_domain": "域名格式非法：仅允许字母、数字、点、连字符、下划线与通配符",
+  "file_op_not_supported_fallback": "当前客户端不支持文件操作",
   "quick_add_domain_placeholder": "输入域名",
 
   "batch_detect_title": "检测页面域名并智能分组",
@@ -54,6 +56,7 @@
   "batch_detect_select_all": "全选",
   "batch_detect_deselect_all": "取消",
   "batch_detect_batch_add": "批量添加",
+  "batch_detect_truncated_hint": "（域名过多，仅采集前 500 个）",
 
   "rule_type_domain": "DOMAIN",
   "rule_type_domain_suffix": "DOMAIN-SUFFIX",

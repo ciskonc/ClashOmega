@@ -1,0 +1,9 @@
+{
+    "name": "com.clash.omega",
+    "description": "ClashOmega Native Messaging Host",
+    "type": "stdio",
+    "path": "%HOST_DIR%\\clash_rules_manager.bat",
+    "allowed_origins": [
+        "chrome-extension://%EXTENSION_ID%/"
+    ]
+}

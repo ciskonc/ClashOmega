@@ -18,8 +18,14 @@ const I18N = (() => {
    */
   async function init() {
     // 1. 尝试从 storage 读取用户设置的语言
-    const config = await chrome.storage.local.get('settings');
-    let userLang = config.settings?.language;
+    // v1.4.9：storage 异常时不让 init() reject，避免中断 popup 初始化链
+    let userLang;
+    try {
+      const config = await chrome.storage.local.get('settings');
+      userLang = config.settings?.language;
+    } catch (e) {
+      console.warn('ClashOmega: failed to read language setting:', e && e.message);
+    }
 
     // 2. 如果用户未设置或设置无效，使用浏览器语言
     if (!userLang || !SUPPORTED_LANGS.includes(userLang)) {
@@ -64,11 +70,12 @@ const I18N = (() => {
   async function setLanguage(lang) {
     if (!SUPPORTED_LANGS.includes(lang)) return;
     await loadLanguage(lang);
-    // 保存到 storage
-    const config = await chrome.storage.local.get('settings');
-    if (!config.settings) config.settings = {};
-    config.settings.language = lang;
-    await chrome.storage.local.set({ settings: config.settings });
+    // v1.4.9 修复：改走 updateSettings 原子更新
+    // 原为「读整对象 → 只改 language → 整对象写回」，会与 popup 的 saveSettings 互相覆盖
+    // （用户表现为「刚保存的 secret 又变回旧值」且无任何报错）
+    await updateSettings((settings) => {
+      settings.language = lang;
+    });
   }
 
   /**
@@ -80,7 +87,12 @@ const I18N = (() => {
   function t(key, ...args) {
     let text = messages[key] !== undefined ? messages[key] : key;
     args.forEach((arg, i) => {
-      text = text.replace(`{${i}}`, arg);
+      // v1.4.9 修复：
+      // 1) String.replace 的字符串模式只替换首个匹配 → 同一占位符出现两次时第二处残留 {0}
+      // 2) 替换串中的美元特殊模式会被展开 → 用户可控文本（域名/规则名）含该符号时文案错乱
+      // 改用 split/join 手工替换：无正则、无特殊模式语义、全部出现都替换
+      const placeholder = '{' + i + '}';
+      text = text.split(placeholder).join(String(arg));
     });
     return text;
   }

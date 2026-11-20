@@ -188,7 +188,7 @@
         </div>
         <div class="settings-group" id="settings-group-connection">
           <div class="settings-group-title" data-i18n="settings_group_connection">连接配置</div>
-          <label data-i18n="settings_api_host">Clash 外部控制地址</label>
+          <label for="settings-api-host" data-i18n="settings_api_host">Clash 外部控制地址</label>
           <div class="settings-row">
             <input class="md3-text-field" id="settings-api-host" type="text" placeholder="127.0.0.1" style="flex: 2;">
             <input class="md3-text-field" id="settings-api-port" type="number" placeholder="9090" style="flex: 1;">
@@ -197,10 +197,10 @@
           <!-- Clash API 地址输入框（在提示下方，手动编辑入口） -->
           <input class="md3-text-field" id="settings-api-url" type="text" placeholder="http://127.0.0.1:9090">
 
-          <label data-i18n="settings_secret">API 密钥</label>
+          <label for="settings-secret" data-i18n="settings_secret">API 密钥</label>
           <input class="md3-text-field" id="settings-secret" type="password" placeholder="(可选)" data-i18n-placeholder="settings_secret_placeholder">
 
-          <label data-i18n="settings_config_path">配置文件路径</label>
+          <label for="settings-config-path" data-i18n="settings_config_path">配置文件路径</label>
           <div class="settings-row">
             <input class="md3-text-field" id="settings-config-path" type="text" placeholder="自动检测" style="flex: 1;" data-i18n-placeholder="settings_config_path_placeholder">
             <button class="md3-button md3-button--outlined" id="settings-detect-config" data-i18n="settings_detect" style="white-space: nowrap;">自动检测</button>
@@ -230,17 +230,17 @@
       <div class="settings-sub-tab-content" data-sub-tab-content="appearance">
         <div class="settings-group" id="settings-group-appearance">
           <div class="settings-group-title" data-i18n="settings_group_appearance">界面外观</div>
-          <label data-i18n="settings_language">界面语言</label>
+          <label for="language-select" data-i18n="settings_language">界面语言</label>
           <select class="md3-select" id="language-select" style="width: 100%;"></select>
 
-          <label data-i18n="settings_theme">界面主题</label>
+          <label for="theme-select" data-i18n="settings_theme">界面主题</label>
           <select class="md3-select" id="theme-select" style="width: 100%;">
             <option value="auto" data-i18n="theme_auto">跟随系统</option>
             <option value="md3-light" data-i18n="theme_md3_light">MD3 亮色</option>
             <option value="md3-dark" data-i18n="theme_md3_dark">MD3 暗色</option>
           </select>
 
-          <label data-i18n="settings_zoom">面板缩放比例</label>
+          <label for="zoom-slider" data-i18n="settings_zoom">面板缩放比例</label>
           <div class="settings-hint" data-i18n="settings_zoom_hint">调整字体和界面元素大小（80%-150%）</div>
           <div class="settings-row" style="align-items: center;">
             <input type="range" id="zoom-slider" min="80" max="150" step="5" value="100" style="flex: 1;">
@@ -270,7 +270,7 @@
       <div class="settings-sub-tab-content" data-sub-tab-content="rules">
         <div class="settings-group" id="settings-group-rules">
           <div class="settings-group-title" data-i18n="settings_group_rules">规则展示</div>
-          <label data-i18n="settings_rule_display">额外脚本规则展示模式</label>
+          <label for="rule-display-mode" data-i18n="settings_rule_display">额外脚本规则展示模式</label>
           <div class="settings-hint" data-i18n="settings_rule_display_hint">规则数量较多时的展示方式</div>
           <select class="md3-select" id="rule-display-mode" style="width: 100%;">
             <option value="auto" data-i18n="rule_display_auto">自动（按阈值切换）</option>
@@ -278,7 +278,7 @@
             <option value="collapse" data-i18n="rule_display_collapse">折叠展示</option>
             <option value="expand" data-i18n="rule_display_expand">全部展开</option>
           </select>
-          <label data-i18n="settings_rule_threshold">每页显示条数</label>
+          <label for="rule-page-size" data-i18n="settings_rule_threshold">每页显示条数</label>
           <div class="settings-hint" data-i18n="settings_rule_threshold_hint">自动模式下规则数超过此值时分页展示；分页模式下每页显示此数量</div>
           <select class="md3-select" id="rule-page-size" style="width: 100%;">
             <option value="10">10</option>

@@ -442,9 +442,13 @@ async function handleMessage(message) {
       // ──── 域名检测 ────
       case 'getPageDomains': {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        // v1.4.9：先从 storage.session 恢复上次 SW 生命周期采集的数据（幂等，内存有数据则立即返回）
+        // 背景：SW 空闲 30s 被杀后内存 Map 清零，不恢复会导致"页面域名提取"静默失效
+        await restoreTabDomainsFromSession();
         const domains = getTabDomains(tab.id);
         const count = getTabDomainCount(tab.id);
-        return { success: true, domains, count };
+        const truncated = getTabDomainTruncated(tab.id);
+        return { success: true, domains, count, truncated };
       }
 
       // ──── 域名连接查询（通过 Clash API /connections 查询域名实际匹配的规则）────
@@ -469,7 +473,12 @@ async function handleMessage(message) {
         if (message.settings) {
           delete message.settings._lastClientType;
         }
-        await chrome.storage.local.set({ settings: message.settings });
+        // v1.4.9 修复：改走 updateSettings 原子更新
+        // 原为整对象 set，与 i18n.setLanguage / 其他写入方并发时会丢失更新
+        // （用户表现为"刚保存的 secret 又变回旧值"且无任何报错）
+        await updateSettings((settings) => {
+          Object.assign(settings, message.settings || {});
+        });
         // 用户修改设置时清除会话级缓存的 API URL，强制重新检测
         await clearCachedApiUrl();
         return { success: true };
@@ -702,4 +711,28 @@ async function setActionIcon(mode) {
   }
 }
 
-init();
+// ──── v1.4.9：SW 生命周期哨兵 ────
+// 原实现顶层无条件 init()：MV3 下每次事件唤醒 SW 都重跑全量探测
+// （clash 模式下 = getClashConfig + 最多 5 端口并行 fetch + setProxyMode 重写 + storage 写入），
+// 而本扩展注册了 <all_urls> webRequest 监听，任意页面请求都会唤醒 SW → 每天 数十~上百次 无谓探测风暴，
+// 且 init 内的 storage 写入与 popup 的设置读写存在竞态窗口。
+// 现改为 storage.session 哨兵：每浏览器会话只跑一次完整 init
+// （session 浏览器关闭即清空 → 下次启动哨兵不存在 → 自然重跑，无需额外 onStartup 监听）。
+// SW 因事件唤醒时跳过全量探测是安全的：chrome.proxy.settings 与 action 图标由浏览器持久管理，SW 重启不丢。
+(async () => {
+  try {
+    let sessionOk = false;
+    try {
+      const flag = await chrome.storage.session.get('__initDone');
+      sessionOk = flag && flag.__initDone === true;
+    } catch (e) {
+      // storage.session 不可用（旧内核）：退回原行为，每次 SW 启动都跑 init
+    }
+    if (!sessionOk) {
+      await init();
+      try { await chrome.storage.session.set({ __initDone: true }); } catch (e) { /* 静默 */ }
+    }
+  } catch (e) {
+    console.warn('ClashOmega: init failed:', e && e.message);
+  }
+})();

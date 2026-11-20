@@ -33,6 +33,35 @@ let _nativeHostQueue = Promise.resolve();
 let _nativeHostCooldownUntil = 0;
 const NATIVE_HOST_COOLDOWN_MS = 30000;  // 30 秒冷却期
 
+// v1.4.9：冷却截止时间持久化到 storage.session
+// 背景：冷却态原存 SW 内存变量，SW 空闲被杀后归零 → 30s 保护窗被 SW 生命周期架空，
+// 卡死的 PowerShell 可被立即再次拉起。session 语义匹配：SW 重启保留、浏览器关闭清空。
+function sessionAvailableSafe() {
+  try { return !!(chrome.storage && chrome.storage.session); } catch (e) { return false; }
+}
+
+// 读冷却态：内存值有效则直接用；否则尝试从 session 恢复（SW 冷启动后内存归零的场景）
+async function getCooldownUntil() {
+  if (_nativeHostCooldownUntil > Date.now()) return _nativeHostCooldownUntil;
+  if (sessionAvailableSafe()) {
+    try {
+      const s = await chrome.storage.session.get('nativeHostCooldownUntil');
+      if (s && s.nativeHostCooldownUntil && s.nativeHostCooldownUntil > Date.now()) {
+        _nativeHostCooldownUntil = s.nativeHostCooldownUntil;
+      }
+    } catch (e) { /* 不可用：退回内存态 */ }
+  }
+  return _nativeHostCooldownUntil;
+}
+
+// 写冷却态：内存 + session 双写（session 写失败不影响内存保护）
+function setCooldownUntil(until) {
+  _nativeHostCooldownUntil = until;
+  if (sessionAvailableSafe()) {
+    chrome.storage.session.set({ nativeHostCooldownUntil: until }).catch(() => {});
+  }
+}
+
 /**
  * 安全发送消息给 Native Host
  * Native Host 不可用时返回 { success: false, error } 而非抛出异常
@@ -47,10 +76,16 @@ const NATIVE_HOST_COOLDOWN_MS = 30000;  // 30 秒冷却期
  * @param {object} message - 消息对象
  * @returns {Promise<object>} - Native Host 响应或错误对象
  */
-async function sendToNativeSafe(message) {
-  // 冷却期检查（快速拒绝，不排队）
+async function sendToNativeSafe(message, options = {}) {
+  // exemptFromCooldown=true：仅用于探活类 action（ping / getSystemProxy）
+  //   - 跳过 30s 冷却期：popup 每 5s 轮询若被冷却拒绝，会把"宿主临时不可用"误渲染为"未安装"，
+  //     造成用户误判（v1.4.5 修复记录过同类误伤事故）
+  //   - 但仍然进入队列 + 保留超时：保证任意时刻只有 1 个 Native Host 进程在途，且卡死时不永久挂起
+  const exemptFromCooldown = options.exemptFromCooldown === true;
+
+  // 冷却期检查（快速拒绝，不排队）；v1.4.9：读持久化冷却态
   const now = Date.now();
-  if (now < _nativeHostCooldownUntil) {
+  if (!exemptFromCooldown && now < (await getCooldownUntil())) {
     return { success: false, error: 'native_host_cooldown' };
   }
 
@@ -64,7 +99,7 @@ async function sendToNativeSafe(message) {
   let timeoutId;
   try {
     // 队列等待期间可能进入了冷却期，出队后再次检查
-    if (Date.now() < _nativeHostCooldownUntil) {
+    if (!exemptFromCooldown && Date.now() < (await getCooldownUntil())) {
       return { success: false, error: 'native_host_cooldown' };
     }
 
@@ -76,8 +111,8 @@ async function sendToNativeSafe(message) {
   } catch (e) {
     if (e.message === 'native_host_timeout') {
       console.warn('ClashOmega: Native Host timeout (process may be stuck):', message.action);
-      // C2 修复（v1.4.6）：超时后进入 30s 冷却期
-      _nativeHostCooldownUntil = Date.now() + NATIVE_HOST_COOLDOWN_MS;
+      // C2 修复（v1.4.6）：超时后进入 30s 冷却期；v1.4.9：双写 session 防 SW 重启后保护窗失效
+      setCooldownUntil(Date.now() + NATIVE_HOST_COOLDOWN_MS);
       console.warn('ClashOmega: Native Host cooldown for', NATIVE_HOST_COOLDOWN_MS, 'ms');
     } else {
       // v1.4.8 修复：非超时错误也输出日志，解决"无日志"排查盲区
@@ -152,7 +187,10 @@ async function setConfigPath(path) {
  */
 async function checkNativeHost() {
   try {
-    const result = await sendToNative({ action: 'ping' });
+    // v1.4.9 修复：改走 sendToNativeSafe wrapper
+    // 原为裸 sendToNative，绕过队列/超时/冷却期，违反 AGENTS.md 强制约束；
+    // 且 PowerShell 卡死时 Promise 永不 settle → getStatus 整链永久挂起
+    const result = await sendToNativeSafe({ action: 'ping' }, { exemptFromCooldown: true });
     return result?.success === true;
   } catch {
     return false;
@@ -179,7 +217,10 @@ async function getSystemProxyStatus() {
   // 优先尝试 Native Host
   let nativeHostAvailable = false;
   try {
-    const result = await sendToNative({ action: 'getSystemProxy' });
+    // v1.4.9 修复：改走 sendToNativeSafe wrapper（保留队列与 10s 超时，跳过冷却期）
+    // 原为裸 sendToNative 且无超时 → Native Host 卡死时本 Promise 永不 settle，
+    // popup「系统代理」栏会永久停在"加载中..."
+    const result = await sendToNativeSafe({ action: 'getSystemProxy' }, { exemptFromCooldown: true });
     if (result && result.success) {
       // Native Host 可用且成功返回
       return { ...result, nativeHostAvailable: true };

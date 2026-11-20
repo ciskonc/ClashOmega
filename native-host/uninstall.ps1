@@ -38,8 +38,13 @@ if ($execPolicy -eq 'Restricted' -or $execPolicy -eq 'AllSigned') {
 }
 
 # ── 删除注册表项 ──
+# v1.4.9：补齐 Chromium 系全部浏览器的宿主键
+# （install.ps1 现按浏览器逐个注册，卸载必须同步清理，否则 Edge/Brave 会残留失效注册）
 $regPaths = @(
     'HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.clash.omega',
+    'HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\com.clash.omega',
+    'HKCU:\Software\BraveSoftware\Brave-Browser\NativeMessagingHosts\com.clash.omega',
+    'HKCU:\Software\Chromium\NativeMessagingHosts\com.clash.omega',
     'HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.clash.manager'
 )
 

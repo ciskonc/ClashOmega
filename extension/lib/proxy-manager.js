@@ -70,26 +70,35 @@ async function getCurrentProxyMode() {
   return config.settings?.currentMode || PROXY_MODES.SYSTEM;
 }
 
+// 默认设置（单一事实源）
+// v1.4.9：抽成常量，供 getSettings() 浅合并与各处回显共用，
+// 消除"默认值在 background.js / proxy-manager.js / popup.js 三处重复硬编码"的漂移
+const DEFAULT_SETTINGS = {
+  currentMode: 'system',
+  clashApiUrl: 'http://127.0.0.1:9090',
+  clashSecret: '',
+  clashApiHost: '127.0.0.1',
+  clashApiPort: 9090,
+  clashConfigPath: '',
+  writeToYaml: false,
+  disableFallback: false,
+  language: 'zh_CN'
+};
+
 /**
  * 获取设置
+ * v1.4.9 修复：settings 存在但缺字段时不再直接返回原对象，
+ * 而是与 DEFAULT_SETTINGS 浅合并，保证 clashApiUrl 始终为合法字符串
+ * （原逻辑下缺 clashApiUrl 会让 clash-api.js 的 baseUrl.match() 抛 TypeError，
+ *   导致 getStatus / detectClashClient 整链 reject，popup 状态区永不更新）
  * @returns {Promise<object>}
  */
 async function getSettings() {
   const config = await chrome.storage.local.get('settings');
   if (!config.settings) {
-    return {
-      currentMode: 'system',
-      clashApiUrl: 'http://127.0.0.1:9090',
-      clashSecret: '',
-      clashApiHost: '127.0.0.1',
-      clashApiPort: 9090,
-      clashConfigPath: '',
-      writeToYaml: false,
-      disableFallback: false,
-      language: 'zh_CN'
-    };
+    return { ...DEFAULT_SETTINGS };
   }
-  const settings = config.settings;
+  const settings = { ...DEFAULT_SETTINGS, ...config.settings };
   let migrated = false;
 
   // 数据迁移1：旧字段名 clashProxyHost/clashProxyPort → clashApiHost/clashApiPort
@@ -118,4 +127,26 @@ async function getSettings() {
     await chrome.storage.local.set({ settings });
   }
   return settings;
+}
+
+/**
+ * 原子更新设置（读-改-写串行化）
+ * v1.4.9 修复：此前 saveSettings（popup 整对象写）与 setLanguage（i18n 只改 language 后整对象写）
+ * 存在 lost update —— 后写方覆盖先写方，用户表现为"刚保存的 secret 又变回旧值"且无任何报错
+ * 本函数用模块级 Promise 链串行化所有 settings 写入，并保证以最新值为基准做合并
+ * @param {(s: object) => void} mutator - 修改 settings 对象的回调
+ * @returns {Promise<object>} 更新后的完整 settings
+ */
+let _settingsWriteChain = Promise.resolve();
+async function updateSettings(mutator) {
+  const task = _settingsWriteChain.then(async () => {
+    const config = await chrome.storage.local.get('settings');
+    const settings = { ...DEFAULT_SETTINGS, ...(config.settings || {}) };
+    await mutator(settings);
+    await chrome.storage.local.set({ settings });
+    return settings;
+  });
+  // 无论成功失败都要让链条继续，避免一次失败卡死后续所有写入
+  _settingsWriteChain = task.then(() => undefined, () => undefined);
+  return await task;
 }

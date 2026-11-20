@@ -11,6 +11,36 @@
 const CLASH_API_PORTS = [9090, 9097, 9098, 9091, 8080];
 
 /**
+ * 解析 API 基址的 scheme 与 hostname
+ * v1.4.9 修复：
+ * 1) 原实现用正则 /^https?:\/\/([^:/]+)/ 提取 host，遇到 IPv6 字面量 http://[::1]:9090
+ *    会提取出 "["，带 userinfo 的 URL 会提取出用户名 → 回退 URL 畸形 → fetch 静默失败
+ * 2) 原实现回退 URL 硬编码 http://，当用户配置 https:// 时会把 Bearer secret 明文下发
+ *    （协议降级泄露），且远程 TLS 内核永远探测不通
+ * 现改用标准 URL 解析器，保留 IPv6 方括号、继承协议、显式拒绝含凭据的 URL
+ *
+ * @param {string} baseUrl - API 基址
+ * @returns {{scheme: string, host: string, valid: boolean}}
+ */
+function parseApiBase(baseUrl) {
+  const fallback = { scheme: 'http', host: '127.0.0.1', valid: false };
+  if (!baseUrl || typeof baseUrl !== 'string') return fallback;
+  try {
+    const u = new URL(baseUrl);
+    // 含 userinfo 的 URL（http://user:pw@host:9090）拒绝使用，避免凭据混入回退探测
+    if (u.username || u.password) return fallback;
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return fallback;
+    return {
+      scheme: u.protocol.replace(':', ''),
+      host: u.hostname,   // hostname 对 IPv6 保留方括号，拼接后仍是合法 URL
+      valid: true
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+/**
  * 获取 Clash API 基础 URL 和认证头
  *
  * 会话级缓存策略（避免每次操作都重复尝试错误端口）：
@@ -69,15 +99,18 @@ async function clearCachedApiUrl() {
  * 超时 1000ms（localhost HTTP 请求足够，避免端口不通时长时间阻塞）
  */
 async function tryFetch(url, headers) {
+  let timer;
   try {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 1000);
+    timer = setTimeout(() => ctrl.abort(), 1000);
     const response = await fetch(url, { headers, signal: ctrl.signal });
-    clearTimeout(timer);
     if (!response.ok) return null;
     return await response.json();
   } catch {
     return null;
+  } finally {
+    // v1.4.9：定时器在异常路径也清理（DNS 失败/连接被拒时原实现会残留空转定时器）
+    if (timer) clearTimeout(timer);
   }
 }
 
@@ -128,11 +161,11 @@ async function clashGet(endpoint, options) {
 
   // 用户配置的 URL 不通时，并行探测其他端口获取数据（竞速，最快响应的端口立即返回）
   // 注意：不再将探测结果写回 storage，避免覆盖用户主动设置的 API 地址
-  // 从 baseUrl 中提取 host，确保回退探测使用用户配置的 host 而非硬编码 127.0.0.1
-  const hostMatch = baseUrl.match(/^https?:\/\/([^:/]+)/);
-  const host = hostMatch ? hostMatch[1] : '127.0.0.1';
+  // 从 baseUrl 中提取 scheme + host，确保回退探测使用用户配置的 host 而非硬编码 127.0.0.1
+  // v1.4.9：回退 URL 继承 baseUrl 的协议（https 场景不再降级为 http，避免 Bearer secret 明文泄露）
+  const { scheme, host } = parseApiBase(baseUrl);
   const candidateUrls = CLASH_API_PORTS
-    .map(port => `http://${host}:${port}${endpoint}`)
+    .map(port => `${scheme}://${host}:${port}${endpoint}`)
     .filter(testUrl => testUrl !== `${baseUrl}${endpoint}`); // 排除已尝试过的
   const found = await tryFetchParallel(candidateUrls, headers);
   if (found) {
@@ -147,14 +180,38 @@ async function clashGet(endpoint, options) {
  * @returns {Promise<boolean>} true=成功（HTTP 2xx），false=失败（HTTP 错误或网络异常）
  */
 async function tryPost(url, headers) {
+  let timer;
   try {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 3000);
+    timer = setTimeout(() => ctrl.abort(), 3000);
     const response = await fetch(url, { method: 'POST', headers, signal: ctrl.signal });
-    clearTimeout(timer);
     return response.ok;
   } catch {
     return false;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * 并行探测多个端口的 POST 成功与否
+ * v1.4.9：与 tryFetchParallel 同构，避免串行探测造成 UI 长阻塞
+ * @param {string[]} urls - 要探测的 URL 列表
+ * @param {object} headers - 请求头
+ * @returns {Promise<string|null>} 成功的 URL；全部失败返回 null
+ */
+async function tryPostParallel(urls, headers) {
+  if (!urls.length) return null;
+  const tasks = urls.map(url =>
+    tryPost(url, headers).then(ok => {
+      if (ok) return url;
+      throw new Error('post failed');
+    })
+  );
+  try {
+    return await Promise.any(tasks);
+  } catch {
+    return null;
   }
 }
 
@@ -170,16 +227,16 @@ async function clashPost(endpoint) {
   console.warn(`ClashOmega: POST ${endpoint} failed at ${url}`);
 
   // 用户配置的 URL 不通时，临时探测其他端口（不覆盖用户设置）
-  // 从 baseUrl 中提取 host，确保回退探测使用用户配置的 host 而非硬编码 127.0.0.1
-  const hostMatch = baseUrl.match(/^https?:\/\/([^:/]+)/);
-  const host = hostMatch ? hostMatch[1] : '127.0.0.1';
-  for (const port of CLASH_API_PORTS) {
-    const testUrl = `http://${host}:${port}${endpoint}`;
-    if (testUrl === url) continue;
-    if (await tryPost(testUrl, headers)) {
-      console.log(`ClashOmega: temp-detected API at http://${host}:${port} (via POST, not saved)`);
-      return true;
-    }
+  // v1.4.9：改为并行探测（原串行 for 循环 5 端口 × 3s = 最坏 15s 阻塞 UI），
+  // 且回退 URL 继承 baseUrl 协议，避免 https 场景降级为 http 泄露 secret
+  const { scheme, host } = parseApiBase(baseUrl);
+  const candidateUrls = CLASH_API_PORTS
+    .map(port => `${scheme}://${host}:${port}${endpoint}`)
+    .filter(testUrl => testUrl !== url);
+  const found = await tryPostParallel(candidateUrls, headers);
+  if (found) {
+    console.log(`ClashOmega: temp-detected API at ${found} (via POST, not saved)`);
+    return true;
   }
   return false;
 }

@@ -6,7 +6,7 @@
 
 <img src="extension/icons/logo128_white.png" width="128" height="128" alt="ClashOmega Logo">
 
-[![Version](https://img.shields.io/badge/version-1.4.8-blue?style=flat-square)](https://github.com/ciskonc/ClashOmega)
+[![Version](https://img.shields.io/badge/version-1.4.9-blue?style=flat-square)](https://github.com/ciskonc/ClashOmega)
 [![Platform](https://img.shields.io/badge/platform-Chromium%20Browsers-green?style=flat-square)](https://github.com/ciskonc/ClashOmega)
 [![License](https://img.shields.io/badge/license-MIT-orange?style=flat-square)](LICENSE)
 [![Manifest](https://img.shields.io/badge/Manifest-V3-purple?style=flat-square)](https://developer.chrome.com/docs/extensions/mv3/intro/)
@@ -210,7 +210,7 @@ Sing-Box、Clash（Meta/Mihomo）、Xray/V2Ray、Surge
 
 - **纯文件系统**：所有状态、记忆、知识存储在磁盘文件中，不依赖运行时内存
 - **多会话协同**：不同对话独立 Agent 实例，通过文件系统交互
-- **Skill/Loop/Agent 模块化**：可演化的工具体系，持续积累经验与坑点
+- **Loop/Agent 模块化**：可演化的工具体系，持续积累经验与坑点（Skill 走 TRAE 原生机制）
 - **Maker/Checker 分离**：同一任务不在同一会话中执行+验证
 
 </details>

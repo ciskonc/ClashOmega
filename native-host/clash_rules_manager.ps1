@@ -1,4 +1,4 @@
-﻿# Clash Rules Manager - Native Messaging Host (PowerShell)
+# Clash Rules Manager - Native Messaging Host (PowerShell)
 # 被 Chrome 按需调用，读写 Clash 配置文件中的 rules 字段。
 # 协议: stdin/stdout 二进制消息 (4字节小端序长度 + UTF-8 JSON)
 # 依赖: 仅 Windows 内置 PowerShell，零额外安装
@@ -187,11 +187,23 @@ function Get-ConfigPath {
     foreach ($proc in $clashProcs) {
         if ($proc.CommandLine) {
             $cmdLine = $proc.CommandLine
-            if ($cmdLine -match '-f\s+"?([^\s"]+\.ya?ml)"?') {
+            # v1.4.9 修复：分两种形态匹配（原字符类排除空格 → 含空格的带引号路径只截到第一个空格）
+            if ($cmdLine -match '-f\s+"([^"]+\.ya?ml)"') {
+                # 带引号路径（可含空格）
                 $p = $matches[1]
                 if (Test-Path $p) { return $p }
             }
-            if ($cmdLine -match '-d\s+"?([^\s"]+)"?') {
+            if ($cmdLine -match '-f\s+([^\s"]+\.ya?ml)') {
+                # 无引号路径（不含空格）
+                $p = $matches[1]
+                if (Test-Path $p) { return $p }
+            }
+            if ($cmdLine -match '-d\s+"([^"]+)"') {
+                $d = $matches[1]
+                $p = Join-Path $d "config.yaml"
+                if (Test-Path $p) { return $p }
+            }
+            if ($cmdLine -match '-d\s+([^\s"]+)') {
                 $d = $matches[1]
                 $p = Join-Path $d "config.yaml"
                 if (Test-Path $p) { return $p }
@@ -477,7 +489,21 @@ function Write-Config($path, $content) {
         Copy-Item -Path $path -Destination $backup -Force
     }
     $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
-    [System.IO.File]::WriteAllText($path, $content, $utf8NoBom)
+    # v1.4.9 修复：原子写盘 —— 原实现原地 WriteAllText，进程被杀/断电/磁盘满时会留下半截文件
+    # 现改为写同目录临时文件 → File.Replace 原子替换（Replace 同时保留备份，失败时原文件不受影响）
+    $tmpPath = "$path.tmp"
+    [System.IO.File]::WriteAllText($tmpPath, $content, $utf8NoBom)
+    try {
+        if ([System.IO.File]::Exists($path)) {
+            [System.IO.File]::Replace($tmpPath, $path, $null)
+        } else {
+            [System.IO.File]::Move($tmpPath, $path)
+        }
+    } catch {
+        # Replace 失败（跨平台/文件占用等边缘场景）回退为直接写，保持旧行为
+        try { [System.IO.File]::Delete($tmpPath) } catch { }
+        [System.IO.File]::WriteAllText($path, $content, $utf8NoBom)
+    }
 }
 
 function Parse-Rules($content) {
@@ -527,6 +553,29 @@ function Parse-Rules($content) {
     return ,$rules.ToArray()
 }
 
+# ──── v1.4.9 安全工具：规则值转义 ────
+# 规则文本来自扩展输入（用户粘贴），未经转义直接写入 YAML / .js 会破坏文件结构。
+# YAML 单引号标量内，单引号必须双写；控制字符与换行必须剥离。
+function ConvertTo-YamlScalar($value) {
+    if ($null -eq $value) { return "''" }
+    $v = [string]$value
+    $v = $v -replace "[\x00-\x08\x0B\x0C\x0E-\x1F]", ''
+    $v = $v -replace "\r?\n", ' '
+    $v = $v.Replace("'", "''")
+    return "'$v'"
+}
+
+# 写 .js 脚本文件时规则值放在双引号字符串中 → 需转义反斜杠/双引号/换行
+function ConvertTo-JsScalar($value) {
+    if ($null -eq $value) { return '""' }
+    $v = [string]$value
+    $v = $v.Replace('\', '\\')
+    $v = $v.Replace('"', '\"')
+    $v = $v -replace "\r?\n", '\n'
+    $v = $v -replace "[\x00-\x08\x0B\x0C\x0E-\x1F]", ''
+    return '"' + $v + '"'
+}
+
 function Add-Rule($content, $rule) {
     # 去除规则首尾的单引号/双引号，防止 YAML 双引号转义问题（''xxx'' 会被解析为空字符串+xxx）
     $rule = $rule.Trim().TrimStart("'").TrimEnd("'").TrimStart('"').TrimEnd('"').Trim()
@@ -540,10 +589,19 @@ function Add-Rule($content, $rule) {
 
     if ($isProfile) {
         $lines = [System.Collections.ArrayList]::new($content -split "`n")
-        $inAppend = $false; $insertIdx = -1; $overrideIdx = -1; $lastSameTypeIdx = -1
+        $inAppend = $false; $insertIdx = -1; $overrideIdx = -1; $lastSameTypeIdx = -1; $modified = $false
         for ($i = 0; $i -lt $lines.Count; $i++) {
             $trimmed = $lines[$i].Trim()
             if ($trimmed -eq 'append:') { $inAppend = $true; continue }
+            # v1.4.9 修复：行内空数组 append: [] / prepend: []
+            # 原逻辑只认 'append:'，遇到 'append: []' 时 inAppend 永不进入 → 规则静默不写入且假报成功
+            if ($trimmed -match '^(append|prepend)\s*:\s*\[\s*\]$') {
+                $lines[$i] = ($trimmed -replace ':\s*\[\s*\]$', ':')
+                $inAppend = $true
+                $insertIdx = $i + 1
+                $modified = $true
+                continue
+            }
             if ($inAppend) {
                 # 检查是否与同类型+同payload规则冲突
                 if ($trimmed -match "^-\s*'?([^,]+),([^,]+),") {
@@ -557,18 +615,31 @@ function Add-Rule($content, $rule) {
                     }
                 }
                 if ($trimmed.StartsWith('- ') -and -not $trimmed.EndsWith('[]')) { $insertIdx = $i + 1; continue }
-                if ($trimmed -eq '[]') { $lines[$i] = "  - '$rule'"; $insertIdx = -1; break }
+                # v1.4.9：空数组条目（裸 '[]' 与缩进 '- []'）→ 就地替换为新规则
+                if ($trimmed -eq '[]' -or $trimmed -match '^- \[\s*\]$') {
+                    $lines[$i] = ('  - ' + (ConvertTo-YamlScalar $rule))
+                    $modified = $true
+                    break
+                }
                 if (-not $trimmed.StartsWith('- ') -and $trimmed -and -not $trimmed.StartsWith('#')) { $insertIdx = $i; break }
             }
         }
+        # v1.4.9：所有写入路径统一走 ConvertTo-YamlScalar 转义
+        $safeRuleLine = '  - ' + (ConvertTo-YamlScalar $rule)
         if ($overrideIdx -ge 0) {
             # 检测到重复规则时，替换原行（而非 Insert 导致重复）
-            $lines[$overrideIdx] = "  - '$rule'"
+            $lines[$overrideIdx] = $safeRuleLine
+            $modified = $true
         } elseif ($lastSameTypeIdx -ge 0) {
-            $lines.Insert($lastSameTypeIdx + 1, "  - '$rule'")
+            $lines.Insert($lastSameTypeIdx + 1, $safeRuleLine)
+            $modified = $true
         } elseif ($insertIdx -ge 0) {
-            $lines.Insert($insertIdx, "  - '$rule'")
+            $lines.Insert($insertIdx, $safeRuleLine)
+            $modified = $true
         }
+        # v1.4.9 修复：完全未找到插入点且内容未被修改时返回 null，
+        # 由调用方如实报错（原实现原样返回内容却仍回复 "Rule added"，属假成功）
+        if (-not $modified) { return $null }
         return $lines -join "`n"
     }
 
@@ -578,6 +649,19 @@ function Add-Rule($content, $rule) {
     for ($i = 0; $i -lt $lines.Count; $i++) {
         $trimmed = $lines[$i].Trim()
         if (-not $inRules) {
+            # v1.4.9 修复：识别行内 flow 数组（rules: []）
+            # 原逻辑把 'rules: []' 当作区块起点 → 新规则以 block 条目插到 flow 数组后 → 产出非法 YAML
+            if ($trimmed -match '^rules\s*:\s*\[\s*\]$') {
+                $lines[$i] = 'rules:'
+                $inRules = $true
+                $insertIdx = $i + 1
+                continue
+            }
+            # 非空 flow 数组（rules: [A, B]）元素本身含逗号，无法安全拆分 →
+            # 明确不支持并返回 null（避免产出语义错误的规则），由调用方报错
+            if ($trimmed -match '^rules\s*:\s*\[.+\]\s*$') {
+                return $null
+            }
             if ($trimmed -eq 'rules:' -or $trimmed.StartsWith('rules:')) { $inRules = $true }
             continue
         }
@@ -600,13 +684,15 @@ function Add-Rule($content, $rule) {
     elseif ($lastSameTypeIdx -ge 0) { $insertIdx = $lastSameTypeIdx + 1 }
     if ($insertIdx -lt 0) { return $content }
     # 确保新规则插入到 MATCH（漏网之鱼）之前，避免被兜底规则拦截
+    # v1.4.9 修复：MATCH 正则加 (?i)，兼容小写 match 配置
     for ($j = 0; $j -lt $lines.Count; $j++) {
-        if ($lines[$j] -match "^\s*-\s*'?MATCH,") {
+        if ($lines[$j] -match "(?i)^\s*-\s*'?MATCH,") {
             if ($insertIdx -gt $j) { $insertIdx = $j }
             break
         }
     }
-    $newLine = if ($rule.Contains(',')) { "  - '$rule'" } else { "  - $rule" }
+    # v1.4.9：统一转义，含逗号的规则也用单引号标量包裹（去掉裸写分支，避免 * / # / [ 开头被 YAML 误解析）
+    $newLine = '  - ' + (ConvertTo-YamlScalar $rule)
     # 检测到重复规则时，替换原行（而非 Insert 导致重复）
     if ($overrideIdx -ge 0) {
         $lines[$overrideIdx] = $newLine
@@ -960,8 +1046,10 @@ function Add-ScriptRule($rule) {
     }
 
     # 6. 插入新规则到数组末尾（] 之前）
-    #    使用 2 空格缩进 + 双引号包裹（与现有格式对齐）
-    $newLine = "    `"$rule`","
+    #    使用 4 空格缩进 + 双引号包裹（与现有格式对齐）
+    # v1.4.9 修复：规则值必须转义后再写入 —— 原实现直接拼接双引号字符串，
+    # 含双引号/反斜杠/换行的规则会提前终止 JS 字符串 → 整个 script.js 语法错误作废
+    $newLine = '    ' + (ConvertTo-JsScalar $rule) + ','
     $lines.Insert($arrayEnd, $newLine)
 
     # 7. 写回文件
@@ -1080,7 +1168,9 @@ function BatchAdd-ScriptRules($rules) {
     }
 
     # 5. 收集已有规则
-    $existing = [System.Collections.Generic.HashSet[string]]::new()
+    # v1.4.9 修复：默认比较器区分大小写 → mihomo 域名匹配不区分大小写，
+    # DOMAIN,Google.COM,P 与 DOMAIN,google.com,P 会被当成不同规则重复插入
+    $existing = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     for ($i = $arrayStart + 1; $i -lt $arrayEnd; $i++) {
         $trimmed = $lines[$i].Trim()
         if ($trimmed -match "^\s*['""]([^'""]+)['""]") {
@@ -1093,7 +1183,8 @@ function BatchAdd-ScriptRules($rules) {
     $insertIdx = $arrayEnd
     foreach ($rule in $cleanRules) {
         if (-not $existing.Contains($rule)) {
-            $newLine = "    `"$rule`","
+            # v1.4.9 修复：规则值必须转义后再写入（双引号/反斜杠/换行会破坏 script.js 语法）
+            $newLine = '    ' + (ConvertTo-JsScalar $rule) + ','
             $lines.Insert($insertIdx, $newLine)
             $insertIdx++
             $added++
@@ -1139,6 +1230,29 @@ function Sync-SnapshotRules($snapshotPath, $rules) {
     for ($i = 0; $i -lt $lines.Count; $i++) {
         $trimmed = $lines[$i].Trim()
         if (-not $inRules) {
+            # v1.4.9 修复：识别行内 flow 数组（rules: [] / rules: [A, B]）
+            # 原逻辑把 'rules: []' 当作区块起点 → 旧条目移除后新 block 条目插到 flow 数组后 → 快照损坏
+            if ($trimmed -match '^rules\s*:\s*\[\s*\]$') {
+                $lines[$i] = 'rules:'
+                $inRules = $true
+                $rulesStart = $i
+                $rulesEnd = $i + 1
+                continue
+            }
+            if ($trimmed -match '^rules\s*:\s*\[(.+)\]\s*$') {
+                $flowItems = $Matches[1] -split ','
+                $rebuilt = @('rules:')
+                foreach ($it in $flowItems) {
+                    $t = $it.Trim()
+                    if ($t) { $rebuilt += ('  - ' + $t) }
+                }
+                $lines[$i] = $rebuilt[0]
+                for ($k = 1; $k -lt $rebuilt.Count; $k++) { $lines.Insert($i + $k, $rebuilt[$k]) }
+                $inRules = $true
+                $rulesStart = $i
+                $rulesEnd = $i + $rebuilt.Count
+                continue
+            }
             if ($trimmed -eq 'rules:' -or $trimmed.StartsWith('rules:')) {
                 $inRules = $true
                 $rulesStart = $i
@@ -1159,7 +1273,8 @@ function Sync-SnapshotRules($snapshotPath, $rules) {
         # 没有 rules: 区块，在末尾追加
         [void]$lines.Add('rules:')
         foreach ($rule in $rules) {
-            [void]$lines.Add("  - '$rule'")
+            # v1.4.9：统一走 ConvertTo-YamlScalar 转义
+            [void]$lines.Add('  - ' + (ConvertTo-YamlScalar $rule))
         }
     } else {
         # 移除旧的 rules 条目
@@ -1169,7 +1284,8 @@ function Sync-SnapshotRules($snapshotPath, $rules) {
         # 插入新规则
         $insertIdx = $rulesStart + 1
         foreach ($rule in $rules) {
-            $lines.Insert($insertIdx, "  - '$rule'")
+            # v1.4.9：统一走 ConvertTo-YamlScalar 转义
+            $lines.Insert($insertIdx, '  - ' + (ConvertTo-YamlScalar $rule))
             $insertIdx++
         }
     }
@@ -1197,11 +1313,32 @@ function Read-Message {
         $script:stdinStream = [Console]::OpenStandardInput()
     }
     $stdin = $script:stdinStream
+    # v1.4.9 修复：长度前缀 4 字节必须循环读满
+    # 原实现单次 Read 不保证读满，高负载下管道分片返回 1-3 字节 → 整条消息丢失（扩展表现为超时）
     $lenBuffer = New-Object byte[] 4
-    $read = $stdin.Read($lenBuffer, 0, 4)
-    if ($read -lt 4) { return $null }
+    $lenRead = 0
+    while ($lenRead -lt 4) {
+        $r = $stdin.Read($lenBuffer, $lenRead, 4 - $lenRead)
+        if ($r -le 0) { return $null }
+        $lenRead += $r
+    }
     $msgLen = [System.BitConverter]::ToInt32($lenBuffer, 0)
-    if ($msgLen -le 0 -or $msgLen -gt 1048576) { return $null }
+    # v1.4.9 修复：超限消息读掉消息体后由调用方回复明确错误，不再静默退出进程
+    # （原实现 return null → 主循环退出 → 扩展按 10s 超时处理并进 30s 冷却，报因完全失真）
+    if ($msgLen -le 0) { return $null }
+    $script:lastMessageOversized = $false
+    if ($msgLen -gt 1048576) {
+        $script:lastMessageOversized = $true
+        # 读掉并丢弃消息体，保持与扩展的长度前缀协议同步
+        $discard = New-Object byte[] $msgLen
+        $discRead = 0
+        while ($discRead -lt $msgLen) {
+            $r = $stdin.Read($discard, $discRead, $msgLen - $discRead)
+            if ($r -le 0) { return $null }
+            $discRead += $r
+        }
+        return $null
+    }
     $msgBuffer = New-Object byte[] $msgLen
     $totalRead = 0
     while ($totalRead -lt $msgLen) {
@@ -1230,7 +1367,22 @@ function Main {
             # 读取失败（stdin 关闭等），安全退出
             break
         }
-        if ($null -eq $msg) { break }
+        if ($null -eq $msg) {
+            # v1.4.9 修复：超大消息（>1MB）不再静默退出进程
+            # 原实现 break → 进程退出 → 扩展按 10s 超时处理并进 30s 冷却，报因完全失真。
+            # 现在读掉消息体后回复明确的 too large 错误并继续服务下一条消息。
+            if ($script:lastMessageOversized) {
+                $script:lastMessageOversized = $false
+                try {
+                    Send-Message @{ success = $false; error = 'Message too large (limit 1MB). Reduce batch size.' }
+                    continue
+                } catch {
+                    # 回复也失败（管道断开），退出
+                    break
+                }
+            }
+            break
+        }
 
         $action = $msg.action
         if (-not $action) { $action = '' }
@@ -1247,6 +1399,20 @@ function Main {
                 'detectClient' {
                     $result = Detect-Client -ApiUrl $msg.apiUrl
                     Send-Message $result
+                }
+
+                # v1.4.9 修复：补齐 getSnapshotPath action
+                # 原实现中扩展 background.js 的「重启 Clash」Step 4 会调用此 action 走
+                # PUT /configs 无中断热重载，但 host 的 switch 未暴露该 action（只实现了
+                # Get-SnapshotPath 函数），请求落入 default 分支返回 Unknown action，
+                # 导致热重载路径自上线起从未生效，每次都降级为中断式 POST /restart。
+                'getSnapshotPath' {
+                    $snap = Get-SnapshotPath
+                    if ($snap) {
+                        Send-Message @{ success = $true; snapshotPath = $snap }
+                    } else {
+                        Send-Message @{ success = $false; error = 'Snapshot file not found (clash-verge.yaml)' }
+                    }
                 }
 
                 'getRules' {
@@ -1290,8 +1456,15 @@ function Main {
                         try {
                             $content = Read-Config $configPath
                             $newContent = Add-Rule $content $msg.rule
-                            Write-Config $configPath $newContent
-                            Send-Message @{ success = $true; message = 'Rule added'; configPath = $configPath }
+                            # v1.4.9 修复：Add-Rule 返回 null 表示无法安全定位插入点
+                            # （如 rules: [非空 flow] 这类无法安全改写的格式）
+                            # 原实现会原样写回并回复 "Rule added" → 假成功，规则从未落盘
+                            if ($null -eq $newContent) {
+                                Send-Message @{ success = $false; error = 'Cannot safely locate rules section in config file (unsupported inline array format). Rule was NOT written.'; configPath = $configPath }
+                            } else {
+                                Write-Config $configPath $newContent
+                                Send-Message @{ success = $true; message = 'Rule added'; configPath = $configPath }
+                            }
                         } catch {
                             Send-Message @{ success = $false; error = "$($_.Exception.Message) | Stack: $($_.InvocationInfo.ScriptLineNumber)" }
                         }
@@ -1317,14 +1490,27 @@ function Main {
                     }
                     else {
                         $content = Read-Config $configPath
-                        $existing = [System.Collections.Generic.HashSet[string]]::new([string[]](Parse-Rules $content))
+                        $existing = [System.Collections.Generic.HashSet[string]]::new([string[]](Parse-Rules $content), [System.StringComparer]::OrdinalIgnoreCase)
                         $added = 0
+                        $failed = @()
                         foreach ($rule in $msg.rules) {
                             if (-not $existing.Contains($rule)) {
-                                $content = Add-Rule $content $rule
+                                $newContent = Add-Rule $content $rule
+                                # v1.4.9 修复：Add-Rule 返回 null → 无法安全写入
+                                # 原实现会把 null 赋给 $content 继续循环，最终写坏整个配置文件
+                                if ($null -eq $newContent) {
+                                    $failed += $rule
+                                    continue
+                                }
+                                $content = $newContent
                                 [void]$existing.Add($rule)
                                 $added++
                             }
+                        }
+                        if ($failed.Count -gt 0) {
+                            Write-Config $configPath $content
+                            Send-Message @{ success = $false; error = "$($failed.Count) rule(s) could not be written (unsupported config format). Written: $added."; configPath = $configPath }
+                            break
                         }
                         Write-Config $configPath $content
                         Send-Message @{ success = $true; message = "$added rules added"; configPath = $configPath }

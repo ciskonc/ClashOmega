@@ -6,7 +6,7 @@
 
 <img src="extension/icons/logo128_white.png" width="128" height="128" alt="ClashOmega Logo">
 
-[![Version](https://img.shields.io/badge/version-1.4.8-blue?style=flat-square)](https://github.com/ciskonc/ClashOmega)
+[![Version](https://img.shields.io/badge/version-1.4.9-blue?style=flat-square)](https://github.com/ciskonc/ClashOmega)
 [![Platform](https://img.shields.io/badge/platform-Chromium%20Browsers-green?style=flat-square)](https://github.com/ciskonc/ClashOmega)
 [![License](https://img.shields.io/badge/license-MIT-orange?style=flat-square)](LICENSE)
 [![Manifest](https://img.shields.io/badge/Manifest-V3-purple?style=flat-square)](https://developer.chrome.com/docs/extensions/mv3/intro/)
@@ -237,7 +237,7 @@ A pure file-system-driven Agent collaboration framework with zero code dependenc
 
 - **Pure File System**: All state, memory, and knowledge stored in disk files, no runtime memory dependency
 - **Multi-session Coordination**: Independent Agent instances in different conversations interact via the file system
-- **Skill/Loop/Agent Modularization**: Evolvable tool system with continuous experience and pitfall accumulation
+- **Loop/Agent Modularization**: Evolvable tool system with continuous experience and pitfall accumulation (Skills use TRAE native mechanism)
 - **Maker/Checker Separation**: The same task is never both executed and verified in the same session
 
 </details>

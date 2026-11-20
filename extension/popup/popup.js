@@ -4,11 +4,62 @@
 // ──── 工具函数 ────
 
 function sendToBackground(message) {
+  // v1.4.9 修复：原实现永远 resolve(response || {})，完全忽略 chrome.runtime.lastError，
+  // 传输失败被伪装成"空对象成功" → 调用方误判（如把通信失败渲染成"Native Host 未安装"）。
+  // 现在：传输失败时 resolve { success:false, __transportError:true, error } ——
+  //   1) 调用方的 if (result && result.success) 失败分支能真正生效；
+  //   2) 不用 reject：全文件 30+ 处 await 调用大多没有 catch，reject 会变成
+  //      unhandled rejection 直接中断事件处理器（比原问题更糟）。
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage(message, (response) => {
-      resolve(response || {});
-    });
+    try {
+      chrome.runtime.sendMessage(message, (response) => {
+        const err = chrome.runtime.lastError;
+        if (err) {
+          resolve({ success: false, __transportError: true, error: err.message || 'runtime_error' });
+          return;
+        }
+        resolve(response || {});
+      });
+    } catch (e) {
+      resolve({ success: false, __transportError: true, error: String((e && e.message) || e) });
+    }
   });
+}
+
+/**
+ * 规则域名/值合法性校验（上游防护）
+ * v1.4.9：Native Host 侧已加转义（ConvertTo-YamlScalar / ConvertTo-JsScalar），
+ * 但扩展侧同样需要一道白名单 —— 规则值最终会进入 YAML / .js 脚本文件，
+ * 只允许安全的域名形态字符，避免引号/逗号/换行/反斜杠/控制字符一路透传。
+ * 允许：字母、数字、点、连字符、下划线、冒号（IPv6）、星号与问号（通配符）、百分号（编码）
+ * @param {string} value - 待校验的规则值
+ * @returns {boolean}
+ */
+function isValidRuleDomain(value) {
+  if (typeof value !== 'string') return false;
+  const v = value.trim();
+  if (!v || v.length > 253) return false;
+  // 不允许任何空白、引号、反斜杠、逗号、尖括号、# & * 之外的控制字符
+  // 逗号是规则分隔符，含逗号会破坏规则结构；引号/反斜杠/换行会破坏 YAML 与 JS 字符串
+  if (/[\s"'\\,;<>|]/.test(v)) return false;
+  // 控制字符
+  if (/[\x00-\x1F\x7F]/.test(v)) return false;
+  // 只允许域名/通配符/IP 形态字符
+  if (!/^[A-Za-z0-9._:*?%!~+\[\]-]+$/.test(v)) return false;
+  return true;
+}
+
+// ──── v1.4.9：chrome.storage.session 安全封装 ────
+// storage.session 为 Chrome 102+ API；manifest 已声明 minimum_chrome_version=102，
+// 但双重防护：任何异常（含未来 API 行为变化）都降级为空结果，不让渲染链中断。
+async function safeSessionGet(key) {
+  try { return await chrome.storage.session.get(key); } catch (e) { return {}; }
+}
+async function safeSessionSet(obj) {
+  try { return await chrome.storage.session.set(obj); } catch (e) { /* 静默 */ }
+}
+async function safeSessionRemove(key) {
+  try { return await chrome.storage.session.remove(key); } catch (e) { /* 静默 */ }
 }
 
 /**
@@ -410,7 +461,9 @@ function switchTab(tabId) {
  * 绑定标签栏点击事件
  */
 function bindTabEvents() {
-  document.getElementById('tab-bar').addEventListener('click', (e) => {
+  const tabBarEl = document.getElementById('tab-bar');
+  if (!tabBarEl) return;
+  tabBarEl.addEventListener('click', (e) => {
     const btn = e.target.closest('.tab-btn');
     if (!btn) return;
     switchTab(btn.dataset.tab);
@@ -965,10 +1018,10 @@ function refreshAllI18n() {
     const key = el.getAttribute('data-i18n');
     if (el.tagName === 'OPTION') {
       el.textContent = I18N.t(key);
-    } else if (el.tagName === 'BUTTON' || el.tagName === 'SPAN' || el.tagName === 'H3' || el.tagName === 'LABEL') {
-      if (!el.hasAttribute('data-i18n-preserve')) {
-        el.textContent = I18N.t(key);
-      }
+    } else if (!el.hasAttribute('data-i18n-preserve')) {
+      // v1.4.9：处理所有标签（原白名单 BUTTON/SPAN/H3/LABEL 漏掉 DIV/P/TD 等，
+      // popup.html 里 25 处 data-i18n 永远不会被翻译；有 preserve 标记的仍跳过）
+      el.textContent = I18N.t(key);
     }
   });
   document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
@@ -1083,11 +1136,14 @@ async function openWebDashboard() {
   // 预设值查不到（如类型名错误）也回退到 metacubexd
   if (!template) template = DASHBOARD_PRESETS.metacubexd;
 
-  // 替换占位符（encodeURIComponent 避免特殊字符破坏 URL）
+  // v1.4.9 修复（Major）：secret 不再拼进第三方域名的 URL
+  // 原实现把 Clash API 的 secret 以明文放进 metacubexd / yacd / zashboard（均为公网第三方）
+  // 的 URL 查询串 → secret 随 URL 进入浏览器历史、Referer 头与第三方服务器日志。
+  // 现在：secret 留空，由用户在面板内自行填写（面板与内核同机时才需要）。
   const dashboardUrl = template
     .replace(/%host/g, encodeURIComponent(hostname))
     .replace(/%port/g, encodeURIComponent(port))
-    .replace(/%secret/g, encodeURIComponent(secret));
+    .replace(/%secret/g, '');
   chrome.tabs.create({ url: dashboardUrl });
 }
 
@@ -1824,7 +1880,9 @@ async function loadScriptRules() {
 }
 
 function bindScriptInitButton() {
-  document.getElementById('script-init-btn').addEventListener('click', async () => {
+  const initBtnEl = document.getElementById('script-init-btn');
+  if (!initBtnEl) return;
+  initBtnEl.addEventListener('click', async () => {
     const btn = document.getElementById('script-init-btn');
     // Minor 修复（v1.4.5）：增加防抖锁 + try/finally
     // 原实现 btn.disabled=true 后 await，若 sendToBackground 抛错则 disabled 永不恢复
@@ -2036,7 +2094,9 @@ async function populateProxyGroupSelects() {
 // ──── 绑定事件 ────
 
 function bindModeSwitchEvents() {
-  document.getElementById('mode-switch').addEventListener('click', async (e) => {
+  const modeSwitchEl = document.getElementById('mode-switch');
+  if (!modeSwitchEl) return;
+  modeSwitchEl.addEventListener('click', async (e) => {
     const btn = e.target.closest('button');
     if (!btn || btn.disabled) return;
     const mode = btn.dataset.mode;
@@ -2057,7 +2117,7 @@ function bindModeSwitchEvents() {
 // 切换成功后 background 自动 closeAllConnections + 刷新当前标签页
 // 让浏览器放弃与 Clash 的 keep-alive 连接，新连接按新 mode 走
 // 注意：不能提供「重启 Clash」按钮，因为 PUT /configs reload 会重置 mode 到配置文件默认值
-document.getElementById('clash-mode-switch').addEventListener('click', async (e) => {
+document.getElementById('clash-mode-switch')?.addEventListener('click', async (e) => {
   const btn = e.target.closest('button');
   if (!btn || btn.disabled) return;
   const mode = btn.dataset.clashMode;
@@ -2119,13 +2179,21 @@ function bindQuickAddRuleEvents() {
     btn.textContent = '...';
     let addResult = null;
     try {
-      const inputDomain = document.getElementById('quick-add-domain').value.trim();
+      const inputDomain = document.getElementById('quick-add-domain')?.value?.trim() || '';
       if (!inputDomain) {
         showToast(I18N.t('quick_add_select_policy'), 'error');
         return;
       }
-      const ruleType = document.getElementById('quick-add-rule-type').value;
-      const policy = document.getElementById('quick-add-policy').value;
+      // v1.4.9 修复（Critical）：域名输入零校验 → JS 注入
+      // 原实现仅 .trim()，含双引号/逗号/换行/反斜杠的输入会一路透传到
+      // Native Host 写入激活订阅的 script.js（customRules 数组），被 CVR 脚本引擎执行。
+      // 此处做上游白名单校验：域名只允许字母数字、点、连字符、下划线、冒号（端口）与通配符前缀
+      if (!isValidRuleDomain(inputDomain)) {
+        showToast(I18N.t('quick_add_invalid_domain'), 'error');
+        return;
+      }
+      const ruleType = document.getElementById('quick-add-rule-type')?.value;
+      const policy = document.getElementById('quick-add-policy')?.value;
       if (!policy) {
         showToast(I18N.t('quick_add_select_policy'), 'error');
         return;
@@ -2212,7 +2280,9 @@ function bindDomainDetection(tabId) {
       currentSuggestions = suggestions;
 
       summaryEl.style.display = 'block';
-      summaryEl.textContent = `${I18N.t('batch_detect_collected')} ${result.count} ${I18N.t('batch_detect_domains')}, ${I18N.t('batch_detect_grouped')} ${suggestions.length} ${I18N.t('batch_detect_groups')}`;
+      // v1.4.9：截断时如实提示（原实现达到 500 上限后静默丢弃新域名，用户无感知）
+      const truncSuffix = result.truncated ? ' ' + I18N.t('batch_detect_truncated_hint') : '';
+      summaryEl.textContent = `${I18N.t('batch_detect_collected')} ${result.count} ${I18N.t('batch_detect_domains')}, ${I18N.t('batch_detect_grouped')} ${suggestions.length} ${I18N.t('batch_detect_groups')}${truncSuffix}`;
 
       listEl.style.display = 'block';
       listEl.innerHTML = '';
@@ -2260,11 +2330,11 @@ function bindDomainDetection(tabId) {
     }
   });
 
-  document.getElementById('batch-detect-select-all').addEventListener('click', () => {
+  document.getElementById('batch-detect-select-all')?.addEventListener('click', () => {
     listEl.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = true; });
   });
 
-  document.getElementById('batch-detect-deselect-all').addEventListener('click', () => {
+  document.getElementById('batch-detect-deselect-all')?.addEventListener('click', () => {
     listEl.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = false; });
     actionsEl.style.display = 'none';
     listEl.style.display = 'none';
@@ -2279,7 +2349,7 @@ function bindDomainDetection(tabId) {
       return;
     }
 
-    const policy = document.getElementById('batch-detect-policy').value;
+    const policy = document.getElementById('batch-detect-policy')?.value;
     if (!policy) {
       showToast(I18N.t('quick_add_select_policy'), 'error');
       return;
@@ -2307,7 +2377,7 @@ function bindDomainDetection(tabId) {
 }
 
 function bindDomainCheckDeleteEvents() {
-  document.getElementById('domain-check-matched').addEventListener('click', async (e) => {
+  document.getElementById('domain-check-matched')?.addEventListener('click', async (e) => {
     const btn = e.target.closest('.rule-delete-btn');
     if (!btn) return;
 
@@ -2408,15 +2478,51 @@ function bindRuleListDeleteEvents() {
 function bindSettingsEvents() {
   // 代理地址+端口 → 自动拼接 API URL
   function autoGenerateApiUrl() {
-    const host = document.getElementById('settings-api-host').value.trim();
-    const port = document.getElementById('settings-api-port').value.trim();
+    const host = document.getElementById('settings-api-host')?.value?.trim() || '';
+    const port = document.getElementById('settings-api-port')?.value?.trim() || '';
     if (host && port) {
       document.getElementById('settings-api-url').value = `http://${host}:${port}`;
     }
   }
 
-  document.getElementById('settings-api-host').addEventListener('input', autoGenerateApiUrl);
-  document.getElementById('settings-api-port').addEventListener('input', autoGenerateApiUrl);
+  /**
+   * Clash API 地址合法性校验
+   * v1.4.9 修复（Major）：此前 API 地址零校验 —— 用户填错主机名后，
+   * 扩展会把存储的 secret 作为 Bearer token 发往该主机（凭据外泄）。
+   * 现在：只允许 http/https 协议、合法主机名、合法端口，禁止含凭据（user:pass@）的 URL。
+   * @param {string} raw - 用户填写的 API 地址
+   * @returns {{valid: boolean, url?: string, reason?: string}}
+   */
+  function validateApiUrl(raw) {
+    const value = (raw || '').trim();
+    if (!value) return { valid: false, reason: 'empty' };
+    let u;
+    try {
+      u = new URL(value);
+    } catch {
+      return { valid: false, reason: 'invalid_url' };
+    }
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+      return { valid: false, reason: 'invalid_protocol' };
+    }
+    // 含 userinfo 的 URL 会把凭据混进请求目标，禁止
+    if (u.username || u.password) {
+      return { valid: false, reason: 'credentials_in_url' };
+    }
+    if (!u.hostname) return { valid: false, reason: 'invalid_host' };
+    // 主机名只允许字母数字、点、连字符（IPv6 冒号由 URL 解析器处理）
+    if (!/^[A-Za-z0-9._:-]+$/.test(u.hostname)) {
+      return { valid: false, reason: 'invalid_host' };
+    }
+    if (u.port && !/^\d{1,5}$/.test(u.port)) {
+      return { valid: false, reason: 'invalid_port' };
+    }
+    return { valid: true, url: value };
+  }
+
+  // v1.4.9：绑定前判空（渲染中途元素缺失时不再抛 TypeError 中断后续绑定）
+  document.getElementById('settings-api-host')?.addEventListener('input', autoGenerateApiUrl);
+  document.getElementById('settings-api-port')?.addEventListener('input', autoGenerateApiUrl);
 
   // 缩放滑块实时预览
   const zoomSlider = document.getElementById('zoom-slider');
@@ -2428,38 +2534,45 @@ function bindSettingsEvents() {
   }
 
   // 保存设置（每个子标签页的保存按钮都保存全部设置，保存后保持当前子标签页）
+  // v1.4.9：防抖锁 —— 原实现无任何并发防护，双击会并发触发两次 saveSettings
+  // （getSettings → 整对象写），且保存失败仍可能提示「已保存」
   document.querySelectorAll('.settings-sub-tab-save').forEach(saveBtn => {
     saveBtn.addEventListener('click', async () => {
+      if (saveBtn.disabled) return;
+      saveBtn.disabled = true;
+      const _saveOriginalText = saveBtn.textContent;
+      saveBtn.textContent = '...';
+      try {
       // 记录当前 active 子标签页，保存后恢复
       const activeSubTab = document.querySelector('.settings-sub-tab.active');
       const activeSubTabId = activeSubTab?.dataset.subTab || 'connection';
 
       const currentSettings = await sendToBackground({ action: 'getSettings' });
-      const configPath = document.getElementById('settings-config-path').value.trim();
-      const theme = document.getElementById('theme-select').value;
+      const configPath = document.getElementById('settings-config-path')?.value?.trim() || '';
+      const theme = document.getElementById('theme-select')?.value;
       const tabLayout = readTabLayoutFromEditor() || getDefaultTabLayout();
-      const zoomScale = parseInt(document.getElementById('zoom-slider').value) || 100;
-      const ruleDisplayMode = document.getElementById('rule-display-mode').value;
-      const rulePageSize = parseInt(document.getElementById('rule-page-size').value) || 20;
+      const zoomScale = parseInt(document.getElementById('zoom-slider')?.value) || 100;
+      const ruleDisplayMode = document.getElementById('rule-display-mode')?.value;
+      const rulePageSize = parseInt(document.getElementById('rule-page-size')?.value) || 20;
       // 控制台面板选择：4 选 1 的 radio，custom 时启用自定义 URL 输入框
       const dashboardRadio = document.querySelector('input[name="dashboard-type"]:checked');
       const dashboardType = dashboardRadio?.value || 'metacubexd';
-      const dashboardCustomUrl = document.getElementById('settings-dashboard-custom-url').value.trim();
+      const dashboardCustomUrl = document.getElementById('settings-dashboard-custom-url')?.value?.trim() || '';
       const settings = {
         currentMode: currentSettings.currentMode || 'system',
-        clashApiUrl: document.getElementById('settings-api-url').value.trim(),
-        clashSecret: document.getElementById('settings-secret').value.trim(),
-        clashApiHost: document.getElementById('settings-api-host').value.trim(),
+        clashApiUrl: document.getElementById('settings-api-url')?.value?.trim() || '',
+        clashSecret: document.getElementById('settings-secret')?.value?.trim() || '',
+        clashApiHost: document.getElementById('settings-api-host')?.value?.trim() || '',
         clashApiPort: parseInt(document.getElementById('settings-api-port').value) || 9090,
         clashConfigPath: configPath,
-        writeToYaml: document.getElementById('settings-write-to-yaml').checked,
-        disableFallback: document.getElementById('settings-disable-fallback').checked,
-        clashRemoteEnabled: document.getElementById('settings-clash-remote-enabled').checked,
+        writeToYaml: document.getElementById('settings-write-to-yaml')?.checked,
+        disableFallback: document.getElementById('settings-disable-fallback')?.checked,
+        clashRemoteEnabled: document.getElementById('settings-clash-remote-enabled')?.checked,
         // clashRemoteMode 不从表单读取（保存设置不切换模式），保留原值
         clashRemoteMode: currentSettings.clashRemoteMode || 'rule',
         dashboardType: dashboardType,
         dashboardCustomUrl: dashboardCustomUrl,
-        language: document.getElementById('language-select').value,
+        language: document.getElementById('language-select')?.value,
         theme: theme,
         tabLayout: tabLayout,
         zoomScale: zoomScale,
@@ -2468,7 +2581,7 @@ function bindSettingsEvents() {
       };
       await sendToBackground({ action: 'saveSettings', settings });
       // 清除端口不匹配忽略标志：保存设置意味着配置已变更，需要重新检测端口匹配状态
-      await chrome.storage.session.remove('clashApiMismatchIgnored');
+      await safeSessionRemove('clashApiMismatchIgnored');
       // 应用主题
       applyTheme(theme);
       // 应用缩放
@@ -2576,35 +2689,52 @@ function bindSettingsEvents() {
       await renderClashApiStatus(latestStatus);
       await initPopup(window._currentTabLayout, Promise.resolve({ settings: await sendToBackground({ action: 'getSettings' }) }));
       refreshPopupStatus(latestStatus);
+      } catch (e) {
+        // v1.4.9：保存失败如实提示（原实现无 catch，失败时用户看不到任何反馈且按钮永久锁定）
+        console.warn('ClashOmega: save settings failed:', e && e.message);
+        showToast(I18N.t('settings_save_fail'), 'error');
+      } finally {
+        // v1.4.9：无论成败都解锁按钮并恢复文案
+        saveBtn.disabled = false;
+        saveBtn.textContent = _saveOriginalText;
+      }
     });
   });
 
   // 自动检测配置文件路径
-  document.getElementById('settings-detect-config').addEventListener('click', async () => {
+  document.getElementById('settings-detect-config')?.addEventListener('click', async () => {
     const btn = document.getElementById('settings-detect-config');
+    if (!btn) return;
     btn.disabled = true;
     btn.textContent = '...';
-    const result = await sendToBackground({ action: 'ping' });
-    btn.disabled = false;
-    btn.textContent = I18N.t('settings_detect');
-    if (result && result.success && result.configPath && result.configPath !== '(not found)') {
-      document.getElementById('settings-config-path').value = result.configPath;
-      showToast(result.configPath, 'success');
-    } else if (result && !result.success) {
-      // Native Host 不可用：明确提示未安装，而非笼统的"未找到配置文件"
-      const err = result.error || '';
-      if (err.includes('not found') || err.includes('native messaging host') || err.includes('Specified native messaging')) {
-        showToast(I18N.t('native_host_not_installed'), 'error', { duration: 5000 });
+    // v1.4.9：try/finally 保证异常时按钮也能恢复（原实现异常时永久停在"..."）
+    try {
+      const result = await sendToBackground({ action: 'ping' });
+      if (result && result.success && result.configPath && result.configPath !== '(not found)') {
+        document.getElementById('settings-config-path').value = result.configPath;
+        showToast(result.configPath, 'success');
+      } else if (result && !result.success) {
+        // Native Host 不可用：明确提示未安装，而非笼统的"未找到配置文件"
+        const err = result.error || '';
+        if (err.includes('not found') || err.includes('native messaging host') || err.includes('Specified native messaging')) {
+          showToast(I18N.t('native_host_not_installed'), 'error', { duration: 5000 });
+        } else {
+          showToast(I18N.t('settings_detect_fail'), 'error');
+        }
       } else {
         showToast(I18N.t('settings_detect_fail'), 'error');
       }
-    } else {
+    } catch (e) {
+      console.warn('ClashOmega: detect config failed:', e && e.message);
       showToast(I18N.t('settings_detect_fail'), 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = I18N.t('settings_detect');
     }
   });
 
   // 语言切换
-  document.getElementById('language-select').addEventListener('change', async (e) => {
+  document.getElementById('language-select')?.addEventListener('change', async (e) => {
     await I18N.setLanguage(e.target.value);
     refreshAllI18n();
     // 重新渲染标签页布局编辑器（模块名称需要更新）
@@ -2615,7 +2745,7 @@ function bindSettingsEvents() {
   });
 
   // 主题切换（实时预览）
-  document.getElementById('theme-select').addEventListener('change', async (e) => {
+  document.getElementById('theme-select')?.addEventListener('change', async (e) => {
     const theme = e.target.value;
     applyTheme(theme);
     const { settings } = await chrome.storage.local.get('settings');
@@ -2625,7 +2755,7 @@ function bindSettingsEvents() {
   });
 
   // 规则展示模式切换（实时预览）
-  document.getElementById('rule-display-mode').addEventListener('change', async (e) => {
+  document.getElementById('rule-display-mode')?.addEventListener('change', async (e) => {
     const mode = e.target.value;
     const { settings } = await chrome.storage.local.get('settings');
     settings.ruleDisplayMode = mode;
@@ -2636,7 +2766,7 @@ function bindSettingsEvents() {
   });
 
   // 分页阈值变更（实时预览）
-  document.getElementById('rule-page-size').addEventListener('change', async (e) => {
+  document.getElementById('rule-page-size')?.addEventListener('change', async (e) => {
     const threshold = Math.max(10, Math.min(3000, parseInt(e.target.value) || 50));
     e.target.value = threshold;
     const { settings } = await chrome.storage.local.get('settings');
@@ -2672,9 +2802,13 @@ async function loadSettingsForm(cachedStatus) {
   document.getElementById('settings-api-host').value = settings.clashApiHost || '127.0.0.1';
   document.getElementById('settings-api-port').value = settings.clashApiPort || 9090;
   document.getElementById('settings-config-path').value = settings.clashConfigPath || '';
-  document.getElementById('settings-write-to-yaml').checked = settings.writeToYaml === true;
-  document.getElementById('settings-disable-fallback').checked = settings.disableFallback === true;
-  document.getElementById('settings-clash-remote-enabled').checked = settings.clashRemoteEnabled === true;
+// v1.4.9：赋值目标不可用可选链（JS 语法限制），改判空守卫
+const yamlToggleEl = document.getElementById('settings-write-to-yaml');
+if (yamlToggleEl) yamlToggleEl.checked = settings.writeToYaml === true;
+const fallbackToggleEl = document.getElementById('settings-disable-fallback');
+if (fallbackToggleEl) fallbackToggleEl.checked = settings.disableFallback === true;
+const remoteToggleEl = document.getElementById('settings-clash-remote-enabled');
+if (remoteToggleEl) remoteToggleEl.checked = settings.clashRemoteEnabled === true;
 
   // 控制台面板选择：选中对应的 radio，custom 时启用自定义 URL 输入框
   const dashboardType = settings.dashboardType || 'metacubexd';
@@ -2799,23 +2933,35 @@ async function renderNativeHostStatus() {
  * 忽略逻辑：用户点击「忽略」后，通过 chrome.storage.session 记录忽略标志，
  *   到下次保存设置前不再显示橙色警告（仍显示绿色「已连接」状态）。
  */
+// v1.4.9：上一次渲染的状态签名。5s 轮询每轮都会调用本函数重绘整个状态卡，
+// 原实现无条件 innerHTML='' 重建 → 用户正要点击「更正端口 / 忽略」按钮时按钮被换成
+// 新 DOM 实例，点击落空。状态签名未变化时跳过重建，保留原 DOM（按钮可正常点击）。
+let _lastApiStatusSignature = null;
+
 async function renderClashApiStatus(cachedStatus) {
   const statusEl = document.getElementById('clash-api-status');
   if (!statusEl) return;
 
-  // 显示检测中状态
-  statusEl.className = 'native-host-status native-host-status--checking';
-  statusEl.innerHTML = '';
-  statusEl.appendChild(el('span', { className: 'native-host-status-dot' }));
-  statusEl.appendChild(el('span', { className: 'native-host-status-text' }, I18N.t('clash_api_checking')));
+  // 显示检测中状态（仅在签名变化时才重建；轮询路径签名不变时直接跳过）
+  const checkingSig = '__checking__';
+  if (_lastApiStatusSignature !== checkingSig) {
+    _lastApiStatusSignature = checkingSig;
+    statusEl.className = 'native-host-status native-host-status--checking';
+    statusEl.innerHTML = '';
+    statusEl.appendChild(el('span', { className: 'native-host-status-dot' }));
+    statusEl.appendChild(el('span', { className: 'native-host-status-text' }, I18N.t('clash_api_checking')));
+  }
 
   // 如果传入了缓存的状态结果则复用，避免重复调用 getStatus（弹窗打开时 initPopup 已调用过一次）
   const result = cachedStatus || await sendToBackground({ action: 'getStatus' });
 
-  statusEl.innerHTML = '';
   // 用 clashConfiguredUrlReachable 判断用户配置的 URL 是否通（不走回退）
   // 这样设置页状态指示器准确反映"用户配置是否正确"，而非"Clash 是否可用"
+  const okSig = 'ok:' + (result && result.clashConfiguredUrlReachable ? '1' : '0');
   if (result && result.clashConfiguredUrlReachable) {
+    if (_lastApiStatusSignature === okSig && statusEl.querySelector('.native-host-status--ok')) return;
+    _lastApiStatusSignature = okSig;
+    statusEl.innerHTML = '';
     statusEl.className = 'native-host-status native-host-status--ok';
     statusEl.appendChild(el('span', { className: 'native-host-status-dot' }));
     const textEl = el('span', { className: 'native-host-status-text' }, I18N.t('settings_clash_connected'));
@@ -2830,9 +2976,16 @@ async function renderClashApiStatus(cachedStatus) {
     // 检查用户是否已点击「忽略」本次端口不匹配警告
     // 忽略标志存储在 chrome.storage.session，浏览器关闭后自动清除
     // 保存设置时会清除忽略标志，确保下次配置变更后重新检测
-    const { clashApiMismatchIgnored } = await chrome.storage.session.get('clashApiMismatchIgnored');
+    const { clashApiMismatchIgnored } = await safeSessionGet('clashApiMismatchIgnored');
+    const fallbackPort = result.fallbackApiUrl?.match(/:(\d+)/)?.[1] || '?';
+    const fallbackSig = clashApiMismatchIgnored
+      ? 'fallback-ignored:' + fallbackPort
+      : 'fallback-warn:' + fallbackPort;
     if (clashApiMismatchIgnored) {
       // 用户已忽略：显示绿色「已连接」状态，不显示橙色警告和按钮
+      if (_lastApiStatusSignature === fallbackSig && statusEl.querySelector('.native-host-status--ok')) return;
+      _lastApiStatusSignature = fallbackSig;
+      statusEl.innerHTML = '';
       statusEl.className = 'native-host-status native-host-status--ok';
       statusEl.appendChild(el('span', { className: 'native-host-status-dot' }));
       statusEl.appendChild(el('span', { className: 'native-host-status-text' }, I18N.t('settings_clash_connected')));
@@ -2840,9 +2993,13 @@ async function renderClashApiStatus(cachedStatus) {
     }
 
     // 显示橙色警告状态
+    // v1.4.9：签名未变时跳过重建，保留「更正 / 忽略」按钮的 DOM 实例，
+    // 避免 5s 轮询把用户正要点击的按钮换成新元素导致点击落空
+    if (_lastApiStatusSignature === fallbackSig && statusEl.querySelector('.clash-api-actions')) return;
+    _lastApiStatusSignature = fallbackSig;
+    statusEl.innerHTML = '';
     statusEl.className = 'native-host-status native-host-status--warn';
     statusEl.appendChild(el('span', { className: 'native-host-status-dot' }));
-    const fallbackPort = result.fallbackApiUrl?.match(/:(\d+)/)?.[1] || '?';
     const msg = I18N.t('settings_clash_port_mismatch')
       .replace('{actual}', fallbackPort);
     statusEl.appendChild(el('span', { className: 'native-host-status-text' }, msg));
@@ -2866,7 +3023,7 @@ async function renderClashApiStatus(cachedStatus) {
           settings.clashApiUrl = result.fallbackApiUrl;
           await sendToBackground({ action: 'saveSettings', settings });
           // 更正后清除忽略标志（配置已变更，警告已解决）
-          await chrome.storage.session.remove('clashApiMismatchIgnored');
+          await safeSessionRemove('clashApiMismatchIgnored');
           showToast(I18N.t('settings_fixed_port').replace('{port}', fallbackPort), 'success', { duration: 3000 });
           // 重新检测状态
           await renderClashApiStatus();
@@ -2893,7 +3050,7 @@ async function renderClashApiStatus(cachedStatus) {
       try {
         // 记录忽略标志到 session 存储（浏览器关闭后自动清除）
         // 保存设置时会清除忽略标志，确保下次配置变更后重新检测
-        await chrome.storage.session.set({ clashApiMismatchIgnored: true });
+        await safeSessionSet({ clashApiMismatchIgnored: true });
         // 重新渲染为绿色「已连接」状态
         await renderClashApiStatus();
       } catch (e) {
@@ -2960,7 +3117,7 @@ function setModuleDisabled(moduleId, disabled, excludeIds = []) {
     module.classList.add('module-file-ops-disabled');
     const reason = (typeof I18N !== 'undefined' && I18N.t)
       ? I18N.t('module_disabled_file_ops')
-      : '当前客户端不支持文件操作';
+      : 'File operations not supported'; // 防御分支（I18N 未加载时），不预设语言
     module.setAttribute('data-disabled-reason', reason);
   } else {
     module.classList.remove('module-file-ops-disabled');
@@ -3137,22 +3294,27 @@ async function initPopup(layout, settingsPromise) {
         renderDomainRuleCheck(domain, matched, proxies);
       }
 
+      // v1.4.9：检测轮次令牌。用户快速切换域名 / 重复触发检测时，旧一轮的
+      // setTimeout 重试仍会在 800ms 后触发并用旧数据覆盖新渲染（定时器从不取消）。
+      // 每轮检测递增全局 epoch，回调渲染前校验令牌，过期轮次的渲染直接放弃。
+      const checkEpoch = (window._domainCheckEpoch = (window._domainCheckEpoch || 0) + 1);
       const queryConnections = (retryCount = 0) => {
         // ★ 性能优化：重试间隔 1500ms → 800ms，最多重试 2 次（总时长 1.6s，原 1.5s 1 次）
         // 原因：首次查询未命中通常是 Clash 内核还在建立连接，800ms 间隔多次重试比 1500ms 单次重试命中率更高
         // 风险评估：800ms 间隔可能仍查不到（连接建立需 1s+），但总时长不变，用户体验不恶化
         sendToBackground({ action: 'getDomainConnections' }).then(connResult => {
+          if (checkEpoch !== window._domainCheckEpoch) return; // 已有更新的检测轮次，丢弃陈旧结果
           if (connResult.success && connResult.connections) {
             const connMatched = findMatchingRulesFromConnections(domain, connResult.connections, clashRules);
             if (connMatched.length > 0) {
               renderDomainRuleCheck(domain, connMatched, proxies);
             } else if (localImprecise && retryCount < 2) {
-              setTimeout(() => queryConnections(retryCount + 1), 800);
+              setTimeout(() => { if (checkEpoch === window._domainCheckEpoch) queryConnections(retryCount + 1); }, 800);
             } else {
               renderDomainRuleCheck(domain, matched, proxies);
             }
           } else if (localImprecise && retryCount < 2) {
-            setTimeout(() => queryConnections(retryCount + 1), 800);
+            setTimeout(() => { if (checkEpoch === window._domainCheckEpoch) queryConnections(retryCount + 1); }, 800);
           } else {
             renderDomainRuleCheck(domain, matched, proxies);
           }
@@ -3400,7 +3562,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   bindTabLayoutEditorEvents(layout);
 
   // 底部「重启 Clash 内核」按钮
-  document.getElementById('restart-clash-btn').addEventListener('click', triggerRestartClash);
+  document.getElementById('restart-clash-btn')?.addEventListener('click', triggerRestartClash);
 
   // 「控制台」按钮 — 打开 metacubexd 网页控制台
   const dashboardBtn = document.getElementById('web-dashboard-btn');

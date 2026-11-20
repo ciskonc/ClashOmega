@@ -43,6 +43,8 @@
   "quick_add_confirm": "Confirm Add",
   "quick_add_loading": "Loading proxy groups...",
   "quick_add_select_policy": "Please select a proxy group",
+  "quick_add_invalid_domain": "Invalid domain format: only letters, digits, dots, hyphens, underscores and wildcards are allowed",
+  "file_op_not_supported_fallback": "File operations are not supported by the current client",
   "quick_add_domain_placeholder": "Enter domain",
 
   "batch_detect_title": "Detect Domains & Smart Group",
@@ -54,17 +56,18 @@
   "batch_detect_select_all": "Select All",
   "batch_detect_deselect_all": "Deselect",
   "batch_detect_batch_add": "Batch Add",
+  "batch_detect_truncated_hint": "(too many domains, only the first 500 collected)",
 
   "rule_type_domain": "DOMAIN",
   "rule_type_domain_suffix": "DOMAIN-SUFFIX",
   "rule_type_domain_keyword": "DOMAIN-KEYWORD",
 
   "rule_list_title": "Built-in Clash Rules",
-  "rule_list_count": "",
+  "rule_list_count": " rules",
   "rule_delete": "Delete",
 
   "script_rules_title": "Extra Script Rules",
-  "script_rules_count": "",
+  "script_rules_count": " rules",
   "script_rules_empty": "No extra script rules",
   "script_rules_need_init": "Extension script file is not initialized or corrupted. Click \"Init\" button.",
   "script_rules_init_btn": "Init",
