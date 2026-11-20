@@ -191,7 +191,10 @@
 }
 
 body {
-  width: var(--popup-width);
+  /* v1.4.10 修复：内容超高时根滚动条会占据视口右侧，固定 470px 宽的 body 右缘
+     （含「重启 Clash」等按钮）被滚动条盖住。改为预留 10px 常驻滚动条宽度，
+     可视内容恒定 460px + 10px 滚动条 = 总宽仍 470px，按钮永不进入滚动条区域 */
+  width: calc(var(--popup-width) - 10px);
   margin: 0;
   padding: var(--md-spacing-4);
   /* 缩放比例：通过 --zoom-scale 调整基础字号，所有使用 rem/em 的尺寸自动跟随 */
@@ -1816,6 +1819,31 @@ input, button, select, textarea {
 }
 
 /* ──── 滚动条全局样式（暗色主题适配） ──── */
+/* v1.4.10 修复：根滚动条常驻（宽度恒定，不随内容溢出出现/消失，避免布局跳动）；
+   自定义细滚动条 10px（比系统默认 ~17px 窄一半），配色跟随主题 */
+html {
+  overflow-y: scroll;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--md-sys-color-outline-variant, #999);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--md-sys-color-outline);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
 [data-theme="md3-dark"] ::-webkit-scrollbar-thumb {
   background: var(--md-sys-color-outline);
 }
