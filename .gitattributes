@@ -1,0 +1,2 @@
+# v1.4.10 起：.bat 必须 CRLF（cmd 解析器对 LF 的 goto/label 结构不可靠）
+*.bat text eol=crlf
