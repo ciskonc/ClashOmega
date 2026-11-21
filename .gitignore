@@ -53,3 +53,4 @@ docs/20260704_*.md
 
 # 上游项目源码克隆（GPL 等许可证，避免污染本仓库）
 research/
+extension/extension.7z
