@@ -4,6 +4,33 @@
 
 ---
 
+## v1.4.11 — 2026-11-21
+
+**紧急修复**：v1.4.9 起的 Native Host 安装流程存在回归，导致部分电脑安装后扩展仍显示「Native Host 未安装」。
+
+### Critical
+
+- **修复 `clash_rules_manager.ps1` 丢失 UTF-8 BOM**：Windows PowerShell 5.1 会按系统 ANSI（中文系统为 GBK）读取无 BOM 的 UTF-8 文件，中文注释被读成乱码，其中的字节被解析成语法符号，脚本直接报 24 处语法错误并立即退出 → Chrome 无法启动宿主 → 扩展永远显示「Native Host 未安装」。v1.4.8 及之前该文件带 BOM，本次发布的所有 PS1 均已确认带 BOM
+- **修复安装器重复执行整段安装逻辑**：install.ps1 中「生成清单 + 注册注册表 + 输出成功提示」整块代码重复了一份，交互模式下会中途多停一次回车、重复写注册表
+- **修复扩展 ID 硬校验导致安装中断**：v1.4.9 新增的 32 位 a-p 正则校验在 ID 带空格/大写/换行时直接 `exit 1` 且不注册（旧版本能注册）。现改为清理空白并转小写，格式非标准只告警不终止；清单的 `allowed_origins` 同时写入「默认固定 ID」与「用户输入 ID」，避免扩展 ID 不一致时 Chrome 报 forbidden
+
+### Added
+
+- **新增 `native-host/diagnose.ps1` 端到端诊断脚本**：安装后仍显示「未安装」时运行一次，即可定位卡在注册表 / 清单 / 宿主启动 / 握手 / BOM / 行尾中的哪一环
+- **扩展区分 Native Host 失败原因**：popup 不再把所有失败一律显示为「未安装」，而是分别提示「已注册但扩展 ID 不匹配」「已注册但宿主启动失败」「启动后异常退出」「通信超时」，并给出对应处置建议
+
+### Changed
+
+- Native Host 通信失败时输出分类后的原因到 Service Worker Console，便于远程排障
+
+### 注意事项
+
+- **本版本必须重新下载 zip 并重装 Native Host**：v1.4.9 / v1.4.10 的 zip 内 `clash_rules_manager.ps1` 缺少 BOM，在 Windows PowerShell 5.1 下无法运行。覆盖安装后请重新运行 `native-host\install.ps1`，并在浏览器中重载扩展
+- 升级后如仍显示「未安装」，运行 `native-host\diagnose.ps1` 并把输出发回，可对号入座定位
+
+
+---
+
 ## v1.4.10 — 2026-11-20
 
 界面修复：popup 内容超高出现滚动条时，滚动条遮挡右侧「重启 Clash」等按钮。

@@ -112,11 +112,11 @@ Write-Host '     复制 ID 字符串'
 Write-Host ''
 
 # v1.4.9：参数解析改用标准 param() 块（原手工解析 $args[0] 无法再加新参数）
+$defaultExtId = 'llfbhodadhnfobbbkipelhknkjdflggm'
 $ExtIdParam = $PSBoundParameters.ContainsKey('ExtId')
 if (-not $ExtId) {
     # 扩展 ID 已通过 manifest.json 的 key 字段固定，无需用户手动查找
     # 直接回车使用默认 ID，或输入其他 ID 覆盖
-    $defaultExtId = 'llfbhodadhnfobbbkipelhknkjdflggm'
     Write-Host "Default Extension ID / 默认扩展 ID: $defaultExtId (press Enter to use default / 直接回车使用默认值)" -ForegroundColor Green
     $ExtId = Read-Host 'Extension ID / 扩展 ID'
     if ([string]::IsNullOrWhiteSpace($ExtId)) {
@@ -129,23 +129,34 @@ if ([string]::IsNullOrWhiteSpace($ExtId)) {
     Read-Host 'Press Enter to exit / 按 Enter 退出'
     exit 1
 }
-# v1.4.9 修复：扩展 ID 格式校验
-# Chrome 扩展 ID 恒为 32 位 a-p 小写字母。输错（多空格/少字符/夹带标点）会生成
-# origin 不匹配的清单 → Chrome 报 forbidden，与「未安装」难以区分，排障困难。
+
+# v1.4.11 修复：扩展 ID 宽松规范化（不再硬失败）
+# v1.4.9 曾用「32 位 a-p」正则硬校验后直接 exit 1 —— 这是回归点：
+#   用户手工粘贴的 ID 带空格/大写/换行时，旧版能注册（Chrome 侧宽松匹配），
+#   新版却直接退出且不注册 → popup 永远显示「Native Host 未安装」。
+# 现在：去掉空白字符 + 转小写；格式非标准只告警不终止（仍继续注册）。
+$ExtId = ($ExtId -replace '\s', '').ToLowerInvariant()
 if ($ExtId -notmatch '^[a-p]{32}$') {
-    Write-Host "[ERROR] Extension ID format invalid: '$ExtId'" -ForegroundColor Red
-    Write-Host '[错误] 扩展 ID 格式非法（应为 32 位 a-p 小写字母，从 chrome://extensions/ 复制）' -ForegroundColor Red
-    Read-Host 'Press Enter to exit / 按 Enter 退出'
-    exit 1
+    Write-Host "[WARNING] Extension ID '$ExtId' is not a standard 32-char id / 扩展 ID 不是标准 32 位格式" -ForegroundColor Yellow
+    Write-Host '[警告] 扩展 ID 格式非标准（正常为 32 位 a-p 小写字母）——已清理空白并继续注册' -ForegroundColor Yellow
+    Write-Host '[警告] 若安装后仍提示未安装，请核对浏览器 chrome://extensions/ 中显示的 ID 是否完全一致' -ForegroundColor Yellow
+    Write-Host ''
 }
 
 # Generate JSON manifest / 生成清单文件
+# v1.4.11 修复：同时写入「默认固定 ID」与「用户输入 ID」两个 origin（去重）
+# 避免用户输入的 ID 与实际扩展 ID 不一致时 Chrome 报 forbidden 而扩展显示「未安装」
+$origins = @("chrome-extension://$defaultExtId/")
+if ($ExtId -and $ExtId -ne $defaultExtId) { $origins += "chrome-extension://$ExtId/" }
+
 $json = @{
     name = 'com.clash.omega'
     description = 'ClashOmega Native Messaging Host'
     path = $BatFile
     type = 'stdio'
-    allowed_origins = @("chrome-extension://$ExtId/")
+    # v1.4.11 修复：同时写入「默认固定 ID」与「用户输入 ID」两个 origin（去重）
+    # 避免用户输入的 ID 与实际扩展 ID 不一致时 Chrome 报 forbidden 而扩展显示「未安装」
+    allowed_origins = $origins
 }
 
 $jsonContent = ConvertTo-Json -InputObject $json -Depth 5
@@ -219,82 +230,3 @@ if (-not $ExtIdParam) {
     Read-Host 'Press Enter to exit / 按 Enter 退出'
 }
 
-# Generate JSON manifest / 生成清单文件
-$json = @{
-    name = 'com.clash.omega'
-    description = 'ClashOmega Native Messaging Host'
-    path = $BatFile
-    type = 'stdio'
-    allowed_origins = @("chrome-extension://$ExtId/")
-}
-
-$jsonContent = ConvertTo-Json -InputObject $json -Depth 5
-$utf8 = [System.Text.UTF8Encoding]::new($false)
-[System.IO.File]::WriteAllText($JsonFile, $jsonContent, $utf8)
-
-Write-Host ''
-Write-Host "[OK] Generated: $JsonFile" -ForegroundColor Gray
-Write-Host "[OK] 已生成: $JsonFile" -ForegroundColor Gray
-
-# ── 确定目标浏览器列表 ──
-# -Browser all：探测本机实际安装的 Chromium 系浏览器，逐个注册
-# 未探测到任何浏览器时，退回 Chrome + Edge 双写（写入未使用的键无害）
-$targetBrowsers = @()
-if ($Browser -eq 'all') {
-    foreach ($name in $BrowserRegMap.Keys) {
-        $probe = $BrowserProbe[$name]
-        if (Test-Path $probe.Reg) { $targetBrowsers += $name }
-    }
-    if ($targetBrowsers.Count -eq 0) {
-        $targetBrowsers = @('chrome', 'edge')
-        Write-Host '[WARN] No Chromium browser detected, falling back to Chrome + Edge' -ForegroundColor Yellow
-        Write-Host '[警告] 未检测到 Chromium 系浏览器，回退为 Chrome + Edge 双注册' -ForegroundColor Yellow
-    }
-} else {
-    $targetBrowsers = @($Browser)
-}
-
-# ── Register in HKCU / 写入注册表（逐浏览器）──
-$registered = @()
-$failed = @()
-foreach ($browserName in $targetBrowsers) {
-    $regPath = $BrowserRegMap[$browserName]
-    try {
-        New-Item -Path $regPath -Force | Out-Null
-        Set-ItemProperty -Path $regPath -Name '(Default)' -Value $JsonFile -Type String
-        $registered += $browserName
-        Write-Host "[OK] Registered for $browserName" -ForegroundColor Gray
-    }
-    catch {
-        $failed += $browserName
-        Write-Host "[ERROR] Registry write failed for $browserName : $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host "[错误] 注册表写入失败 ($browserName): $($_.Exception.Message)" -ForegroundColor Red
-    }
-}
-
-Write-Host ''
-if ($registered.Count -gt 0) {
-    Write-Host '========================================' -ForegroundColor Green
-    Write-Host "  [SUCCESS] Native Host registered for: $($registered -join ', ')" -ForegroundColor Green
-    Write-Host "  [成功] Native Host 已注册（浏览器）: $($registered -join ', ')" -ForegroundColor Green
-    Write-Host '========================================' -ForegroundColor Green
-    Write-Host ''
-    Write-Host 'Please reload the extension: chrome://extensions/ (edge://extensions/)'
-    Write-Host '请重新加载扩展: chrome://extensions/ (edge://extensions/)'
-}
-if ($failed.Count -gt 0) {
-    Write-Host ''
-    Write-Host "[WARN] Failed for: $($failed -join ', ')" -ForegroundColor Yellow
-    Write-Host "[警告] 以下浏览器注册失败: $($failed -join ', ')" -ForegroundColor Yellow
-    Write-Host 'Manual registry path / 手动注册表路径:' -ForegroundColor Yellow
-    foreach ($browserName in $failed) {
-        Write-Host "  $($BrowserRegMap[$browserName])"
-        Write-Host "  Value: $JsonFile"
-    }
-}
-
-Write-Host ''
-# 交互模式才等待 Enter
-if (-not $ExtIdParam) {
-    Read-Host 'Press Enter to exit / 按 Enter 退出'
-}

@@ -1,4 +1,4 @@
-# ClashOmega Native Host 直接测试脚本（绕过 Chrome）
+﻿# ClashOmega Native Host 直接测试脚本（绕过 Chrome）
 # 用途：验证 Native Host 本身是否能正常启动和响应
 # 用法：powershell -ExecutionPolicy Bypass -File test-native-host.ps1
 

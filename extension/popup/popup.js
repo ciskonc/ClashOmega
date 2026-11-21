@@ -2903,13 +2903,35 @@ async function renderNativeHostStatus() {
     }
     statusEl.appendChild(textEl);
   } else {
-    // Native Host 不可用（未安装/未注册）
+    // v1.4.11：按失败原因给出不同文案与指引
+    // 原来所有失败都显示「未安装，请运行 install.ps1」——宿主启动失败 / 扩展 ID 不匹配
+    // / 通信超时 都会被误导成「未安装」，用户反复重装却始终无效。
+    const reason = result?.reason || 'unknown';
+    const textKey = {
+      not_installed: 'native_host_not_installed',
+      id_mismatch:   'native_host_id_mismatch',
+      start_failed:  'native_host_start_failed',
+      exited:        'native_host_exited',
+      timeout:       'native_host_timeout',
+      cooldown:      'native_host_cooldown_hint',
+      unknown:       'native_host_not_installed'
+    }[reason] || 'native_host_not_installed';
+    const hintKey = {
+      not_installed: 'native_host_not_installed_hint',
+      id_mismatch:   'native_host_id_mismatch_hint',
+      start_failed:  'native_host_start_failed_hint',
+      exited:        'native_host_exited_hint',
+      timeout:       'native_host_timeout_hint',
+      cooldown:      'native_host_cooldown_hint',
+      unknown:       'native_host_not_installed_hint'
+    }[reason] || 'native_host_not_installed_hint';
     statusEl.className = 'native-host-status native-host-status--error';
     statusEl.appendChild(el('span', { className: 'native-host-status-dot' }));
-    statusEl.appendChild(el('span', { className: 'native-host-status-text' }, I18N.t('native_host_not_installed')));
-    // 添加安装引导链接
+    statusEl.appendChild(el('span', { className: 'native-host-status-text' }, I18N.t(textKey)));
+    // 添加排查指引
     const hintEl = el('div', { className: 'native-host-status-hint' });
-    hintEl.appendChild(el('span', {}, I18N.t('native_host_install_hint')));
+    hintEl.appendChild(el('span', {}, I18N.t(hintKey)));
+    // 仍保留安装脚本入口（所有原因都需要时可用）
     const linkEl = el('a', { className: 'native-host-install-link', title: I18N.t('native_host_install_link_title') }, I18N.t('native_host_install_link'));
     linkEl.href = '#';
     linkEl.addEventListener('click', (e) => {

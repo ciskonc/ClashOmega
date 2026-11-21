@@ -1,4 +1,4 @@
-# Clash Rules Manager - Native Messaging Host (PowerShell)
+﻿# Clash Rules Manager - Native Messaging Host (PowerShell)
 # 被 Chrome 按需调用，读写 Clash 配置文件中的 rules 字段。
 # 协议: stdin/stdout 二进制消息 (4字节小端序长度 + UTF-8 JSON)
 # 依赖: 仅 Windows 内置 PowerShell，零额外安装

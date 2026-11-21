@@ -491,8 +491,20 @@ async function handleMessage(message) {
       }
 
       case 'ping': {
-        const result = await sendToNativeSafe({ action: 'ping' });
-        return result;
+        // v1.4.11：区分失败原因（原来一律返回裸 error，popup 只能显示「未安装」，
+        // 导致宿主启动失败 / ID 不匹配 / 超时都被误导成「未安装」，用户反复重装无效）
+        const result = await sendToNativeSafe({ action: 'ping' }, { exemptFromCooldown: true });
+        if (result && result.success) return result;
+        const err = String((result && result.error) || 'unknown');
+        let reason = 'unknown';
+        if (/not found|no such native|not registered/i.test(err)) reason = 'not_installed';
+        else if (/forbidden/i.test(err)) reason = 'id_mismatch';
+        else if (/failed to start/i.test(err)) reason = 'start_failed';
+        else if (/has exited/i.test(err)) reason = 'exited';
+        else if (/timeout/i.test(err)) reason = 'timeout';
+        else if (/cooldown/i.test(err)) reason = 'cooldown';
+        console.warn('ClashOmega: native host ping failed (' + reason + '): ' + err);
+        return { success: false, error: err, reason };
       }
 
       case 'restartClash': {
